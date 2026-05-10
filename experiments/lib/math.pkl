@@ -1,0 +1,3 @@
+function double(n: Int): Int = n * 2
+
+function sum(xs: Listing<Int>): Int = xs.fold(0, (acc, x) -> acc + x)

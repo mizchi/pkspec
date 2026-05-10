@@ -1,0 +1,12 @@
+examples {
+  ["snapshotted payload"] {
+    new {
+      name = "alpha"
+      count = 99
+      tags {
+        "a"
+        "b"
+      }
+    }
+  }
+}

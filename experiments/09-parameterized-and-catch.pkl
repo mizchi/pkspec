@@ -1,0 +1,38 @@
+/// Probe 09: parameterized tests via `for` and error capture via `module.catch`.
+///
+/// `facts { for (case in cases) { [...] { ... } } }` looks tempting; verify
+/// that the dynamic-key syntax works and that each parameterized case is
+/// reported individually rather than as one collapsed "test".
+amends "pkl:test"
+
+local class Case {
+  input: Int
+  expected: Int
+  label: String
+}
+
+local cases: Listing<Case> = new {
+  new { input = 0; expected = 0;  label = "zero" }
+  new { input = 1; expected = 2;  label = "one" }
+  new { input = 7; expected = 14; label = "seven" }
+  new { input = 5; expected = 99; label = "intentionally wrong" }
+}
+
+local function double(n: Int): Int = n * 2
+
+facts {
+  for (c in cases) {
+    ["double(\(c.input)) == \(c.expected) — \(c.label)"] {
+      double(c.input) == c.expected
+    }
+  }
+
+  // Asserting that an expression *throws* uses module.catch.
+  ["division by zero throws"] {
+    module.catch(() -> 1 / 0) != null
+  }
+  ["module.catch returns the error message"] {
+    let (msg = module.catch(() -> 1 / 0))
+      msg != null && msg!!.contains("0")
+  }
+}

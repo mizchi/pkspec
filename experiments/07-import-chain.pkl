@@ -1,0 +1,20 @@
+/// Probe 07: testing imported source modules.
+///
+/// Real test suites live in a separate file from the production code.
+/// Confirm that `import "lib.pkl"` brings functions across cleanly and
+/// power assertions still work on imported calls.
+amends "pkl:test"
+
+import "lib/math.pkl" as math
+
+facts {
+  ["math.double works"] {
+    math.double(3) == 6
+  }
+  ["math.sum works on a Listing"] {
+    math.sum(new Listing<Int> { 1; 2; 3 }) == 6
+  }
+  ["chained imported calls show every intermediate in failure trace"] {
+    math.double(math.sum(new Listing<Int> { 1; 2; 3 })) == 99   // intentional fail
+  }
+}

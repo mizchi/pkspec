@@ -1,0 +1,21 @@
+/// Probe 08: what happens when an example value changes after the
+/// snapshot was captured?
+///
+/// Run sequence to reproduce:
+///   pkl test experiments/08-snapshot-mismatch.pkl                  # writes
+///   <edit `payload` below to change a value>
+///   pkl test experiments/08-snapshot-mismatch.pkl                  # diff
+///   pkl test experiments/08-snapshot-mismatch.pkl --overwrite      # accept
+amends "pkl:test"
+
+local payload = new {
+  name = "alpha"
+  count = 1
+  tags = new Listing<String> { "a"; "b" }
+}
+
+examples {
+  ["snapshotted payload"] {
+    payload
+  }
+}

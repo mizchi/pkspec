@@ -1,0 +1,26 @@
+/// Probe 10: how does pkl test handle long evaluation, and is it parallel?
+///
+/// Pkl is pure-functional; "long-running" tests can really only mean
+/// "expensive computation in pure values". To probe parallelism, run the
+/// test under `time`:
+///
+///   time pkl test experiments/10-timeout-and-parallel.pkl
+///
+/// To probe the timeout flag:
+///
+///   pkl test experiments/10-timeout-and-parallel.pkl -t 1
+amends "pkl:test"
+
+// Burn cycles: a quadratic-ish loop counting down. Each fact independently
+// recomputes — if pkl ran them in parallel, the wall time would be ~1× the
+// per-fact cost; serial would be ~3×.
+local function spin(n: Int): Int =
+  IntSeq(0, n).toList().fold(0, (acc, x) -> acc + x)
+
+local n: Int = 4_000_000
+
+facts {
+  ["spin n is positive (a)"] { spin(n) > 0 }
+  ["spin n is positive (b)"] { spin(n) > 0 }
+  ["spin n is positive (c)"] { spin(n) > 0 }
+}

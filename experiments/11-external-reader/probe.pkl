@@ -1,0 +1,22 @@
+/// Probe 11: external resource readers.
+///
+/// `pkl test --external-resource-reader=<scheme>='<exe>'` is a
+/// documented hatch for adding custom URI schemes that pkl will read
+/// during evaluation. The helper executable speaks a documented
+/// msgpack protocol over stdio.
+///
+/// This probe just tries to read from a custom scheme and records
+/// what comes back. Run:
+///
+///   pkl test experiments/11-external-reader/probe.pkl \
+///     --external-resource-reader=cmd='echo' \
+///     --allowed-resources='cmd:'
+amends "pkl:test"
+
+local result: String? = module.catch(() -> read("cmd:hello").text)
+
+facts {
+  ["read('cmd:...') either works or fails with a meaningful message"] {
+    result != null
+  }
+}
