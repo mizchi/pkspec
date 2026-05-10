@@ -34,6 +34,10 @@ type Step struct {
 // ReferenceSnapshot mirrors `pkthunder.Test#RenderedSnapshot`.
 type ReferenceSnapshot struct {
 	Name string `pkl:"name"`
+	// Generator is the optional reference Test whose stdout is
+	// captured as the snapshot when the file is missing or when
+	// --refresh-snapshots is in effect.
+	Generator *Test `pkl:"generator"`
 }
 
 // Background mirrors `pkthunder.Test#RenderedBackground`.

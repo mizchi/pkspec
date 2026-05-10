@@ -144,31 +144,49 @@ func (e *Executor) snapshotPath(name string) string {
 }
 
 // checkSnapshot compares `actual` against the committed snapshot file
-// for `s.Name`. Three outcomes:
+// for `s.Name`. Outcomes:
 //
 //   - matched         → ok=true, reason=""
-//   - missing file    → write `actual`, ok=false, reason="initial write"
-//   - mismatched      → write `*.actual` next to it, ok=false, reason=diff
+//   - missing file    → write the snapshot bytes (from the generator
+//                       if `s.Generator` is set, otherwise from `actual`),
+//                       return ok=false with a "first run, commit it"
+//                       reason.
+//   - mismatched      → write `*.actual` next to the expected file,
+//                       return ok=false with an inline diff.
 //
 // When RefreshSnapshots is set, the file is overwritten unconditionally
-// and ok=true is returned regardless of prior contents.
-func (e *Executor) checkSnapshot(s *config.ReferenceSnapshot, actual string) (ok bool, reason string) {
+// (using the generator when present) and ok=true is returned.
+func (e *Executor) checkSnapshot(ctx context.Context, s *config.ReferenceSnapshot, actual string, defaults *config.Defaults) (ok bool, reason string) {
 	if s == nil {
 		return true, ""
 	}
 	path := e.snapshotPath(s.Name)
+
 	if e.opts.RefreshSnapshots {
-		if err := writeSnapshot(path, actual); err != nil {
+		bytes, err := e.snapshotSource(ctx, s, actual, defaults)
+		if err != nil {
+			return false, fmt.Sprintf("snapshot %q: refresh failed: %v", s.Name, err)
+		}
+		if err := writeSnapshotBytes(path, bytes); err != nil {
 			return false, fmt.Sprintf("snapshot %q: write failed: %v", s.Name, err)
 		}
 		return true, ""
 	}
+
 	expected, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		if werr := writeSnapshot(path, actual); werr != nil {
+		bytes, srcErr := e.snapshotSource(ctx, s, actual, defaults)
+		if srcErr != nil {
+			return false, fmt.Sprintf("snapshot %q: source unavailable: %v", s.Name, srcErr)
+		}
+		if werr := writeSnapshotBytes(path, bytes); werr != nil {
 			return false, fmt.Sprintf("snapshot %q: not found and write failed: %v", s.Name, werr)
 		}
-		return false, fmt.Sprintf("snapshot %q: not found, wrote initial — review and commit %s", s.Name, path)
+		origin := "wrote initial from this test's output"
+		if s.Generator != nil {
+			origin = "wrote initial from generator"
+		}
+		return false, fmt.Sprintf("snapshot %q: %s — review and commit %s", s.Name, origin, path)
 	}
 	if err != nil {
 		return false, fmt.Sprintf("snapshot %q: read failed: %v", s.Name, err)
@@ -176,17 +194,52 @@ func (e *Executor) checkSnapshot(s *config.ReferenceSnapshot, actual string) (ok
 	if string(expected) == actual {
 		return true, ""
 	}
-	// Persist the actual side for diff tooling.
 	_ = os.WriteFile(path+".actual", []byte(actual), 0o644)
 	return false, fmt.Sprintf("snapshot %q mismatch (actual saved at %s.actual):\n%s",
 		s.Name, path, diff(string(expected), actual))
 }
 
 func writeSnapshot(path, actual string) error {
+	return writeSnapshotBytes(path, []byte(actual))
+}
+
+func writeSnapshotBytes(path string, body []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(actual), 0o644)
+	return os.WriteFile(path, body, 0o644)
+}
+
+// snapshotSource returns the bytes that should become the committed
+// snapshot. With a generator, it runs the reference Test's body and
+// uses its stdout; without one, it just echoes the consumer's output.
+func (e *Executor) snapshotSource(ctx context.Context, s *config.ReferenceSnapshot, fallback string, defaults *config.Defaults) ([]byte, error) {
+	if s.Generator == nil {
+		return []byte(fallback), nil
+	}
+	gen := s.Generator
+	if gen.Mode() != config.ModeCmd {
+		return nil, fmt.Errorf("generator must use a single `cmd`; steps/parallelSteps not yet supported")
+	}
+	out := e.runShell(ctx, runShellInput{
+		Cmd:        *gen.Cmd,
+		Shell:      gen.Shell,
+		Stdin:      gen.Stdin,
+		Env:        mergeEnv(defaultsEnv(defaults), gen.Env),
+		Dir:        resolveDir(e.opts.Workdir, gen.Workdir),
+		TimeoutSec: gen.TimeoutSec,
+	})
+	if out.TimedOut {
+		return nil, fmt.Errorf("generator timed out after %ds", gen.TimeoutSec)
+	}
+	if out.StartErr != nil {
+		return nil, fmt.Errorf("generator could not start: %w", out.StartErr)
+	}
+	if out.ExitCode != gen.ExpectExitCode {
+		return nil, fmt.Errorf("generator exited %d, expected %d (stderr: %q)",
+			out.ExitCode, gen.ExpectExitCode, out.Stderr)
+	}
+	return []byte(out.Stdout), nil
 }
 
 // Tally summarizes the bucketed results for caller reporting and exit code.
@@ -381,10 +434,10 @@ func (e *Executor) runCmd(ctx context.Context, res *Result, t *config.Test, defa
 	if t.ExpectStderr != nil && out.Stderr != *t.ExpectStderr {
 		res.Reasons = append(res.Reasons, fmt.Sprintf("stderr mismatch:\n%s", diff(*t.ExpectStderr, out.Stderr)))
 	}
-	if ok, reason := e.checkSnapshot(t.ExpectStdoutSnapshot, out.Stdout); !ok {
+	if ok, reason := e.checkSnapshot(ctx, t.ExpectStdoutSnapshot, out.Stdout, defaults); !ok {
 		res.Reasons = append(res.Reasons, "stdout "+reason)
 	}
-	if ok, reason := e.checkSnapshot(t.ExpectStderrSnapshot, out.Stderr); !ok {
+	if ok, reason := e.checkSnapshot(ctx, t.ExpectStderrSnapshot, out.Stderr, defaults); !ok {
 		res.Reasons = append(res.Reasons, "stderr "+reason)
 	}
 	if len(res.Reasons) > 0 {

@@ -38,14 +38,27 @@ class Step {
 
 /// Reference to a committed snapshot file. The runner stores expected
 /// bytes under `<test-module-dir>/.pkthunder/snapshots/<name>.bytes`.
-/// On first encounter, the file is written from the captured output
-/// and the test fails so the user reviews and commits it. Subsequent
-/// runs compare the captured output against the committed bytes.
+///
+/// Without a `generator`: on first encounter the consumer's own
+/// captured output becomes the snapshot, the test fails so the user
+/// reviews and commits, and subsequent runs do a byte-exact compare.
 /// `pkt exec --refresh-snapshots` rewrites every snapshot.
+///
+/// With a `generator`: the runner instead executes the generator's
+/// shell command (typically a reference implementation) and uses
+/// its stdout as the snapshot. This is the "port testing" pattern —
+/// reference implementation defines the truth, the consumer must
+/// match it. The generator runs only when the snapshot file is
+/// missing or `--refresh-snapshots` is in effect; on a normal warm
+/// run, only the consumer's command executes.
 class ReferenceSnapshot {
   /// Snapshot identifier. Becomes the file name; restricted to safe
   /// characters so the path can never escape the snapshots dir.
   name: String(matches(Regex(#"^[a-zA-Z0-9_\-]+$"#)))
+
+  /// Optional reference Test whose stdout becomes the snapshot when
+  /// the file does not exist or a refresh is requested.
+  generator: Test? = null
 }
 
 /// A long-running process the runner starts before the test body and
@@ -153,6 +166,7 @@ class RenderedBackground {
 
 class RenderedSnapshot {
   name: String
+  generator: RenderedTest?
 }
 
 class RenderedTest {
@@ -220,35 +234,48 @@ local function renderBackground(b: Background): RenderedBackground = new {
   graceTimeoutSec = b.graceTimeoutSec
 }
 
+// `renderTest` and `renderSnapshot` recurse into each other when a
+// snapshot has a generator: the generator is itself a Test that needs
+// rendering (its own `expectStdoutSnapshot` etc. could in principle
+// cycle, but in practice generators are leaf shell invocations).
+local function renderTest(t: Test): RenderedTest = new {
+  description = t.description
+  shell = t.shell
+  env = t.env
+  workdir = t.workdir
+  timeoutSec = t.timeoutSec
+  retries = t.retries
+  flakyAcceptable = t.flakyAcceptable
+  cmd = t.cmd
+  stdin = t.stdin
+  expectExitCode = t.expectExitCode
+  expectStdout = t.expectStdout
+  expectStderr = t.expectStderr
+  expectStdoutSnapshot =
+    if (t.expectStdoutSnapshot == null) null
+    else renderSnapshot(t.expectStdoutSnapshot)
+  expectStderrSnapshot =
+    if (t.expectStderrSnapshot == null) null
+    else renderSnapshot(t.expectStderrSnapshot)
+  steps = new Listing<RenderedStep> {
+    for (s in t.steps) { renderStep(s) }
+  }
+  parallelSteps = new Listing<RenderedStep> {
+    for (s in t.parallelSteps) { renderStep(s) }
+  }
+  background = new Listing<RenderedBackground> {
+    for (b in t.background) { renderBackground(b) }
+  }
+}
+
+local function renderSnapshot(s: ReferenceSnapshot): RenderedSnapshot = new {
+  name = s.name
+  generator = if (s.generator == null) null else renderTest(s.generator)
+}
+
 local rendered: Mapping<String, RenderedTest> = new Mapping {
   for (t in tests) {
-    [t.name] = new RenderedTest {
-      description = t.description
-      shell = t.shell
-      env = t.env
-      workdir = t.workdir
-      timeoutSec = t.timeoutSec
-      retries = t.retries
-      flakyAcceptable = t.flakyAcceptable
-      cmd = t.cmd
-      stdin = t.stdin
-      expectExitCode = t.expectExitCode
-      expectStdout = t.expectStdout
-      expectStderr = t.expectStderr
-      expectStdoutSnapshot = if (t.expectStdoutSnapshot == null) null
-        else new RenderedSnapshot { name = t.expectStdoutSnapshot.name }
-      expectStderrSnapshot = if (t.expectStderrSnapshot == null) null
-        else new RenderedSnapshot { name = t.expectStderrSnapshot.name }
-      steps = new Listing<RenderedStep> {
-        for (s in t.steps) { renderStep(s) }
-      }
-      parallelSteps = new Listing<RenderedStep> {
-        for (s in t.parallelSteps) { renderStep(s) }
-      }
-      background = new Listing<RenderedBackground> {
-        for (b in t.background) { renderBackground(b) }
-      }
-    }
+    [t.name] = renderTest(t)
   }
 }
 
