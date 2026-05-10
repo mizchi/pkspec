@@ -19,27 +19,44 @@ tests in Pkl, run any external tool" goal.
 
 ## Goal
 
-Tests authored as Pkl values (typed, composable, snapshot-friendly),
-then executed by a Go runner that can drive arbitrary subprocesses.
-The end result should let you write things like:
+A test runner where every test is a Pkl value (typed, composable,
+snapshot-friendly), executed by a Go orchestrator with retry / flaky
+detection / reference-snapshot machinery on top of `pkl test`.
+
+The three target scenarios driving the design:
+
+- **Language-agnostic reference tests.** A spec implemented in two or
+  more languages — run the reference once, capture its stdout, assert
+  every port produces the same bytes.
+- **E2E in lieu of a bash harness.** `playwright test` and similar
+  runners already do one job well; bolt-on retry / flake handling /
+  reporting belong in a generic layer. Bash chains break down past
+  three steps.
+- **Snapshot porting from a reference implementation.** Mid-port the
+  reference is the spec; pkthunder runs it, stores its output, and
+  the port must match — same model as `pkl test`'s snapshots, but for
+  subprocess output rather than pure-Pkl values.
 
 ```pkl
-amends "pkthunder:Test.pkl"
+amends "package://pkg.pkl-lang.org/.../pkthunder@0.0.1#/Test.pkl"
 
-tests {
-  ["cli prints version"] = new Test {
-    cmd = "myapp --version"
-    expectStdout = Regex(#"^myapp \d+\.\d+\.\d+\n$"#)
-  }
-  ["go unit"] = new Test {
-    cmd = "go test ./..."
-    expectExitCode = 0
-  }
+local goImpl = new Test {
+  cmd = "go run ./impl-go -- --json input.txt"
 }
+
+local rustPort = new Test {
+  cmd = "target/release/impl-rs --json input.txt"
+  expectStdoutMatches = goImpl     // resolved at runtime
+  retries = 2
+  flakyAcceptable = false
+}
+
+tests: Listing<Test> = new { rustPort }
 ```
 
-But before designing the schema, we need to know what `pkl test`
-already does well, and where it falls short.
+See [`docs/notes/runner-design.md`](./docs/notes/runner-design.md) for
+the full schema sketch (incl. `ReferenceSnapshot`, retry semantics,
+result categories) and the implementation order.
 
 ## What's in this repo right now
 
