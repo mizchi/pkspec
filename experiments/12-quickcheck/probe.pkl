@@ -1,0 +1,79 @@
+/// Probe 12: can we implement QuickCheck-style property testing in Pkl?
+///
+/// QuickCheck needs three things, and Pkl can give us all three —
+/// just with seeded determinism instead of randomness:
+///
+///   1. A pseudo-random value generator. Pkl is pure / no I/O, so a
+///      seeded LCG inside the language is the only option. That's
+///      arguably *better* for CI: every run is reproducible, and the
+///      seed becomes the bug ID.
+///   2. A property — a function from generated inputs to Boolean.
+///      Pkl has first-class functions, so this is just a lambda.
+///   3. Counterexample reporting. `pkl test`'s power assertions print
+///      every subexpression's value when a fact fails, so as long as
+///      we run the property inside `facts { }`, the failing input is
+///      already in the diagnostic.
+///
+/// What's missing vs Hypothesis-grade QuickCheck:
+///   - Shrinking. Pkl can express it (recursive function returning a
+///     `Listing` of smaller candidates), but it's mechanically heavy;
+///     punt to a separate probe.
+///   - Stateful properties. Out of scope for a pure language.
+amends "pkl:test"
+
+// ── Seeded PRNG (Linear Congruential Generator) ───────────────────
+//
+// `next` produces the next state, masked to 31 bits so multiplication
+// stays inside Pkl's 64-bit signed Int. `bounded` reduces it to
+// [0, upper).
+local function next(s: Int): Int = (s * 1103515245 + 12345).and(0x7fffffff)
+
+local function bounded(s: Int, upper: Int): Int =
+  let (n = next(s))
+    n % upper
+
+// ── Generators ────────────────────────────────────────────────────
+
+local function genInt(seed: Int, lo: Int, hi: Int): Int =
+  lo + bounded(seed, hi - lo)
+
+local function genList(seed: Int, len: Int, lo: Int, hi: Int): Listing<Int> =
+  new {
+    for (i in IntSeq(0, len - 1)) { genInt(seed + i * 7919, lo, hi) }
+  }
+
+// ── Property under test ──────────────────────────────────────────
+//
+// reverse(reverse(xs)) == xs is the canonical "your test suite has
+// at least one passing property" example. We also include a known
+// counterexample to confirm power assertions surface the input.
+
+local function reverse(xs: Listing<Int>): Listing<Int> =
+  new {
+    for (i in IntSeq(0, xs.length - 1)) { xs[xs.length - 1 - i] }
+  }
+
+local function listEqual(a: Listing<Int>, b: Listing<Int>): Boolean =
+  a.toList() == b.toList()
+
+// Number of generated cases per property.
+local n: Int = 50
+
+facts {
+  for (seed in IntSeq(0, n)) {
+    ["reverse∘reverse == id (seed \(seed))"] {
+      let (xs = genList(seed, 5, 0, 100))
+        listEqual(reverse(reverse(xs)), xs)
+    }
+  }
+
+  // Intentional failure to demonstrate counterexample reporting.
+  // Hypothesis: every generated 3-tuple sums to less than 100.
+  // Obviously false; the failing case shows up in the power assertion.
+  for (seed in IntSeq(0, 5)) {
+    ["sum < 100 (seed \(seed))"] {
+      let (xs = genList(seed, 3, 0, 100))
+        xs.fold(0, (acc, x) -> acc + x) < 100
+    }
+  }
+}

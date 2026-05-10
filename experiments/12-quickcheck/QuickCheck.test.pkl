@@ -1,0 +1,49 @@
+/// Schema-level tests for QuickCheck.pkl.
+///
+/// The PRNG is xorshift32; the seed sequence is locked in here so any
+/// future change to `step` is visible as a snapshot diff.
+amends "pkl:test"
+
+import "QuickCheck.pkl" as QC
+
+facts {
+  ["deterministic seed stream"] {
+    QC.seedAt(12345, 0) == 12345
+    QC.seedAt(12345, 1) == 3336926330
+    QC.seedAt(12345, 2) == 1697253807
+  }
+
+  ["intCases length and inclusive bounds"] {
+    let (cs = QC.intCases(20260511, 50, 3, 9))
+      cs.length == 50 && cs.toList().every((c) ->
+        c.value >= 3 && c.value <= 9
+      )
+  }
+
+  ["intCases indexes are sequential"] {
+    let (cs = QC.intCases(20260511, 5, 0, 100))
+      cs.toList().mapIndexed((i, c) -> i == c.index).every((b) -> b)
+  }
+
+  ["checkAll returns passed=true when predicate holds for every case"] {
+    let (cs = QC.intCases(1, 10, 0, 0))   // every value forced to 0
+    let (r = QC.checkAll("trivial", cs, (c) -> c.value == 0))
+      r.passed && r.failure == null
+  }
+
+  ["checkAll surfaces the first counterexample"] {
+    let (cs = QC.intCases(20260511, 20, 0, 10))
+    let (r = QC.checkAll("value below eight", cs, (c) -> c.value < 8))
+      r.passed == false &&
+      r.failure != null &&
+      r.failure!!.value >= 8
+  }
+}
+
+examples {
+  ["seedAt sample for seed=42, indices 0..4"] {
+    new Listing<Int> {
+      for (i in IntSeq(0, 4)) { QC.seedAt(42, i) }
+    }
+  }
+}

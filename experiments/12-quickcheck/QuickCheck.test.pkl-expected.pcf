@@ -1,0 +1,11 @@
+examples {
+  ["seedAt sample for seed=42, indices 0..4"] {
+    new {
+      42
+      11355432
+      2836018348
+      476557059
+      3648046016
+    }
+  }
+}

@@ -5,6 +5,39 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Probe 12 — `experiments/12-quickcheck/`
+
+- **Verdict — QuickCheck-style property testing fits in pure Pkl.**
+  A 32-bit xorshift PRNG (`step(s) = s ^= s<<13; s ^= s>>17; s ^= s<<5`)
+  is enough for reproducible "random" inputs; every run is the same
+  given a seed, which is the desired property for CI anyway.
+- API committed in `QuickCheck.pkl` matches the TODO.md sketch:
+  - `seedAt(seed, index) → Int`
+  - `intCases(seed, count, lo, hi) → Listing<Case>`
+  - `checkAll(name, cases, pred) → Result { passed, cases, failure?, summary }`
+- pkthunder needs **no new runner support** — a property test is just
+  a `facts { ... checkAll(...) ... }` block, executed by the existing
+  `pkt run` path.
+- Four Pkl gotchas surfaced while writing this:
+  - `IntSeq(a, b)` is **inclusive on both ends**. For `[0, n)` write
+    `IntSeq(0, n - 1)`.
+  - `Int` has `ushr` and `and`, but no `shiftLeft`. Emulate via
+    `(s * 2^n).and(0xffffffff)` for left shifts.
+  - Calling a function-typed parameter inside a method chain wants
+    `pred.apply(c)`, not `pred(c)`.
+  - `trace(x)` returns `x`, so it cannot sit inline in a fact body
+    (the body must be `Boolean`). Use `let (_ = trace(x)) booleanExpr`.
+- xorshift32 reproducibility lock-ins (committed in
+  `QuickCheck.test.pkl`):
+  - `seedAt(12345, 0) == 12345`
+  - `seedAt(12345, 1) == 3336926330`
+  - `seedAt(12345, 2) == 1697253807`
+
+  The TODO.md sketch suggested different values (`1406932606`,
+  `654583775`); those imply a different LCG. xorshift32 was chosen
+  here because it has the smallest Pkl footprint — happy to swap if
+  there is a reason to standardise on a specific generator.
+
 ## Probe 11 — `experiments/11-external-reader/`
 
 - **Verdict — `--external-resource-reader=<scheme>='<exe>'` is real and

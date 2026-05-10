@@ -1,0 +1,81 @@
+/// pkthunder QuickCheck PoC — property-based testing in pure Pkl.
+///
+/// Pkl is side-effect-free, so "random" inputs come from a seeded
+/// PRNG (xorshift32) implemented in the language itself. That makes
+/// every run deterministic — the seed becomes the bug ID.
+///
+/// API matches the shape sketched in TODO.md:
+///
+///   seedAt(seed, index)     int — seedAt(s, 0) == s, then iterates.
+///   intCases(s, n, lo, hi)  Listing<Case>, lo/hi inclusive.
+///   checkAll(name, cs, p)   Result with first counterexample.
+@ModuleInfo { minPklVersion = "0.31.0" }
+module pkthunder.experiments.QuickCheck
+
+class Case {
+  index: Int
+  seed: Int
+  value: Int
+}
+
+class Failure {
+  index: Int
+  seed: Int
+  value: Int
+}
+
+class Result {
+  passed: Boolean
+  cases: Int
+  failure: Failure?
+  summary: String
+}
+
+local mask32: Int = 0xffffffff
+
+/// xorshift32: `x ^= x<<13; x ^= x>>17; x ^= x<<5`. Pkl's Int has
+/// `ushr` (unsigned shift right) and `and`, but no shift-left method,
+/// so we emulate the left shifts via `* 2^n` followed by a 32-bit
+/// mask. Each line keeps the running state inside `mask32`.
+local function step(s: Int): Int =
+  let (s0 = s.and(mask32))
+  let (s1 = s0.xor((s0 * 8192).and(mask32)))    // << 13
+  let (s2 = s1.xor(s1.ushr(17)))
+    s2.xor((s2 * 32).and(mask32)).and(mask32)   // << 5
+
+/// Returns the seed at position `index` in the seed stream that
+/// starts from `seed`. Position 0 is the initial seed itself.
+function seedAt(seed: Int, index: Int): Int =
+  if (index <= 0) seed
+  else seedAt(step(seed), index - 1)
+
+/// Generate `count` integer cases, each `value` ∈ [lo, hi] inclusive.
+function intCases(seed: Int, count: Int, lo: Int, hi: Int): Listing<Case> =
+  let (range = hi - lo + 1)
+    new {
+      for (i in IntSeq(0, count - 1)) {
+        let (s = seedAt(seed, i))
+          new Case {
+            index = i
+            seed = s
+            value = lo + (s % range)
+          }
+      }
+    }
+
+/// Runs `pred` against every case. The result reports the first
+/// counterexample (if any) and a one-line summary suitable for a
+/// fact's power-assertion output.
+function checkAll(name: String, cases: Listing<Case>, pred: (Case) -> Boolean): Result =
+  let (failed = cases.toList().filter((c) -> !pred.apply(c)))
+    let (first = if (failed.isEmpty) null else failed.first)
+      new Result {
+        passed = failed.isEmpty
+        cases = cases.length
+        failure =
+          if (first == null) null
+          else new Failure { index = first.index; seed = first.seed; value = first.value }
+        summary =
+          if (first == null) "PASS \(name) cases=\(cases.length)"
+          else "FAIL \(name) seed=\(first.seed) index=\(first.index) value=\(first.value)"
+      }
