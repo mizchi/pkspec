@@ -1,7 +1,9 @@
 # pkthunder
 
-> **[experimental]** Design notebook for a language-agnostic test
-> runner that extends `pkl test`. Not a usable runner yet.
+> **[experimental]** Language-agnostic test runner that extends
+> `pkl test`. Phase 1 (the `pkl test` wrapper) is implemented and
+> usable; the `Test` schema, retries, flaky detection, and reference
+> snapshots are still pending.
 
 This repository is public so others can read along, but every file
 is subject to change without notice. The schema, the CLI name, the
@@ -16,6 +18,31 @@ The contents right now are probes against Apple's
 [`pkl test`](https://pkl-lang.org/blog/testing-in-pkl.html), captured
 to find out which capabilities are reusable for the broader "declare
 tests in Pkl, run any external tool" goal.
+
+## Phase 1 — `pkt run` (available now)
+
+```sh
+go install github.com/mizchi/pkthunder/cmd/pkt@latest
+
+pkt run path/to/Test.pkl                # one module
+pkt run                                  # everything in PklProject.tests
+pkt run --overwrite path/to/Test.pkl     # accept new snapshots
+```
+
+Every argument after `pkt run` is forwarded to `pkl test`, so any flag
+you would pass to pkl test (`--overwrite`, `--junit-aggregate-reports`,
+`--no-power-assertions`, etc.) works the same. What pkthunder adds on
+top is a **trustworthy exit code**:
+
+| Outcome | `pkl test` | `pkt run` |
+| --- | --- | --- |
+| every assertion passes | 0 | 0 |
+| at least one assertion fails | **0** | **1** |
+| at least one example freshly written | **0** | **1** (with a hint to commit the `*.pkl-expected.pcf`) |
+
+You also need the `pkl` CLI on `PATH`. A Nix flake mirroring pkfire's
+landed in step 6 of the implementation order; until then, install
+[Pkl](https://pkl-lang.org/) yourself.
 
 ## Goal
 
