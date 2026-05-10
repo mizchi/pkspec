@@ -150,14 +150,18 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 		Workdir: filepath.Dir(abs),
 		Stderr:  stderr,
 	})
-	results, failed, err := exe.Run(ctx, plan)
+	results, tally, err := exe.Run(ctx, plan)
 	if err != nil {
 		return err
 	}
+	_ = results // kept for future structured reporters
 
-	fmt.Fprintf(stderr, "pkt: %d/%d test(s) passed\n", len(results)-failed, len(results))
-	if failed > 0 {
-		return fmt.Errorf("%d test(s) failed", failed)
+	fmt.Fprintf(stderr,
+		"pkt: %d passed, %d flaky, %d failed, %d errored (of %d)\n",
+		tally.Passed, tally.Flaky, tally.Failed, tally.Errored, tally.Total())
+
+	if !tally.IsGreen() {
+		return fmt.Errorf("%d test(s) failed, %d errored", tally.Failed, tally.Errored)
 	}
 	return nil
 }

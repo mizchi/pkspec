@@ -43,6 +43,10 @@ const (
 	OutcomeFailed
 	OutcomeErrored
 	OutcomeSkipped
+	// OutcomeFlaky means at least one attempt across `retries+1` passed
+	// AND `flakyAcceptable` was true. Test-level only; no Step ever
+	// reports flaky directly.
+	OutcomeFlaky
 )
 
 func (o Outcome) String() string {
@@ -53,9 +57,18 @@ func (o Outcome) String() string {
 		return "failed"
 	case OutcomeSkipped:
 		return "skipped"
+	case OutcomeFlaky:
+		return "flaky"
 	default:
 		return "errored"
 	}
+}
+
+// IsGreen reports whether the outcome should let CI pass. Passed and
+// Flaky are green; Failed / Errored are red; Skipped is neutral but
+// should never appear at the test level.
+func (o Outcome) IsGreen() bool {
+	return o == OutcomePassed || o == OutcomeFlaky
 }
 
 // StepResult is the per-step outcome inside a sequential or parallel test.
@@ -79,6 +92,11 @@ type Result struct {
 	Stdout   string       // ModeCmd only
 	Stderr   string       // ModeCmd only
 	Duration time.Duration
+
+	// Attempts counts how many times the body ran (1 = no retries).
+	// PassedAttempts is how many of those passed.
+	Attempts       int
+	PassedAttempts int
 }
 
 // Options configures an Executor.
@@ -108,9 +126,25 @@ func New(opts Options) *Executor {
 	return &Executor{opts: opts}
 }
 
+// Tally summarizes the bucketed results for caller reporting and exit code.
+type Tally struct {
+	Passed  int
+	Flaky   int
+	Failed  int
+	Errored int
+}
+
+// Total returns the total number of tests reported.
+func (t Tally) Total() int { return t.Passed + t.Flaky + t.Failed + t.Errored }
+
+// IsGreen reports whether this tally should let CI pass — flaky is
+// surfaced but does not turn the run red.
+func (t Tally) IsGreen() bool { return t.Failed == 0 && t.Errored == 0 }
+
 // Run executes every test in `plan` in alphabetical order. Returns the
-// per-test results plus the count of failed/errored entries.
-func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, int, error) {
+// per-test results plus a Tally for the caller to format / use for
+// exit code decisions.
+func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally, error) {
 	names := make([]string, 0, len(plan.Tests))
 	for n := range plan.Tests {
 		names = append(names, n)
@@ -118,59 +152,125 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, int, e
 	sort.Strings(names)
 
 	results := make([]Result, 0, len(names))
-	failed := 0
+	tally := Tally{}
 	for _, name := range names {
 		res := e.runOne(ctx, name, plan.Tests[name], plan.Defaults)
 		results = append(results, res)
-		if res.Outcome != OutcomePassed {
-			failed++
+		switch res.Outcome {
+		case OutcomePassed:
+			tally.Passed++
+		case OutcomeFlaky:
+			tally.Flaky++
+		case OutcomeErrored:
+			tally.Errored++
+		default:
+			tally.Failed++
 		}
-		fmt.Fprintf(e.opts.Stderr, "[pkt] %s: %s (%s)\n", name, res.Outcome, res.Duration.Round(time.Millisecond))
-		for _, sr := range res.Steps {
-			if sr.Outcome == OutcomeSkipped {
-				fmt.Fprintf(e.opts.Stderr, "      step %q: skipped\n", sr.Name)
-				continue
-			}
-			if sr.Outcome != OutcomePassed {
-				fmt.Fprintf(e.opts.Stderr, "      step %q: %s\n", sr.Name, sr.Outcome)
-				for _, r := range sr.Reasons {
-					fmt.Fprintf(e.opts.Stderr, "        %s\n", r)
-				}
-			}
+		formatResult(e.opts.Stderr, res)
+	}
+	return results, tally, nil
+}
+
+// formatResult writes the per-test status line plus any failed-step
+// detail. Passed steps stay silent; flaky / failed / errored get the
+// attempt count surfaced.
+func formatResult(w io.Writer, res Result) {
+	suffix := ""
+	if res.Attempts > 1 {
+		suffix = fmt.Sprintf(" [%d/%d attempts passed]", res.PassedAttempts, res.Attempts)
+	}
+	fmt.Fprintf(w, "[pkt] %s: %s%s (%s)\n",
+		res.Name, res.Outcome, suffix, res.Duration.Round(time.Millisecond))
+	for _, sr := range res.Steps {
+		if sr.Outcome == OutcomeSkipped {
+			fmt.Fprintf(w, "      step %q: skipped\n", sr.Name)
+			continue
 		}
-		for _, r := range res.Reasons {
-			fmt.Fprintf(e.opts.Stderr, "      %s\n", r)
+		if sr.Outcome != OutcomePassed {
+			fmt.Fprintf(w, "      step %q: %s\n", sr.Name, sr.Outcome)
+			for _, r := range sr.Reasons {
+				fmt.Fprintf(w, "        %s\n", r)
+			}
 		}
 	}
-	return results, failed, nil
+	for _, r := range res.Reasons {
+		fmt.Fprintf(w, "      %s\n", r)
+	}
 }
 
 func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defaults *config.Defaults) Result {
 	start := time.Now()
-	res := Result{Name: name}
 
 	mode := t.Mode()
 	if mode == config.ModeInvalid {
-		res.Outcome = OutcomeErrored
-		res.Reasons = []string{"specify exactly one of cmd / steps / parallelSteps"}
-		res.Duration = time.Since(start)
-		return res
+		return Result{
+			Name:     name,
+			Outcome:  OutcomeErrored,
+			Reasons:  []string{"specify exactly one of cmd / steps / parallelSteps"},
+			Duration: time.Since(start),
+		}
 	}
 
-	// Backgrounds first; the deferred kill is what guarantees cleanup
-	// even if a step panics or a parent context is cancelled.
+	// Backgrounds live for the entire retry sequence — restarting them
+	// per-attempt would defeat the point (the dev server would never
+	// stay up). The deferred kill guarantees cleanup regardless of how
+	// the retry loop exits (panic, ctx cancel, regular return).
 	bgs, bgErr := e.startBackgrounds(ctx, t, defaults)
 	defer e.killBackgrounds(bgs)
 	if bgErr != nil {
-		res.Outcome = OutcomeErrored
-		res.Reasons = []string{bgErr.Error()}
-		res.Duration = time.Since(start)
-		return res
+		return Result{
+			Name:     name,
+			Outcome:  OutcomeErrored,
+			Reasons:  []string{bgErr.Error()},
+			Duration: time.Since(start),
+		}
 	}
 
+	maxAttempts := 1 + t.Retries
+	var last Result
+	attempts := 0
+	passed := 0
+	for attempts < maxAttempts {
+		attempts++
+		last = e.runAttempt(ctx, name, mode, t, defaults)
+		if last.Outcome == OutcomePassed {
+			passed++
+			break
+		}
+	}
+
+	last.Attempts = attempts
+	last.PassedAttempts = passed
+	last.Outcome = classify(last.Outcome, attempts, passed, t.FlakyAcceptable)
+	last.Duration = time.Since(start)
+	return last
+}
+
+// classify folds the loop's bookkeeping into the user-visible outcome.
+//
+//   - 0 passes        → the last attempt's failed/errored outcome.
+//   - 1 pass on first → passed (clean run, no flake).
+//   - 1+ passes after at least one failure → flaky if `flakyAcceptable`,
+//     otherwise failed (the flake is the bug).
+func classify(lastOutcome Outcome, attempts, passed int, flakyOK bool) Outcome {
+	if passed == 0 {
+		return lastOutcome
+	}
+	if attempts == 1 {
+		return OutcomePassed
+	}
+	if flakyOK {
+		return OutcomeFlaky
+	}
+	return OutcomeFailed
+}
+
+// runAttempt executes one round of the body with a fresh body context
+// so each attempt has its own timeout budget.
+func (e *Executor) runAttempt(ctx context.Context, name string, mode config.Mode, t *config.Test, defaults *config.Defaults) Result {
+	res := Result{Name: name}
 	bodyCtx, cancel := context.WithTimeout(ctx, time.Duration(t.TimeoutSec)*time.Second)
 	defer cancel()
-
 	switch mode {
 	case config.ModeCmd:
 		e.runCmd(bodyCtx, &res, t, defaults)
@@ -179,8 +279,6 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 	case config.ModeParallelSteps:
 		e.runParallel(bodyCtx, &res, t, defaults)
 	}
-
-	res.Duration = time.Since(start)
 	return res
 }
 

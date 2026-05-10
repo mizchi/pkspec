@@ -46,11 +46,13 @@ type Background struct {
 
 // Test mirrors `pkthunder.Test#RenderedTest`.
 type Test struct {
-	Description *string           `pkl:"description"`
-	Shell       string            `pkl:"shell"`
-	Env         map[string]string `pkl:"env"`
-	Workdir     *string           `pkl:"workdir"`
-	TimeoutSec  int               `pkl:"timeoutSec"`
+	Description     *string           `pkl:"description"`
+	Shell           string            `pkl:"shell"`
+	Env             map[string]string `pkl:"env"`
+	Workdir         *string           `pkl:"workdir"`
+	TimeoutSec      int               `pkl:"timeoutSec"`
+	Retries         int               `pkl:"retries"`
+	FlakyAcceptable bool              `pkl:"flakyAcceptable"`
 
 	Cmd            *string `pkl:"cmd"`
 	Stdin          *string `pkl:"stdin"`

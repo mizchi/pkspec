@@ -77,6 +77,17 @@ class Test {
   /// counting background lifetime).
   timeoutSec: Int(this > 0) = 60
 
+  /// Re-run the body on failure. 0 = no retry (default). Up to
+  /// `1 + retries` attempts in total. Backgrounds are NOT restarted
+  /// between attempts; they live for the full retry sequence.
+  retries: Int(this >= 0) = 0
+
+  /// When true and at least one attempt across `retries+1` passed,
+  /// the test is reported as `flaky` rather than `failed` and does
+  /// not contribute to the runner's non-zero exit code. Off by
+  /// default — every attempt must pass.
+  flakyAcceptable: Boolean = false
+
   // ── Body: pick exactly one ─────────────────────────────────────
   cmd: (String(length > 0))? = null
   stdin: String? = null
@@ -130,6 +141,8 @@ class RenderedTest {
   env: Mapping<String, String>
   workdir: String?
   timeoutSec: Int
+  retries: Int
+  flakyAcceptable: Boolean
 
   cmd: String?
   stdin: String?
@@ -193,6 +206,8 @@ local rendered: Mapping<String, RenderedTest> = new Mapping {
       env = t.env
       workdir = t.workdir
       timeoutSec = t.timeoutSec
+      retries = t.retries
+      flakyAcceptable = t.flakyAcceptable
       cmd = t.cmd
       stdin = t.stdin
       expectExitCode = t.expectExitCode
