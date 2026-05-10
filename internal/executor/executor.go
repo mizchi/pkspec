@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -478,13 +479,21 @@ func (e *Executor) runSteps(ctx context.Context, res *Result, t *config.Test, de
 		}
 		sr := e.runStep(ctx, step, t, defaults, state)
 		// captures only fire on success; capturing a failed step's stdout
-		// would just propagate noise.
+		// would just propagate noise. Shell uses Stdout/ExitCode; HTTP
+		// reuses Stdout for the body and ExitCode for the status code,
+		// but also exposes captureBody / captureStatus aliases for clarity.
 		if sr.Outcome == OutcomePassed {
 			if step.CaptureStdout != nil {
 				state[*step.CaptureStdout] = strings.TrimSuffix(sr.Stdout, "\n")
 			}
 			if step.CaptureExitCode != nil {
 				state[*step.CaptureExitCode] = strconv.Itoa(sr.ExitCode)
+			}
+			if step.CaptureBody != nil {
+				state[*step.CaptureBody] = sr.Stdout
+			}
+			if step.CaptureStatus != nil {
+				state[*step.CaptureStatus] = strconv.Itoa(sr.ExitCode)
 			}
 		}
 		res.Steps = append(res.Steps, sr)
@@ -512,8 +521,22 @@ func (e *Executor) runParallel(ctx context.Context, res *Result, t *config.Test,
 }
 
 func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
+	if step.Http != nil {
+		return e.runHttpStep(ctx, step, t, defaults, state)
+	}
+	return e.runShellStep(ctx, step, t, defaults, state)
+}
+
+func (e *Executor) runShellStep(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
 	start := time.Now()
 	sr := StepResult{Name: stepName(step)}
+
+	if step.Cmd == nil || *step.Cmd == "" {
+		sr.Outcome = OutcomeErrored
+		sr.Reasons = []string{"step has neither `cmd` nor `http`"}
+		sr.Duration = time.Since(start)
+		return sr
+	}
 
 	shell := step.Shell
 	if shell == "" {
@@ -527,7 +550,7 @@ func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Tes
 	}
 
 	out := e.runShell(ctx, runShellInput{
-		Cmd:        step.Cmd,
+		Cmd:        *step.Cmd,
 		Shell:      shell,
 		Stdin:      step.Stdin,
 		Env:        mergeEnv(defaultsEnv(defaults), t.Env, state, step.Env),
@@ -566,6 +589,115 @@ func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Tes
 		sr.Outcome = OutcomePassed
 	}
 	return sr
+}
+
+// ── HTTP step path ────────────────────────────────────────────────────
+
+func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
+	start := time.Now()
+	sr := StepResult{Name: stepName(step)}
+	h := step.Http
+
+	// Per-request timeout independent of step.TimeoutSec; honor whichever
+	// fires first by deriving a context from the smaller of the two.
+	timeout := time.Duration(h.TimeoutSec) * time.Second
+	stepCap := time.Duration(step.TimeoutSec) * time.Second
+	if stepCap > 0 && stepCap < timeout {
+		timeout = stepCap
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// Expand `$VAR` (from prior captures + env) inside the URL and headers.
+	// Body is left as-is on purpose; users wanting interpolation can do
+	// it in Pkl with string concatenation.
+	envMap := mergedMap(defaultsEnv(defaults), t.Env, state, step.Env)
+	url := expandEnv(h.URL, envMap)
+
+	var body io.Reader
+	if h.Body != nil {
+		body = strings.NewReader(*h.Body)
+	}
+	req, err := http.NewRequestWithContext(reqCtx, h.Method, url, body)
+	if err != nil {
+		sr.Outcome = OutcomeErrored
+		sr.Reasons = []string{fmt.Sprintf("build request: %v", err)}
+		sr.Duration = time.Since(start)
+		return sr
+	}
+	for k, v := range h.Headers {
+		req.Header.Set(k, expandEnv(v, envMap))
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	sr.Duration = time.Since(start)
+	if err != nil {
+		if errors.Is(reqCtx.Err(), context.DeadlineExceeded) {
+			sr.Outcome = OutcomeErrored
+			sr.Reasons = []string{fmt.Sprintf("timed out after %s", timeout)}
+		} else {
+			sr.Outcome = OutcomeErrored
+			sr.Reasons = []string{fmt.Sprintf("request failed: %v", err)}
+		}
+		return sr
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	sr.ExitCode = resp.StatusCode
+	sr.Stdout = string(bodyBytes)
+
+	if step.ExpectStatus != nil && resp.StatusCode != *step.ExpectStatus {
+		sr.Reasons = append(sr.Reasons,
+			fmt.Sprintf("expected status %d, got %d", *step.ExpectStatus, resp.StatusCode))
+	}
+	if step.ExpectBodyEquals != nil && string(bodyBytes) != *step.ExpectBodyEquals {
+		sr.Reasons = append(sr.Reasons, fmt.Sprintf("body mismatch:\n%s",
+			diff(*step.ExpectBodyEquals, string(bodyBytes))))
+	}
+	if step.ExpectBodyContains != nil && !strings.Contains(string(bodyBytes), *step.ExpectBodyContains) {
+		sr.Reasons = append(sr.Reasons,
+			fmt.Sprintf("body does not contain %q", *step.ExpectBodyContains))
+	}
+	for k, v := range step.ExpectHeaderEquals {
+		got := resp.Header.Get(k)
+		if got != v {
+			sr.Reasons = append(sr.Reasons,
+				fmt.Sprintf("header %q expected %q, got %q", k, v, got))
+		}
+	}
+
+	if len(sr.Reasons) > 0 {
+		sr.Outcome = OutcomeFailed
+	} else {
+		sr.Outcome = OutcomePassed
+	}
+	return sr
+}
+
+// mergedMap is `mergeEnv` minus the inherited PATH/HOME/etc. — used
+// for the env-substitution dictionary, where we don't want PATH to
+// accidentally be substitutable into a URL.
+func mergedMap(layers ...map[string]string) map[string]string {
+	out := make(map[string]string)
+	for _, layer := range layers {
+		for k, v := range layer {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// expandEnv substitutes `$VAR` and `${VAR}` references in s with values
+// from m. Unknown vars are left as-is; this is intentionally less
+// magical than `os.Expand` so a literal `$` does not need escaping.
+func expandEnv(s string, m map[string]string) string {
+	return os.Expand(s, func(k string) string {
+		if v, ok := m[k]; ok {
+			return v
+		}
+		// Restore the literal so unset variables don't silently disappear.
+		return "$" + k
+	})
 }
 
 // ── Shell exec helper ─────────────────────────────────────────────────
@@ -751,10 +883,19 @@ func stepName(s *config.Step) string {
 	if s.Name != nil && *s.Name != "" {
 		return *s.Name
 	}
-	if len(s.Cmd) > 60 {
-		return s.Cmd[:60] + "…"
+	var fallback string
+	switch {
+	case s.Cmd != nil && *s.Cmd != "":
+		fallback = *s.Cmd
+	case s.Http != nil:
+		fallback = s.Http.Method + " " + s.Http.URL
+	default:
+		fallback = "<unnamed step>"
 	}
-	return s.Cmd
+	if len(fallback) > 60 {
+		return fallback[:60] + "…"
+	}
+	return fallback
 }
 
 func nameOr(opt *string, fallback string) string {

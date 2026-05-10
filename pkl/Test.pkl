@@ -8,28 +8,57 @@
 @ModuleInfo { minPklVersion = "0.31.0" }
 open module pkthunder.Test
 
+/// HTTP request authored on a Step. When `Step.http` is non-null, the
+/// runner takes the HTTP path: it dispatches the request via Go's
+/// `net/http`, applies the `expectStatus` / `expectBody*` /
+/// `expectHeaders` assertions, and feeds `captureBody` /
+/// `captureStatus` back into the sequential step's env map.
+class HttpRequest {
+  method: String(matches(Regex(#"^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$"#))) = "GET"
+  url: String(length > 0)
+  headers: Mapping<String, String> = new {}
+  body: String? = null
+  /// Per-request timeout. Independent of `Step.timeoutSec`.
+  timeoutSec: Int(this > 0) = 30
+}
+
 /// One step inside a `steps` (sequential) or `parallelSteps` (concurrent)
-/// list.
+/// list. Choose exactly one of `cmd` (shell) or `http` (HTTP request).
 class Step {
-  /// Optional name for reporting. Defaults to the cmd's first chars.
+  /// Optional name for reporting. Defaults to the cmd / URL preview.
   name: String? = null
 
-  cmd: String(length > 0)
+  /// Shell command — pick this OR `http`, not both.
+  cmd: (String(length > 0))? = null
   shell: String = "bash"
   stdin: String? = null
+
+  /// HTTP request — pick this OR `cmd`, not both.
+  http: HttpRequest? = null
+
   env: Mapping<String, String> = new {}
   workdir: String? = null
   timeoutSec: Int(this > 0) = 60
 
+  // ── Shell expectations ─────────────────────────────────────────
   expectExitCode: Int = 0
   expectStdout: String? = null
   expectStderr: String? = null
 
-  /// When set on a *sequential* step, store the step's stdout into the
-  /// named environment variable so subsequent steps can `$VAR` it. The
-  /// captured value loses a single trailing newline (echo-friendly).
+  // ── HTTP expectations ──────────────────────────────────────────
+  expectStatus: Int? = null
+  expectBodyEquals: String? = null
+  expectBodyContains: String? = null
+  expectHeaderEquals: Mapping<String, String> = new {}
+
+  /// When set on a sequential step, store the step's stdout (shell)
+  /// or body (http) into the named environment variable so subsequent
+  /// steps can `$VAR` it. The captured value loses a single trailing
+  /// newline for shell stdout; HTTP bodies are stored verbatim.
   captureStdout: String? = null
   captureExitCode: String? = null
+  captureBody: String? = null
+  captureStatus: String? = null
 
   /// When true, run this step even if a previous sequential step
   /// failed. Use for cleanup. Ignored inside `parallelSteps`.
@@ -142,19 +171,34 @@ class Defaults {
   env: Mapping<String, String> = new {}
 }
 
+class RenderedHttpRequest {
+  method: String
+  url: String
+  headers: Mapping<String, String>
+  body: String?
+  timeoutSec: Int
+}
+
 class RenderedStep {
   name: String?
-  cmd: String
+  cmd: String?
   shell: String
   stdin: String?
+  http: RenderedHttpRequest?
   env: Mapping<String, String>
   workdir: String?
   timeoutSec: Int
   expectExitCode: Int
   expectStdout: String?
   expectStderr: String?
+  expectStatus: Int?
+  expectBodyEquals: String?
+  expectBodyContains: String?
+  expectHeaderEquals: Mapping<String, String>
   captureStdout: String?
   captureExitCode: String?
+  captureBody: String?
+  captureStatus: String?
   always: Boolean
 }
 
@@ -213,19 +257,34 @@ local duplicateNames: List<String> = testNames
   .filter((n) -> testNames.count((m) -> m == n) > 1)
   .distinct
 
+local function renderHttp(h: HttpRequest): RenderedHttpRequest = new {
+  method = h.method
+  url = h.url
+  headers = h.headers
+  body = h.body
+  timeoutSec = h.timeoutSec
+}
+
 local function renderStep(s: Step): RenderedStep = new {
   name = s.name
   cmd = s.cmd
   shell = s.shell
   stdin = s.stdin
+  http = if (s.http == null) null else renderHttp(s.http)
   env = s.env
   workdir = s.workdir
   timeoutSec = s.timeoutSec
   expectExitCode = s.expectExitCode
   expectStdout = s.expectStdout
   expectStderr = s.expectStderr
+  expectStatus = s.expectStatus
+  expectBodyEquals = s.expectBodyEquals
+  expectBodyContains = s.expectBodyContains
+  expectHeaderEquals = s.expectHeaderEquals
   captureStdout = s.captureStdout
   captureExitCode = s.captureExitCode
+  captureBody = s.captureBody
+  captureStatus = s.captureStatus
   always = s.always
 }
 

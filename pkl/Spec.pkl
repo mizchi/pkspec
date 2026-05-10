@@ -80,14 +80,21 @@ local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.St
   cmd = s.impl.cmd
   shell = s.impl.shell
   stdin = s.impl.stdin
+  http = s.impl.http
   env = s.impl.env
   workdir = s.impl.workdir
   timeoutSec = s.impl.timeoutSec
   expectExitCode = s.impl.expectExitCode
   expectStdout = s.impl.expectStdout
   expectStderr = s.impl.expectStderr
+  expectStatus = s.impl.expectStatus
+  expectBodyEquals = s.impl.expectBodyEquals
+  expectBodyContains = s.impl.expectBodyContains
+  expectHeaderEquals = s.impl.expectHeaderEquals
   captureStdout = s.impl.captureStdout
   captureExitCode = s.impl.captureExitCode
+  captureBody = s.impl.captureBody
+  captureStatus = s.impl.captureStatus
   always = runAlways
 }
 

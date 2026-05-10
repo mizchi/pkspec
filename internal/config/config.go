@@ -14,21 +14,42 @@ import (
 	"github.com/apple/pkl-go/pkl"
 )
 
-// Step mirrors `pkthunder.Test#RenderedStep`.
+// HttpRequest mirrors `pkthunder.Test#RenderedHttpRequest`.
+type HttpRequest struct {
+	Method     string            `pkl:"method"`
+	URL        string            `pkl:"url"`
+	Headers    map[string]string `pkl:"headers"`
+	Body       *string           `pkl:"body"`
+	TimeoutSec int               `pkl:"timeoutSec"`
+}
+
+// Step mirrors `pkthunder.Test#RenderedStep`. Either `Cmd` (shell) or
+// `Http` (HTTP request) is set; the executor branches on which one.
 type Step struct {
 	Name            *string           `pkl:"name"`
-	Cmd             string            `pkl:"cmd"`
+	Cmd             *string           `pkl:"cmd"`
 	Shell           string            `pkl:"shell"`
 	Stdin           *string           `pkl:"stdin"`
+	Http            *HttpRequest      `pkl:"http"`
 	Env             map[string]string `pkl:"env"`
 	Workdir         *string           `pkl:"workdir"`
 	TimeoutSec      int               `pkl:"timeoutSec"`
-	ExpectExitCode  int               `pkl:"expectExitCode"`
-	ExpectStdout    *string           `pkl:"expectStdout"`
-	ExpectStderr    *string           `pkl:"expectStderr"`
-	CaptureStdout   *string           `pkl:"captureStdout"`
-	CaptureExitCode *string           `pkl:"captureExitCode"`
-	Always          bool              `pkl:"always"`
+
+	ExpectExitCode int     `pkl:"expectExitCode"`
+	ExpectStdout   *string `pkl:"expectStdout"`
+	ExpectStderr   *string `pkl:"expectStderr"`
+
+	ExpectStatus       *int              `pkl:"expectStatus"`
+	ExpectBodyEquals   *string           `pkl:"expectBodyEquals"`
+	ExpectBodyContains *string           `pkl:"expectBodyContains"`
+	ExpectHeaderEquals map[string]string `pkl:"expectHeaderEquals"`
+
+	CaptureStdout   *string `pkl:"captureStdout"`
+	CaptureExitCode *string `pkl:"captureExitCode"`
+	CaptureBody     *string `pkl:"captureBody"`
+	CaptureStatus   *string `pkl:"captureStatus"`
+
+	Always bool `pkl:"always"`
 }
 
 // ReferenceSnapshot mirrors `pkthunder.Test#RenderedSnapshot`.
@@ -97,6 +118,7 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedStep", Step{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedBackground", Background{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedSnapshot", ReferenceSnapshot{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedHttpRequest", HttpRequest{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects
