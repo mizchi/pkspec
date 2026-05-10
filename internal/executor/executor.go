@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/mizchi/pkthunder/internal/config"
+	"github.com/mizchi/pkthunder/internal/inline"
 )
 
 // Outcome categorizes the result of a test or step.
@@ -133,12 +134,24 @@ type Options struct {
 	// would otherwise hit the cache. Useful after upgrading the
 	// underlying model or fixing a buggy judge.
 	RefreshAi bool
+	// UpdateInlineSnapshots, when set, rewrites the Test.pkl source
+	// to populate inlineStdout / inlineStderr fields with the
+	// just-captured output. Without this flag, an inline assertion
+	// whose field is `null` is reported as a failure with
+	// instructions to re-run with the flag.
+	UpdateInlineSnapshots bool
 }
 
 // Executor runs a Plan. Phase 2.5 is still serial across tests; parallel
 // scheduling at the test level lands with the retry phase.
 type Executor struct {
 	opts Options
+	// sourcePath is set per Run from plan.SourcePath; the inline
+	// snapshot rewriter writes back to this file.
+	sourcePath string
+	// sourceMu serialises source rewrites so concurrent Step inline
+	// updates from parallelSteps cannot interleave writes.
+	sourceMu sync.Mutex
 }
 
 // New returns an Executor with the given options.
@@ -281,6 +294,7 @@ func (t Tally) IsGreen() bool { return t.Failed == 0 && t.Errored == 0 }
 // per-test results plus a Tally for the caller to format / use for
 // exit code decisions.
 func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally, error) {
+	e.sourcePath = plan.SourcePath
 	names := make([]string, 0, len(plan.Tests))
 	for n := range plan.Tests {
 		names = append(names, n)
@@ -421,7 +435,7 @@ func (e *Executor) runAttempt(ctx context.Context, name string, mode config.Mode
 	defer cancel()
 	switch mode {
 	case config.ModeCmd:
-		e.runCmd(bodyCtx, &res, t, defaults)
+		e.runCmd(bodyCtx, name, &res, t, defaults)
 	case config.ModeSteps:
 		e.runSteps(bodyCtx, &res, t, defaults)
 	case config.ModeParallelSteps:
@@ -432,7 +446,7 @@ func (e *Executor) runAttempt(ctx context.Context, name string, mode config.Mode
 
 // ── Body modes ────────────────────────────────────────────────────────
 
-func (e *Executor) runCmd(ctx context.Context, res *Result, t *config.Test, defaults *config.Defaults) {
+func (e *Executor) runCmd(ctx context.Context, name string, res *Result, t *config.Test, defaults *config.Defaults) {
 	out := e.runShell(ctx, runShellInput{
 		Cmd:        *t.Cmd,
 		Shell:      t.Shell,
@@ -471,6 +485,12 @@ func (e *Executor) runCmd(ctx context.Context, res *Result, t *config.Test, defa
 	}
 	if ok, reason := e.checkSnapshot(ctx, t.ExpectStderrSnapshot, out.Stderr, defaults); !ok {
 		res.Reasons = append(res.Reasons, "stderr "+reason)
+	}
+	if reason := e.checkInline(name, "inlineStdout", t.InlineStdout, out.Stdout); reason != "" {
+		res.Reasons = append(res.Reasons, reason)
+	}
+	if reason := e.checkInline(name, "inlineStderr", t.InlineStderr, out.Stderr); reason != "" {
+		res.Reasons = append(res.Reasons, reason)
 	}
 	if len(res.Reasons) > 0 {
 		res.Outcome = OutcomeFailed
@@ -673,6 +693,16 @@ func (e *Executor) runShellStep(ctx context.Context, step *config.Step, t *confi
 	}
 	if step.ExpectStderr != nil && out.Stderr != *step.ExpectStderr {
 		sr.Reasons = append(sr.Reasons, fmt.Sprintf("stderr mismatch:\n%s", diff(*step.ExpectStderr, out.Stderr)))
+	}
+	if step.Name != nil && *step.Name != "" {
+		if reason := e.checkInline(*step.Name, "inlineStdout", step.InlineStdout, out.Stdout); reason != "" {
+			sr.Reasons = append(sr.Reasons, reason)
+		}
+	} else if step.InlineStdout != nil {
+		// inlineStdout requires a step name to identify the source
+		// block; without one we cannot rewrite or even reliably
+		// compare across runs of the same module.
+		sr.Reasons = append(sr.Reasons, "inlineStdout requires step.name to be set")
 	}
 	if len(sr.Reasons) > 0 {
 		sr.Outcome = OutcomeFailed
@@ -1214,6 +1244,61 @@ func diff(expected, actual string) string {
 		return s
 	}
 	return fmt.Sprintf("  expected: %q\n      actual:   %q", trim(expected), trim(actual))
+}
+
+// checkInline implements the assertion side of an inline snapshot.
+//
+//   - field == nil + UpdateInlineSnapshots: rewrite the source so the
+//     field is populated with the captured value; no reason added (the
+//     test passes on this run).
+//   - field == nil without the flag: reason describing the missing
+//     snapshot, asking the user to re-run with the flag.
+//   - field != nil + actual != *field + UpdateInlineSnapshots:
+//     overwrite the source with the new value; no reason added.
+//   - field != nil + actual != *field without the flag: reason with a
+//     readable diff.
+//   - field != nil + actual == *field: no reason (the assertion holds).
+//
+// The empty string return signals "this assertion contributed no
+// failure on this run."
+func (e *Executor) checkInline(blockName, fieldName string, expected *string, actual string) string {
+	if expected != nil && *expected == actual {
+		return ""
+	}
+	if e.opts.UpdateInlineSnapshots {
+		if err := e.rewriteInline(blockName, fieldName, actual); err != nil {
+			return fmt.Sprintf("%s update failed: %v", fieldName, err)
+		}
+		fmt.Fprintf(e.opts.Stderr, "[pkt] %s for %q updated (%d bytes)\n",
+			fieldName, blockName, len(actual))
+		return ""
+	}
+	if expected == nil {
+		return fmt.Sprintf("%s is null; run --update-inline-snapshots to populate it (captured %d bytes)",
+			fieldName, len(actual))
+	}
+	return fmt.Sprintf("%s mismatch:\n%s", fieldName, diff(*expected, actual))
+}
+
+// rewriteInline performs the file-level work of populating an inline
+// snapshot: read the source, apply the rewriter, atomically replace
+// the file. Serialised across goroutines via sourceMu so concurrent
+// step rewrites cannot interleave writes to the same file.
+func (e *Executor) rewriteInline(blockName, fieldName, value string) error {
+	if e.sourcePath == "" {
+		return errors.New("no source path available")
+	}
+	e.sourceMu.Lock()
+	defer e.sourceMu.Unlock()
+	src, err := os.ReadFile(e.sourcePath)
+	if err != nil {
+		return err
+	}
+	rewritten, err := inline.ReplaceField(src, blockName, fieldName, value)
+	if err != nil {
+		return err
+	}
+	return inline.WriteAtomic(e.sourcePath, rewritten)
 }
 
 // aiSnapshot is the on-disk shape of a cached AI verdict.

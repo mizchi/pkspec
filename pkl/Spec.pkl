@@ -87,6 +87,7 @@ local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.St
   expectExitCode = s.impl.expectExitCode
   expectStdout = s.impl.expectStdout
   expectStderr = s.impl.expectStderr
+  inlineStdout = s.impl.inlineStdout
   expectStatus = s.impl.expectStatus
   expectStatusBetween = s.impl.expectStatusBetween
   expectBodyEquals = s.impl.expectBodyEquals

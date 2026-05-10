@@ -55,6 +55,13 @@ class Step {
   expectStdout: String? = null
   expectStderr: String? = null
 
+  /// Inline snapshot of step stdout. Same semantics as
+  /// `Test.inlineStdout` — write `null` initially, run with
+  /// `--update-inline-snapshots` to populate, subsequent runs do an
+  /// exact compare. Only meaningful for shell steps; HTTP steps
+  /// should use `expectBodyEquals` / `expectBodyJsonPath` instead.
+  inlineStdout: String? = null
+
   // ── HTTP expectations ──────────────────────────────────────────
   expectStatus: Int? = null
 
@@ -244,6 +251,19 @@ class Test {
   expectStdoutSnapshot: ReferenceSnapshot? = null
   expectStderrSnapshot: ReferenceSnapshot? = null
 
+  /// Inline snapshot of stdout. Authored as `inlineStdout = null` on
+  /// first commit; the runner reports the missing snapshot as a
+  /// failure and rewrites this field in-place inside the Test.pkl
+  /// source when invoked with `--update-inline-snapshots`. On
+  /// subsequent runs the captured stdout must match exactly.
+  ///
+  /// Composes with `expectStdout` — both checks run if both are set.
+  /// Distinct from `expectStdoutSnapshot`, which stores bytes in a
+  /// separate file (.bytes); inline snapshots live in the Pkl source
+  /// itself and show up in code review diffs.
+  inlineStdout: String? = null
+  inlineStderr: String? = null
+
   steps: Listing<Step> = new {}
   parallelSteps: Listing<Step> = new {}
   // ───────────────────────────────────────────────────────────────
@@ -288,6 +308,7 @@ class RenderedStep {
   expectExitCode: Int
   expectStdout: String?
   expectStderr: String?
+  inlineStdout: String?
   expectStatus: Int?
   expectStatusBetween: Listing<Int>
   expectBodyEquals: String?
@@ -338,6 +359,8 @@ class RenderedTest {
   expectStderr: String?
   expectStdoutSnapshot: RenderedSnapshot?
   expectStderrSnapshot: RenderedSnapshot?
+  inlineStdout: String?
+  inlineStderr: String?
 
   steps: Listing<RenderedStep>
   parallelSteps: Listing<RenderedStep>
@@ -380,6 +403,7 @@ local function renderStep(s: Step): RenderedStep = new {
   expectExitCode = s.expectExitCode
   expectStdout = s.expectStdout
   expectStderr = s.expectStderr
+  inlineStdout = s.inlineStdout
   expectStatus = s.expectStatus
   expectStatusBetween = s.expectStatusBetween
   expectBodyEquals = s.expectBodyEquals
@@ -439,6 +463,8 @@ local function renderTest(t: Test): RenderedTest = new {
   expectStderrSnapshot =
     if (t.expectStderrSnapshot == null) null
     else renderSnapshot(t.expectStderrSnapshot)
+  inlineStdout = t.inlineStdout
+  inlineStderr = t.inlineStderr
   steps = new Listing<RenderedStep> {
     for (s in t.steps) { renderStep(s) }
   }

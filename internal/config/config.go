@@ -56,6 +56,7 @@ type Step struct {
 	ExpectExitCode int     `pkl:"expectExitCode"`
 	ExpectStdout   *string `pkl:"expectStdout"`
 	ExpectStderr   *string `pkl:"expectStderr"`
+	InlineStdout   *string `pkl:"inlineStdout"`
 
 	ExpectStatus        *int              `pkl:"expectStatus"`
 	ExpectStatusBetween []int             `pkl:"expectStatusBetween"`
@@ -115,6 +116,8 @@ type Test struct {
 	ExpectStderr         *string            `pkl:"expectStderr"`
 	ExpectStdoutSnapshot *ReferenceSnapshot `pkl:"expectStdoutSnapshot"`
 	ExpectStderrSnapshot *ReferenceSnapshot `pkl:"expectStderrSnapshot"`
+	InlineStdout         *string            `pkl:"inlineStdout"`
+	InlineStderr         *string            `pkl:"inlineStderr"`
 
 	Steps         []*Step       `pkl:"steps"`
 	ParallelSteps []*Step       `pkl:"parallelSteps"`
@@ -132,6 +135,11 @@ type Plan struct {
 	Defaults  *Defaults        `pkl:"defaults"`
 	Tests     map[string]*Test `pkl:"tests"`
 	Canonical []byte           `pkl:"-"`
+	// SourcePath is the absolute path to the Pkl module that produced
+	// this plan. Inline-snapshot updates rewrite that file in place,
+	// so the runner needs the original location separately from the
+	// rendered bytes in `Canonical`.
+	SourcePath string `pkl:"-"`
 }
 
 func init() {
@@ -203,5 +211,6 @@ func Load(ctx context.Context, path string) (*Plan, error) {
 		return nil, fmt.Errorf("canonicalize %s: %w", path, err)
 	}
 	plan.Canonical = canonical
+	plan.SourcePath = path
 	return plan, nil
 }

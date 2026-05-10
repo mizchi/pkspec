@@ -5,6 +5,44 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 12 — inline snapshots and three-kind taxonomy
+
+- **Hand-written rewriter beat trying to parse Pkl.** pkl-go has no
+  AST API, and the surface area we need (find a Test by name, find
+  one named field inside its braces, replace the value) is small
+  enough that a regex + brace counter handles every authoring shape
+  we ship. Trying to embed a real Pkl parser would have been weeks
+  of work to support a feature whose primary failure mode is "the
+  diff is unreadable," not "the rewriter destroyed the source."
+- **Single-line `\n`-escaped strings instead of triple-quoted Pkl.**
+  Pkl's `"""..."""` would produce prettier diffs, but reliably
+  detecting the *end* of an existing triple-quoted snapshot during
+  rewrite means tracking quote nesting, indent stripping rules, and
+  embedded `"""` corner cases. Single-line `"a\nb\n"` makes the
+  rewriter trivial in exchange for ugly diffs on multi-line stdout.
+  We can swap the encoding later; the field name (`inlineStdout`)
+  doesn't change.
+- **Step-level inline requires `step.name`.** Without a name the
+  rewriter has no anchor inside the source and would have to count
+  step indices, which breaks the moment someone reorders. Treating
+  anonymous steps with `inlineStdout` as errored (not silently
+  ignored) surfaces the constraint at the right moment.
+- **Per-Executor mutex on source writes, not per-Test.** Steps
+  inside `parallelSteps` execute concurrently and could each want to
+  rewrite the same Test.pkl file. Holding the mutex on the Executor
+  keeps the implementation a one-liner; the only contention is
+  during update-mode runs, which are typically rare and serial-ish
+  anyway.
+- **Three-kind taxonomy made the docs cleaner than the code.** The
+  three snapshot mechanisms (`byte` / `inline` / `ai-verdict`) live
+  in independent code paths already; the value of "classifying" them
+  was clarifying the *choice* for users — see `docs/notes/snapshots.md`
+  for the decision tree and per-kind trade-offs. The on-disk dirs
+  (`snapshots/` vs `ai-snapshots/`) and the in-source `inline*`
+  fields communicate the kind without an explicit `kind` enum.
+
+---
+
 ## Phase 11 — operational ergonomics around `expectAi`
 
 - **`--refresh-ai` is the right shape; per-snapshot path filters are
