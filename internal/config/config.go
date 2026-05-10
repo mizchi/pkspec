@@ -31,6 +31,11 @@ type Step struct {
 	Always          bool              `pkl:"always"`
 }
 
+// ReferenceSnapshot mirrors `pkthunder.Test#RenderedSnapshot`.
+type ReferenceSnapshot struct {
+	Name string `pkl:"name"`
+}
+
 // Background mirrors `pkthunder.Test#RenderedBackground`.
 type Background struct {
 	Name               *string           `pkl:"name"`
@@ -54,11 +59,13 @@ type Test struct {
 	Retries         int               `pkl:"retries"`
 	FlakyAcceptable bool              `pkl:"flakyAcceptable"`
 
-	Cmd            *string `pkl:"cmd"`
-	Stdin          *string `pkl:"stdin"`
-	ExpectExitCode int     `pkl:"expectExitCode"`
-	ExpectStdout   *string `pkl:"expectStdout"`
-	ExpectStderr   *string `pkl:"expectStderr"`
+	Cmd                  *string            `pkl:"cmd"`
+	Stdin                *string            `pkl:"stdin"`
+	ExpectExitCode       int                `pkl:"expectExitCode"`
+	ExpectStdout         *string            `pkl:"expectStdout"`
+	ExpectStderr         *string            `pkl:"expectStderr"`
+	ExpectStdoutSnapshot *ReferenceSnapshot `pkl:"expectStdoutSnapshot"`
+	ExpectStderrSnapshot *ReferenceSnapshot `pkl:"expectStderrSnapshot"`
 
 	Steps         []*Step       `pkl:"steps"`
 	ParallelSteps []*Step       `pkl:"parallelSteps"`
@@ -84,6 +91,7 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedTest", Test{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedStep", Step{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedBackground", Background{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedSnapshot", ReferenceSnapshot{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

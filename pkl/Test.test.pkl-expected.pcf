@@ -17,6 +17,8 @@ examples {
         
         """
       expectStderr = null
+      expectStdoutSnapshot = null
+      expectStderrSnapshot = null
       steps {}
       parallelSteps {}
       background {}

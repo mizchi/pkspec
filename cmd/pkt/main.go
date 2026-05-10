@@ -129,6 +129,7 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(io.Discard)
 	file := fs.String("f", "Test.pkl", "path to the Test.pkl module")
 	fs.StringVar(file, "file", "Test.pkl", "path to the Test.pkl module")
+	refresh := fs.Bool("refresh-snapshots", false, "(re)write every reference snapshot file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -147,8 +148,9 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	}
 
 	exe := executor.New(executor.Options{
-		Workdir: filepath.Dir(abs),
-		Stderr:  stderr,
+		Workdir:          filepath.Dir(abs),
+		Stderr:           stderr,
+		RefreshSnapshots: *refresh,
 	})
 	results, tally, err := exe.Run(ctx, plan)
 	if err != nil {

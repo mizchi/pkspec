@@ -107,6 +107,13 @@ type Options struct {
 	// Stderr receives one status line per test (and one per failed step);
 	// defaults to io.Discard.
 	Stderr io.Writer
+	// SnapshotsDir is where reference snapshot files live, relative to
+	// Workdir. Defaults to `.pkthunder/snapshots`.
+	SnapshotsDir string
+	// RefreshSnapshots forces every snapshot file to be (re)written from
+	// the live capture, regardless of whether it currently matches.
+	// Equivalent to `pkl test --overwrite`, scoped to subprocess output.
+	RefreshSnapshots bool
 }
 
 // Executor runs a Plan. Phase 2.5 is still serial across tests; parallel
@@ -123,7 +130,63 @@ func New(opts Options) *Executor {
 	if opts.Workdir == "" {
 		opts.Workdir = "."
 	}
+	if opts.SnapshotsDir == "" {
+		opts.SnapshotsDir = filepath.Join(opts.Workdir, ".pkthunder", "snapshots")
+	}
 	return &Executor{opts: opts}
+}
+
+// snapshotPath returns the on-disk path for a reference snapshot.
+// The schema's name regex (`[a-zA-Z0-9_-]+`) guarantees the result
+// stays inside SnapshotsDir.
+func (e *Executor) snapshotPath(name string) string {
+	return filepath.Join(e.opts.SnapshotsDir, name+".bytes")
+}
+
+// checkSnapshot compares `actual` against the committed snapshot file
+// for `s.Name`. Three outcomes:
+//
+//   - matched         → ok=true, reason=""
+//   - missing file    → write `actual`, ok=false, reason="initial write"
+//   - mismatched      → write `*.actual` next to it, ok=false, reason=diff
+//
+// When RefreshSnapshots is set, the file is overwritten unconditionally
+// and ok=true is returned regardless of prior contents.
+func (e *Executor) checkSnapshot(s *config.ReferenceSnapshot, actual string) (ok bool, reason string) {
+	if s == nil {
+		return true, ""
+	}
+	path := e.snapshotPath(s.Name)
+	if e.opts.RefreshSnapshots {
+		if err := writeSnapshot(path, actual); err != nil {
+			return false, fmt.Sprintf("snapshot %q: write failed: %v", s.Name, err)
+		}
+		return true, ""
+	}
+	expected, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		if werr := writeSnapshot(path, actual); werr != nil {
+			return false, fmt.Sprintf("snapshot %q: not found and write failed: %v", s.Name, werr)
+		}
+		return false, fmt.Sprintf("snapshot %q: not found, wrote initial — review and commit %s", s.Name, path)
+	}
+	if err != nil {
+		return false, fmt.Sprintf("snapshot %q: read failed: %v", s.Name, err)
+	}
+	if string(expected) == actual {
+		return true, ""
+	}
+	// Persist the actual side for diff tooling.
+	_ = os.WriteFile(path+".actual", []byte(actual), 0o644)
+	return false, fmt.Sprintf("snapshot %q mismatch (actual saved at %s.actual):\n%s",
+		s.Name, path, diff(string(expected), actual))
+}
+
+func writeSnapshot(path, actual string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(actual), 0o644)
 }
 
 // Tally summarizes the bucketed results for caller reporting and exit code.
@@ -317,6 +380,12 @@ func (e *Executor) runCmd(ctx context.Context, res *Result, t *config.Test, defa
 	}
 	if t.ExpectStderr != nil && out.Stderr != *t.ExpectStderr {
 		res.Reasons = append(res.Reasons, fmt.Sprintf("stderr mismatch:\n%s", diff(*t.ExpectStderr, out.Stderr)))
+	}
+	if ok, reason := e.checkSnapshot(t.ExpectStdoutSnapshot, out.Stdout); !ok {
+		res.Reasons = append(res.Reasons, "stdout "+reason)
+	}
+	if ok, reason := e.checkSnapshot(t.ExpectStderrSnapshot, out.Stderr); !ok {
+		res.Reasons = append(res.Reasons, "stderr "+reason)
 	}
 	if len(res.Reasons) > 0 {
 		res.Outcome = OutcomeFailed

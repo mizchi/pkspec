@@ -36,6 +36,18 @@ class Step {
   always: Boolean = false
 }
 
+/// Reference to a committed snapshot file. The runner stores expected
+/// bytes under `<test-module-dir>/.pkthunder/snapshots/<name>.bytes`.
+/// On first encounter, the file is written from the captured output
+/// and the test fails so the user reviews and commits it. Subsequent
+/// runs compare the captured output against the committed bytes.
+/// `pkt exec --refresh-snapshots` rewrites every snapshot.
+class ReferenceSnapshot {
+  /// Snapshot identifier. Becomes the file name; restricted to safe
+  /// characters so the path can never escape the snapshots dir.
+  name: String(matches(Regex(#"^[a-zA-Z0-9_\-]+$"#)))
+}
+
 /// A long-running process the runner starts before the test body and
 /// terminates after it. Typical use: spinning up a dev server for an
 /// E2E run.
@@ -94,6 +106,10 @@ class Test {
   expectExitCode: Int = 0
   expectStdout: String? = null
   expectStderr: String? = null
+  /// Match captured stdout against a committed snapshot file.
+  /// Composes with `expectStdout`; both checks must pass when both set.
+  expectStdoutSnapshot: ReferenceSnapshot? = null
+  expectStderrSnapshot: ReferenceSnapshot? = null
 
   steps: Listing<Step> = new {}
   parallelSteps: Listing<Step> = new {}
@@ -135,6 +151,10 @@ class RenderedBackground {
   graceTimeoutSec: Int
 }
 
+class RenderedSnapshot {
+  name: String
+}
+
 class RenderedTest {
   description: String?
   shell: String
@@ -149,6 +169,8 @@ class RenderedTest {
   expectExitCode: Int
   expectStdout: String?
   expectStderr: String?
+  expectStdoutSnapshot: RenderedSnapshot?
+  expectStderrSnapshot: RenderedSnapshot?
 
   steps: Listing<RenderedStep>
   parallelSteps: Listing<RenderedStep>
@@ -213,6 +235,10 @@ local rendered: Mapping<String, RenderedTest> = new Mapping {
       expectExitCode = t.expectExitCode
       expectStdout = t.expectStdout
       expectStderr = t.expectStderr
+      expectStdoutSnapshot = if (t.expectStdoutSnapshot == null) null
+        else new RenderedSnapshot { name = t.expectStdoutSnapshot.name }
+      expectStderrSnapshot = if (t.expectStderrSnapshot == null) null
+        else new RenderedSnapshot { name = t.expectStderrSnapshot.name }
       steps = new Listing<RenderedStep> {
         for (s in t.steps) { renderStep(s) }
       }
