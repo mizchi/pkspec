@@ -19,6 +19,8 @@ package executor
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -508,6 +510,28 @@ func (e *Executor) runSteps(ctx context.Context, res *Result, t *config.Test, de
 				result := jsonPathLookup([]byte(sr.Stdout), path)
 				if result.Exists() {
 					state[varName] = result.String()
+				}
+			}
+
+			// AI assertion runs after the step's deterministic
+			// expectations have all passed. Doing it here (instead of
+			// inside runStepOnce) means an `eventually` step polls
+			// without re-invoking the judge, and a failed step never
+			// pollutes the AI snapshot cache.
+			if step.ExpectAi != nil {
+				pass, explanation, fromCache, aiErr := e.evaluateAi(ctx, step.ExpectAi, []byte(sr.Stdout))
+				switch {
+				case aiErr != nil:
+					sr.Outcome = OutcomeErrored
+					sr.Reasons = append(sr.Reasons, fmt.Sprintf("ai assertion: %v", aiErr))
+				case !pass:
+					sr.Outcome = OutcomeFailed
+					prefix := "ai"
+					if fromCache {
+						prefix = "ai (cached)"
+					}
+					sr.Reasons = append(sr.Reasons,
+						fmt.Sprintf("%s: %s", prefix, strings.TrimSpace(explanation)))
 				}
 			}
 		}
@@ -1185,6 +1209,136 @@ func diff(expected, actual string) string {
 		return s
 	}
 	return fmt.Sprintf("  expected: %q\n      actual:   %q", trim(expected), trim(actual))
+}
+
+// aiSnapshot is the on-disk shape of a cached AI verdict.
+type aiSnapshot struct {
+	// Hash is sha256(prompt + "\n" + body). Cache hit on exact match.
+	Hash string `json:"hash"`
+	// Verdict is the literal "pass" or "fail" the judge produced.
+	Verdict string `json:"verdict"`
+	// Explanation is the judge's stdout, surfaced in the report on
+	// fail (and inspected by humans reviewing the snapshot file).
+	Explanation string `json:"explanation"`
+	// PromptPreview is the first 240 chars of the prompt — enough
+	// for a human reading the snapshot to recognise what was asked
+	// without re-deriving the hash.
+	PromptPreview string `json:"prompt_preview,omitempty"`
+	UpdatedAt     string `json:"updated_at,omitempty"`
+}
+
+// aiSnapshotPath returns the on-disk path for an AI snapshot.
+// SnapshotName is regex-restricted upstream so the join cannot escape.
+func (e *Executor) aiSnapshotPath(name string) string {
+	return filepath.Join(filepath.Dir(e.opts.SnapshotsDir), "ai-snapshots", name+".json")
+}
+
+// evaluateAi consults the on-disk cache for the given prompt+body
+// pair, falling back to spawning the user-supplied judge command on a
+// miss. The judge contract is:
+//
+//   - body on stdin
+//   - prompt via $PKT_AI_PROMPT
+//   - exit 0 = pass, non-zero = fail
+//   - stdout = explanation
+//
+// On a cache hit fromCache is true and no subprocess runs. On miss
+// the snapshot is rewritten so the next run with the same inputs
+// will hit the cache. err is reserved for unrecoverable conditions
+// (judge fails to start, snapshot dir un-writable); a "judge ran and
+// said fail" outcome surfaces as pass=false with no err.
+func (e *Executor) evaluateAi(ctx context.Context, a *config.AiAssertion, body []byte) (pass bool, explanation string, fromCache bool, err error) {
+	digest := aiDigest(a.Prompt, body)
+	path := e.aiSnapshotPath(a.SnapshotName)
+
+	if cached, ok := readAiSnapshot(path); ok && cached.Hash == digest {
+		return cached.Verdict == "pass", cached.Explanation, true, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "bash", "-c", a.Cmd)
+	cmd.Env = append(os.Environ(), "PKT_AI_PROMPT="+a.Prompt)
+	cmd.Stdin = bytes.NewReader(body)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	cmd.Dir = e.opts.Workdir
+	runErr := cmd.Run()
+
+	explanation = stdout.String()
+	if explanation == "" {
+		explanation = strings.TrimSpace(stderr.String())
+	}
+
+	switch {
+	case runErr == nil:
+		pass = true
+	case isExitError(runErr):
+		pass = false
+	default:
+		// Judge could not start (binary missing, etc.). Don't write
+		// a snapshot — there's no real verdict to cache.
+		return false, explanation, false, fmt.Errorf("judge failed to run: %w", runErr)
+	}
+
+	verdict := "fail"
+	if pass {
+		verdict = "pass"
+	}
+	preview := a.Prompt
+	if len(preview) > 240 {
+		preview = preview[:240]
+	}
+	snap := aiSnapshot{
+		Hash:          digest,
+		Verdict:       verdict,
+		Explanation:   explanation,
+		PromptPreview: preview,
+		UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := writeAiSnapshot(path, snap); err != nil {
+		fmt.Fprintf(e.opts.Stderr, "[pkt] warning: write ai snapshot %s: %v\n", a.SnapshotName, err)
+	}
+	return pass, explanation, false, nil
+}
+
+func aiDigest(prompt string, body []byte) string {
+	h := sha256.New()
+	h.Write([]byte(prompt))
+	h.Write([]byte("\n"))
+	h.Write(body)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func readAiSnapshot(path string) (aiSnapshot, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return aiSnapshot{}, false
+	}
+	var s aiSnapshot
+	if err := json.Unmarshal(data, &s); err != nil {
+		return aiSnapshot{}, false
+	}
+	return s, true
+}
+
+func writeAiSnapshot(path string, s aiSnapshot) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func isExitError(err error) bool {
+	var ee *exec.ExitError
+	return errors.As(err, &ee)
 }
 
 // syncBuffer is a thread-safe bytes.Buffer for background stdout capture.

@@ -21,6 +21,16 @@ type Eventually struct {
 	TimeoutSec int `pkl:"timeoutSec"`
 }
 
+// AiAssertion mirrors `pkthunder.Test#RenderedAiAssertion` — the
+// external-judge fuzzy assertion. The runner caches the judge's
+// verdict by sha256(prompt + body) so the cmd only re-runs when the
+// inputs actually change.
+type AiAssertion struct {
+	Prompt       string `pkl:"prompt"`
+	Cmd          string `pkl:"cmd"`
+	SnapshotName string `pkl:"snapshotName"`
+}
+
 // HttpRequest mirrors `pkthunder.Test#RenderedHttpRequest`.
 type HttpRequest struct {
 	Method     string            `pkl:"method"`
@@ -60,8 +70,9 @@ type Step struct {
 	CaptureStatus       *string           `pkl:"captureStatus"`
 	CaptureBodyJsonPath map[string]string `pkl:"captureBodyJsonPath"`
 
-	Eventually *Eventually `pkl:"eventually"`
-	Always     bool        `pkl:"always"`
+	Eventually *Eventually  `pkl:"eventually"`
+	ExpectAi   *AiAssertion `pkl:"expectAi"`
+	Always     bool         `pkl:"always"`
 }
 
 // ReferenceSnapshot mirrors `pkthunder.Test#RenderedSnapshot`.
@@ -132,6 +143,7 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedSnapshot", ReferenceSnapshot{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedHttpRequest", HttpRequest{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedEventually", Eventually{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedAiAssertion", AiAssertion{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

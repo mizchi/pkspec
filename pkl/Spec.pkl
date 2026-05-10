@@ -99,6 +99,7 @@ local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.St
   captureStatus = s.impl.captureStatus
   captureBodyJsonPath = s.impl.captureBodyJsonPath
   eventually = s.impl.eventually
+  expectAi = s.impl.expectAi
   always = runAlways
 }
 

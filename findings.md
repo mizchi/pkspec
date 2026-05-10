@@ -5,6 +5,39 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 10 — `Step.expectAi` with snapshot-cached judge
+
+- **Shell-out beats embedded SDK for the judge.** Embedding an
+  Anthropic / OpenAI client inside pkthunder would have meant API key
+  plumbing, vendor selection in the schema, and a heavier binary —
+  for a feature most users will rarely reach for. The contract is
+  instead "any executable that reads body on stdin, prompt via
+  `$PKT_AI_PROMPT`, and exits 0/non-0." Authors plug in `claude`,
+  `llm`, or a hand-rolled curl-to-Anthropic shell script as they
+  prefer; the runner stays vendor-neutral.
+- **Cache key is `sha256(prompt + "\n" + body)` only.** Including
+  `cmd` or `model` in the digest was tempting (auto-invalidate when
+  switching judges) but adds churn: rename the cmd, every snapshot
+  goes stale even though the semantic claim is identical. Users who
+  swap judges deliberately can rm the snapshots dir; the simpler
+  invariant is worth the manual step.
+- **AI evaluation runs once per step, after deterministic assertions
+  succeed.** Putting it inside `runStepOnce` would have meant the
+  `eventually` polling loop fires the judge on every attempt — slow
+  and a cache-pollution risk (failed-attempt body still hashes into
+  the snapshot). Sequencing it in `runSteps` (alongside captures,
+  guarded by `Outcome == OutcomePassed`) cleanly avoids both.
+- **Failed-judge → `OutcomeFailed`, not `Errored`.** Reserving
+  `Errored` for "the judge binary couldn't even start" matches how
+  shell steps already distinguish exit-failure from launch-failure.
+  Reports prefix the explanation with `ai:` (or `ai (cached):` on
+  cache hits) so a reader can tell which assertion lane fired.
+- **Atomic snapshot write via `*.tmp` + rename.** Same pattern the
+  reference-snapshot path uses; ensures a partial write doesn't
+  corrupt a previously-good cache entry on crash.
+
+---
+
 ## Phase 9 — `Step.eventually` for assertion-driven polling
 
 - **`Test.retries` and `Step.eventually` are orthogonal, not

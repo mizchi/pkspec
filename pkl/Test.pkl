@@ -100,9 +100,43 @@ class Step {
   /// `Eventually` block re-fires on every attempt.
   eventually: Eventually? = null
 
+  /// Optional fuzzy assertion delegated to an external judge process
+  /// (typically a wrapper around an LLM). The runner caches the
+  /// verdict on disk keyed by `sha256(prompt + body)`, so the judge
+  /// is only invoked when the prompt or the response body actually
+  /// changes — same body, same verdict, no API call.
+  expectAi: AiAssertion? = null
+
   /// When true, run this step even if a previous sequential step
   /// failed. Use for cleanup. Ignored inside `parallelSteps`.
   always: Boolean = false
+}
+
+/// External AI/LLM-backed assertion.
+///
+/// Authoring contract: the judge is any executable that receives the
+/// step's response body on stdin, the prompt via the env var
+/// `PKT_AI_PROMPT`, and signals its verdict by exit code (0 = pass,
+/// non-zero = fail). Stdout is captured as the explanation surfaced
+/// in the report.
+///
+/// The runner caches the verdict under
+/// `<test-module-dir>/.pkthunder/ai-snapshots/<snapshotName>.json`,
+/// keyed by `sha256(prompt + "\n" + body)`. Cache hits skip the cmd
+/// entirely; mismatches re-invoke and rewrite the snapshot.
+class AiAssertion {
+  /// Natural-language claim about the response body.
+  prompt: String(length > 0)
+
+  /// Shell command that judges the body. Receives the body on stdin
+  /// and the prompt via `$PKT_AI_PROMPT`. Exit 0 = pass, non-0 =
+  /// fail. Stdout is captured as the explanation.
+  cmd: String(length > 0)
+
+  /// File name (under `.pkthunder/ai-snapshots/`) where the cached
+  /// verdict is stored. Restricted to safe characters so the path
+  /// can never escape the snapshots dir.
+  snapshotName: String(matches(Regex(#"^[a-zA-Z0-9_\-]+$"#)))
 }
 
 /// Polling configuration for a flaky step. The runner re-runs the
@@ -236,6 +270,12 @@ class RenderedEventually {
   timeoutSec: Int
 }
 
+class RenderedAiAssertion {
+  prompt: String
+  cmd: String
+  snapshotName: String
+}
+
 class RenderedStep {
   name: String?
   cmd: String?
@@ -260,6 +300,7 @@ class RenderedStep {
   captureStatus: String?
   captureBodyJsonPath: Mapping<String, String>
   eventually: RenderedEventually?
+  expectAi: RenderedAiAssertion?
   always: Boolean
 }
 
@@ -353,6 +394,11 @@ local function renderStep(s: Step): RenderedStep = new {
   eventually = if (s.eventually == null) null else new RenderedEventually {
     intervalMs = s.eventually.intervalMs
     timeoutSec = s.eventually.timeoutSec
+  }
+  expectAi = if (s.expectAi == null) null else new RenderedAiAssertion {
+    prompt = s.expectAi.prompt
+    cmd = s.expectAi.cmd
+    snapshotName = s.expectAi.snapshotName
   }
   always = s.always
 }
