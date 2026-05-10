@@ -1,20 +1,26 @@
 // Command pkt is the pkthunder test runner.
 //
-// Phase 1 wraps `pkl test --junit-reports` so that assertion failures
-// produce a non-zero exit code (which `pkl test` itself does not). The
-// `Test` schema, retries, flaky reporting, and reference-snapshot flow
-// land in subsequent phases.
+// Two execution paths share the binary:
+//
+//   - `pkt run`  — wraps `pkl test --junit-reports` so assertion failures
+//     produce a non-zero exit code (Phase 1).
+//   - `pkt exec` — loads a Test.pkl module via pkl-go, runs each declared
+//     `Test` instance as a subprocess, and asserts on exit code + literal
+//     stdout/stderr (Phase 2). Retries / flaky / snapshots come later.
 package main
 
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/mizchi/pkthunder/internal/config"
+	"github.com/mizchi/pkthunder/internal/executor"
 	"github.com/mizchi/pkthunder/internal/junit"
 )
 
@@ -41,6 +47,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return nil
 	case "run":
 		return cmdRun(args[1:], stdout, stderr)
+	case "exec":
+		return cmdExec(args[1:], stdout, stderr)
 	default:
 		usage(stderr)
 		return fmt.Errorf("unknown command %q", args[0])
@@ -54,10 +62,14 @@ usage:
   pkt <command> [args]
 
 commands:
-  run [pkl-test args...]   wrap `+"`pkl test`"+` and force a non-zero exit on
-                           any assertion failure (closes pkl test's exit-code gap)
-  version                  print pkt version
-  help                     show this message
+  run [pkl-test args...]      wrap `+"`pkl test`"+` and force a non-zero exit on
+                              any assertion failure (closes pkl test's
+                              exit-code gap)
+  exec -f Test.pkl            load a Test schema module via pkl-go and
+                              execute each declared Test as a subprocess;
+                              asserts exit code + literal stdout/stderr
+  version                     print pkt version
+  help                        show this message
 
 `+"`pkt run`"+` forwards every argument it does not recognize to `+"`pkl test`"+`,
 including module paths, --junit-aggregate-reports, --overwrite, etc.
@@ -108,6 +120,44 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 	var exitErr *exec.ExitError
 	if pklErr != nil && !errors.As(pklErr, &exitErr) {
 		return fmt.Errorf("invoke pkl: %w", pklErr)
+	}
+	return nil
+}
+
+func cmdExec(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("pkt exec", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	file := fs.String("f", "Test.pkl", "path to the Test.pkl module")
+	fs.StringVar(file, "file", "Test.pkl", "path to the Test.pkl module")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) > 0 {
+		return fmt.Errorf("exec takes no positional args, got %v", fs.Args())
+	}
+	abs, err := filepath.Abs(*file)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	plan, err := config.Load(ctx, abs)
+	if err != nil {
+		return err
+	}
+
+	exe := executor.New(executor.Options{
+		Workdir: filepath.Dir(abs),
+		Stderr:  stderr,
+	})
+	results, failed, err := exe.Run(ctx, plan)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(stderr, "pkt: %d/%d test(s) passed\n", len(results)-failed, len(results))
+	if failed > 0 {
+		return fmt.Errorf("%d test(s) failed", failed)
 	}
 	return nil
 }

@@ -1,0 +1,38 @@
+/// Schema-level tests for `Test.pkl`. Run with `pkl test pkl/Test.test.pkl`.
+amends "pkl:test"
+
+import "Test.pkl" as Schema
+
+local tcp: Schema.Test = new {
+  name = "tcp"
+  cmd = "curl -fsS http://localhost:8080/health"
+  expectExitCode = 0
+  expectStdout = "ok\n"
+}
+
+facts {
+  ["name and cmd are preserved"] {
+    tcp.name == "tcp"
+    tcp.cmd == "curl -fsS http://localhost:8080/health"
+  }
+  ["defaults: shell is bash, exit code is 0, timeout is 60s"] {
+    tcp.shell == "bash"
+    tcp.expectExitCode == 0
+    tcp.timeoutSec == 60
+  }
+  ["empty cmd is rejected"] {
+    module.catch(() -> (new Schema.Test { name = "x"; cmd = "" }).cmd) != null
+  }
+  ["bad name characters are rejected"] {
+    module.catch(() -> (new Schema.Test { name = "1leading-digit"; cmd = "x" }).name) != null
+  }
+  ["non-positive timeout is rejected"] {
+    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; timeoutSec = 0 }).timeoutSec) != null
+  }
+}
+
+examples {
+  ["minimal Test"] {
+    tcp
+  }
+}

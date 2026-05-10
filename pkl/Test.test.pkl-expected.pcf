@@ -1,0 +1,20 @@
+examples {
+  ["minimal Test"] {
+    new {
+      name = "tcp"
+      cmd = "curl -fsS http://localhost:8080/health"
+      shell = "bash"
+      stdin = null
+      env {}
+      workdir = null
+      timeoutSec = 60
+      expectExitCode = 0
+      expectStdout = """
+        ok
+        
+        """
+      expectStderr = null
+      description = null
+    }
+  }
+}

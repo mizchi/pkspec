@@ -1,0 +1,111 @@
+/// pkthunder Test schema (Phase 2: basic subprocess assertions).
+///
+/// Authoring model mirrors pkfire's: each test is a `local Test`
+/// instance, all listed in `tests { ... }`. The Pkl side is purely
+/// declarative; the runner (`pkt exec`) reads the rendered output
+/// and executes the subprocesses.
+@ModuleInfo { minPklVersion = "0.31.0" }
+open module pkthunder.Test
+
+class Test {
+  /// Identifier. Used as the Mapping key in the rendered output and
+  /// as the visible name in `pkt list` / reporting.
+  name: String(matches(Regex(#"^[a-zA-Z][a-zA-Z0-9_:.\-/ ]*$"#)))
+
+  /// Shell command to execute (run via `<shell> -c <cmd>`).
+  cmd: String(length > 0)
+
+  /// Shell binary used to run `cmd`. Defaults to `bash`.
+  shell: String = "bash"
+
+  /// Optional stdin fed to the process.
+  stdin: String? = null
+
+  /// Environment variables exposed to `cmd`. Merged on top of
+  /// `defaults.env`; absent keys inherit from the runner's ambient
+  /// environment so PATH etc. are findable.
+  env: Mapping<String, String> = new {}
+
+  /// Working directory relative to the Test module's directory.
+  /// Null means the module's directory.
+  workdir: String? = null
+
+  /// Maximum wall-clock seconds for one execution. Exceeding this
+  /// counts as `errored`, not `failed`.
+  timeoutSec: Int(this > 0) = 60
+
+  /// Expected process exit code. Default 0.
+  expectExitCode: Int = 0
+
+  /// If set, the captured stdout must equal this string verbatim.
+  /// (Regex / reference matchers land in later phases.)
+  expectStdout: String? = null
+
+  /// If set, the captured stderr must equal this string verbatim.
+  expectStderr: String? = null
+
+  /// Free-form description for reports.
+  description: String? = null
+}
+
+class Defaults {
+  shell: String = "bash"
+  env: Mapping<String, String> = new {}
+}
+
+class RenderedTest {
+  cmd: String
+  shell: String
+  stdin: String?
+  env: Mapping<String, String>
+  workdir: String?
+  timeoutSec: Int
+  expectExitCode: Int
+  expectStdout: String?
+  expectStderr: String?
+  description: String?
+}
+
+class Rendered {
+  defaults: Defaults
+  tests: Mapping<String, RenderedTest>
+}
+
+defaults: Defaults = new {}
+
+/// Authored test list. Append in user modules with
+/// `tests { newTest; ... }`. Forgetting to add a declared `local`
+/// to this listing is the most common pitfall — same caveat as
+/// pkfire's `tasks`.
+tests: Listing<Test> = new {}
+
+local testNames: List<String> = tests.toList().map((t) -> t.name)
+
+local duplicateNames: List<String> = testNames
+  .filter((n) -> testNames.count((m) -> m == n) > 1)
+  .distinct
+
+local rendered: Mapping<String, RenderedTest> = new Mapping {
+  for (t in tests) {
+    [t.name] = new RenderedTest {
+      cmd = t.cmd
+      shell = t.shell
+      stdin = t.stdin
+      env = t.env
+      workdir = t.workdir
+      timeoutSec = t.timeoutSec
+      expectExitCode = t.expectExitCode
+      expectStdout = t.expectStdout
+      expectStderr = t.expectStderr
+      description = t.description
+    }
+  }
+}
+
+output {
+  value = new Rendered {
+    defaults = module.defaults
+    tests = if (duplicateNames.isEmpty) rendered
+      else throw("duplicate test names: \(duplicateNames.join(", "))")
+  }
+}
