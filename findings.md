@@ -5,6 +5,36 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 9 — `Step.eventually` for assertion-driven polling
+
+- **`Test.retries` and `Step.eventually` are orthogonal, not
+  alternatives.** `retries` re-runs the entire test body on failure
+  and exists for "this whole flow is sometimes flaky." `eventually`
+  re-runs a single step's request + assertions until the assertions
+  pass, and exists for "the system needs a moment to reach the state
+  I am asserting." A single test can have both: an `eventually` step
+  that polls for readiness, plus `retries = 1` covering whole-test
+  flakes downstream.
+- **Captures fire only on the passing attempt.** The `runSteps` loop
+  already gates capture on `Outcome == OutcomePassed`, and the
+  Eventually wrapper returns the passing attempt unchanged, so this
+  property falls out for free — failed attempts cannot pollute the
+  env with stale `$VAR` values that later steps would observe.
+- **POST/DELETE inside `eventually` is a foot-gun, not a feature.**
+  Each attempt re-fires the full request, including side-effecting
+  ones. The schema doc warns about this rather than disallowing it,
+  because `POST /widgets` followed by polling `/widgets/<id>` is a
+  legitimate "create-then-wait" pattern in some APIs. The runner does
+  not deduplicate. Authors who need that should split into a
+  non-eventually create step + an eventually GET step.
+- **`time.After` inside the loop, not a `Ticker`.** The loop is at
+  most a few dozen iterations (5s / 100ms = 50 attempts), so the
+  per-iteration `time.After` allocation is negligible and the code
+  reads cleaner than a ticker + cleanup pair. If we ever raise the
+  ceiling to multi-minute polls, switch to `time.NewTicker`.
+
+---
+
 ## Phase 8.2 — JSON path assertions and `bodyJson` encoding
 
 - **`Mapping<String, Any>` is not a stable contract for pkl-go.** When a

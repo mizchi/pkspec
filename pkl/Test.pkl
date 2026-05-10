@@ -90,9 +90,30 @@ class Step {
   /// subsequent steps. Same path syntax as `expectBodyJsonPath`.
   captureBodyJsonPath: Mapping<String, String> = new {}
 
+  /// Polling: when set, the runner re-executes this step (request +
+  /// assertions) until every assertion passes, or until `timeoutSec`
+  /// elapses. Captures from a failing attempt are discarded; only the
+  /// successful attempt's captures bind to the env. Distinct from
+  /// `Test.retries`, which retries the whole test on failure.
+  ///
+  /// Use sparingly on side-effecting steps — POST / DELETE inside an
+  /// `Eventually` block re-fires on every attempt.
+  eventually: Eventually? = null
+
   /// When true, run this step even if a previous sequential step
   /// failed. Use for cleanup. Ignored inside `parallelSteps`.
   always: Boolean = false
+}
+
+/// Polling configuration for a flaky step. The runner re-runs the
+/// step body every `intervalMs` ms until either every assertion
+/// passes or `timeoutSec` is reached.
+class Eventually {
+  /// Polling interval in milliseconds.
+  intervalMs: Int(this > 0) = 100
+
+  /// Maximum total wait, including the first attempt.
+  timeoutSec: Int(this > 0) = 5
 }
 
 /// Reference to a committed snapshot file. The runner stores expected
@@ -210,6 +231,11 @@ class RenderedHttpRequest {
   timeoutSec: Int
 }
 
+class RenderedEventually {
+  intervalMs: Int
+  timeoutSec: Int
+}
+
 class RenderedStep {
   name: String?
   cmd: String?
@@ -233,6 +259,7 @@ class RenderedStep {
   captureBody: String?
   captureStatus: String?
   captureBodyJsonPath: Mapping<String, String>
+  eventually: RenderedEventually?
   always: Boolean
 }
 
@@ -323,6 +350,10 @@ local function renderStep(s: Step): RenderedStep = new {
   captureBody = s.captureBody
   captureStatus = s.captureStatus
   captureBodyJsonPath = s.captureBodyJsonPath
+  eventually = if (s.eventually == null) null else new RenderedEventually {
+    intervalMs = s.eventually.intervalMs
+    timeoutSec = s.eventually.timeoutSec
+  }
   always = s.always
 }
 

@@ -536,10 +536,57 @@ func (e *Executor) runParallel(ctx context.Context, res *Result, t *config.Test,
 }
 
 func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
+	if step.Eventually == nil {
+		return e.runStepOnce(ctx, step, t, defaults, state)
+	}
+	return e.runStepEventually(ctx, step, t, defaults, state)
+}
+
+// runStepOnce dispatches a single attempt of `step` to the shell or
+// HTTP engine. It is also the unit `runStepEventually` re-invokes
+// inside its polling loop.
+func (e *Executor) runStepOnce(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
 	if step.Http != nil {
 		return e.runHttpStep(ctx, step, t, defaults, state)
 	}
 	return e.runShellStep(ctx, step, t, defaults, state)
+}
+
+// runStepEventually polls runStepOnce on `step.Eventually.IntervalMs`
+// until either a passing StepResult is observed or the
+// `Eventually.TimeoutSec` budget is exhausted. On success the result
+// of the passing attempt is returned unchanged; on timeout the last
+// observed attempt is returned with an `eventually:` prefix added to
+// its Reasons so the report distinguishes "assertion failed once"
+// from "assertion failed every time we polled".
+func (e *Executor) runStepEventually(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
+	ev := step.Eventually
+	deadline := time.Now().Add(time.Duration(ev.TimeoutSec) * time.Second)
+	interval := time.Duration(ev.IntervalMs) * time.Millisecond
+	attempts := 0
+	var last StepResult
+	for {
+		attempts++
+		last = e.runStepOnce(ctx, step, t, defaults, state)
+		if last.Outcome == OutcomePassed {
+			return last
+		}
+		if !time.Now().Before(deadline) {
+			elapsed := time.Duration(ev.TimeoutSec) * time.Second
+			last.Reasons = append([]string{
+				fmt.Sprintf("eventually: %d attempts over %s, all failed", attempts, elapsed),
+			}, last.Reasons...)
+			return last
+		}
+		select {
+		case <-ctx.Done():
+			last.Reasons = append([]string{
+				fmt.Sprintf("eventually: cancelled after %d attempts", attempts),
+			}, last.Reasons...)
+			return last
+		case <-time.After(interval):
+		}
+	}
 }
 
 func (e *Executor) runShellStep(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {

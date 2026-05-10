@@ -14,6 +14,13 @@ import (
 	"github.com/apple/pkl-go/pkl"
 )
 
+// Eventually mirrors `pkthunder.Test#RenderedEventually` — the
+// per-step polling configuration.
+type Eventually struct {
+	IntervalMs int `pkl:"intervalMs"`
+	TimeoutSec int `pkl:"timeoutSec"`
+}
+
 // HttpRequest mirrors `pkthunder.Test#RenderedHttpRequest`.
 type HttpRequest struct {
 	Method     string            `pkl:"method"`
@@ -53,7 +60,8 @@ type Step struct {
 	CaptureStatus       *string           `pkl:"captureStatus"`
 	CaptureBodyJsonPath map[string]string `pkl:"captureBodyJsonPath"`
 
-	Always bool `pkl:"always"`
+	Eventually *Eventually `pkl:"eventually"`
+	Always     bool        `pkl:"always"`
 }
 
 // ReferenceSnapshot mirrors `pkthunder.Test#RenderedSnapshot`.
@@ -123,6 +131,7 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedBackground", Background{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedSnapshot", ReferenceSnapshot{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedHttpRequest", HttpRequest{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedEventually", Eventually{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects
