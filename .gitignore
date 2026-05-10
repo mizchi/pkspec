@@ -1,4 +1,5 @@
 /bin/
+/pkt
 /result
 /result-*
 *.test

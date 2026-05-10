@@ -1,9 +1,51 @@
 # pkthunder
 
+[![Nix CI](https://github.com/mizchi/pkthunder/actions/workflows/nix.yml/badge.svg)](https://github.com/mizchi/pkthunder/actions/workflows/nix.yml)
+
 > **[experimental]** Language-agnostic test runner that extends
-> `pkl test`. Phase 1 (the `pkl test` wrapper) is implemented and
-> usable; the `Test` schema, retries, flaky detection, and reference
-> snapshots are still pending.
+> `pkl test`. The full design (Test schema, steps + parallel +
+> background, retries / flaky, reference snapshots, and a `cmd:`
+> resource scheme that lets Pkl invoke subprocesses inside facts)
+> is implemented; expect API churn.
+
+## Install
+
+### Nix (recommended; no Go toolchain required)
+
+```sh
+nix run github:mizchi/pkthunder -- run path/to/Test.pkl
+nix profile install github:mizchi/pkthunder
+```
+
+The flake builds the `pkt` binary and wraps it so the bundled Pkl
+CLI is on `PATH` automatically. The Nix workflow on every push to
+`main` and on every PR builds the flake on `aarch64-darwin` and
+`x86_64-linux`; the badge above tracks its status.
+
+In a home-manager flake:
+
+```nix
+{
+  inputs.pkthunder.url = "github:mizchi/pkthunder";
+
+  outputs = { self, nixpkgs, home-manager, pkthunder, ... }: {
+    homeConfigurations.example = home-manager.lib.homeManagerConfiguration {
+      modules = [{
+        home.packages = [ pkthunder.packages.${pkgs.system}.default ];
+      }];
+    };
+  };
+}
+```
+
+### Go
+
+```sh
+go install github.com/mizchi/pkthunder/cmd/pkt@latest
+```
+
+You also need the [Pkl CLI](https://pkl-lang.org/main/current/pkl-cli/)
+on `PATH` — that's exactly the friction Nix removes.
 
 This repository is public so others can read along, but every file
 is subject to change without notice. The schema, the CLI name, the
