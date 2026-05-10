@@ -194,8 +194,8 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	_ = results // kept for future structured reporters
 
 	fmt.Fprintf(stderr,
-		"pkt: %d passed, %d flaky, %d failed, %d errored (of %d)\n",
-		tally.Passed, tally.Flaky, tally.Failed, tally.Errored, tally.Total())
+		"pkt: %d passed, %d flaky, %d pending, %d failed, %d errored (of %d)\n",
+		tally.Passed, tally.Flaky, tally.Pending, tally.Failed, tally.Errored, tally.Total())
 
 	if !tally.IsGreen() {
 		return fmt.Errorf("%d test(s) failed, %d errored", tally.Failed, tally.Errored)

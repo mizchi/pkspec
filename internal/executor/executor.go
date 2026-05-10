@@ -47,6 +47,10 @@ const (
 	// AND `flakyAcceptable` was true. Test-level only; no Step ever
 	// reports flaky directly.
 	OutcomeFlaky
+	// OutcomePending means the test was declared `pending = true` and
+	// the runner skipped its body entirely. Reported separately, but
+	// green for CI purposes — pending is a tracked gap, not a failure.
+	OutcomePending
 )
 
 func (o Outcome) String() string {
@@ -59,16 +63,18 @@ func (o Outcome) String() string {
 		return "skipped"
 	case OutcomeFlaky:
 		return "flaky"
+	case OutcomePending:
+		return "pending"
 	default:
 		return "errored"
 	}
 }
 
-// IsGreen reports whether the outcome should let CI pass. Passed and
-// Flaky are green; Failed / Errored are red; Skipped is neutral but
-// should never appear at the test level.
+// IsGreen reports whether the outcome should let CI pass. Passed,
+// Flaky, and Pending are green; Failed / Errored are red; Skipped is
+// neutral but should never appear at the test level.
 func (o Outcome) IsGreen() bool {
-	return o == OutcomePassed || o == OutcomeFlaky
+	return o == OutcomePassed || o == OutcomeFlaky || o == OutcomePending
 }
 
 // StepResult is the per-step outcome inside a sequential or parallel test.
@@ -248,13 +254,14 @@ type Tally struct {
 	Flaky   int
 	Failed  int
 	Errored int
+	Pending int
 }
 
 // Total returns the total number of tests reported.
-func (t Tally) Total() int { return t.Passed + t.Flaky + t.Failed + t.Errored }
+func (t Tally) Total() int { return t.Passed + t.Flaky + t.Failed + t.Errored + t.Pending }
 
-// IsGreen reports whether this tally should let CI pass — flaky is
-// surfaced but does not turn the run red.
+// IsGreen reports whether this tally should let CI pass — flaky and
+// pending are surfaced but do not turn the run red.
 func (t Tally) IsGreen() bool { return t.Failed == 0 && t.Errored == 0 }
 
 // Run executes every test in `plan` in alphabetical order. Returns the
@@ -277,6 +284,8 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 			tally.Passed++
 		case OutcomeFlaky:
 			tally.Flaky++
+		case OutcomePending:
+			tally.Pending++
 		case OutcomeErrored:
 			tally.Errored++
 		default:
@@ -316,6 +325,16 @@ func formatResult(w io.Writer, res Result) {
 
 func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defaults *config.Defaults) Result {
 	start := time.Now()
+
+	if t.Pending {
+		// Skip body, background, retry — the whole envelope. Pending
+		// is a tracked gap, not a runtime concern.
+		return Result{
+			Name:     name,
+			Outcome:  OutcomePending,
+			Duration: time.Since(start),
+		}
+	}
 
 	mode := t.Mode()
 	if mode == config.ModeInvalid {

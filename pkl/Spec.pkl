@@ -60,6 +60,10 @@ class Scenario {
   retries: Int(this >= 0) = 0
   flakyAcceptable: Boolean = false
   background: Listing<base.Background> = new {}
+
+  /// Mark the scenario as not-yet-implemented. Useful for "I will
+  /// write this tomorrow" placeholders that still document intent.
+  pending: Boolean = false
 }
 
 /// Optional human-readable feature name; not currently surfaced in
@@ -102,6 +106,7 @@ local function scenarioToTest(s: Scenario): base.Test = new {
   retries = s.retries
   flakyAcceptable = s.flakyAcceptable
   background = s.background
+  pending = s.pending
   // Order matters: Given → When → Then, then any always-run cleanup.
   // tests run sequentially via `steps`; mode auto-resolves to ModeSteps.
   steps = new Listing<base.Step> {

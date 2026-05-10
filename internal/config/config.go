@@ -62,6 +62,7 @@ type Test struct {
 	TimeoutSec      int               `pkl:"timeoutSec"`
 	Retries         int               `pkl:"retries"`
 	FlakyAcceptable bool              `pkl:"flakyAcceptable"`
+	Pending         bool              `pkl:"pending"`
 
 	Cmd                  *string            `pkl:"cmd"`
 	Stdin                *string            `pkl:"stdin"`

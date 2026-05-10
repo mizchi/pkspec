@@ -113,6 +113,12 @@ class Test {
   /// default — every attempt must pass.
   flakyAcceptable: Boolean = false
 
+  /// Mark the test as not-yet-implemented. The runner skips the body
+  /// entirely (no subprocess, no background, no snapshot work) and
+  /// reports `pending`. Pending tests are green for CI purposes —
+  /// they are a written record of known gaps, not failures.
+  pending: Boolean = false
+
   // ── Body: pick exactly one ─────────────────────────────────────
   cmd: (String(length > 0))? = null
   stdin: String? = null
@@ -177,6 +183,7 @@ class RenderedTest {
   timeoutSec: Int
   retries: Int
   flakyAcceptable: Boolean
+  pending: Boolean
 
   cmd: String?
   stdin: String?
@@ -246,6 +253,7 @@ local function renderTest(t: Test): RenderedTest = new {
   timeoutSec = t.timeoutSec
   retries = t.retries
   flakyAcceptable = t.flakyAcceptable
+  pending = t.pending
   cmd = t.cmd
   stdin = t.stdin
   expectExitCode = t.expectExitCode
