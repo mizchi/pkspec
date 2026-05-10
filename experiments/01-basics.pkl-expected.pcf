@@ -1,0 +1,17 @@
+examples {
+  ["the doubled values for a small range"] {
+    new {
+      0
+      2
+      4
+      6
+      8
+    }
+  }
+  ["a structured value"] {
+    new {
+      input = 7
+      output = 14
+    }
+  }
+}

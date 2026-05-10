@@ -1,0 +1,31 @@
+/// Probe 01: how do `facts` and `examples` differ in practice?
+///
+/// Run:
+///   pkl test experiments/01-basics.pkl
+///   pkl test experiments/01-basics.pkl --junit-reports out/
+amends "pkl:test"
+
+local function double(n: Int): Int = n * 2
+
+facts {
+  ["double of 3 is 6"] {
+    double(3) == 6
+  }
+  ["multiple boolean expressions are AND-ed"] {
+    double(1) == 2
+    double(0) == 0
+    double(-5) == -10
+  }
+}
+
+examples {
+  ["the doubled values for a small range"] {
+    new Listing<Int> { for (i in IntSeq(0, 4)) { double(i) } }
+  }
+  ["a structured value"] {
+    new {
+      input = 7
+      output = double(7)
+    }
+  }
+}

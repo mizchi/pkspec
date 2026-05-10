@@ -1,0 +1,25 @@
+/// Probe 02: what does pkl test print when something fails?
+///
+/// Run:
+///   pkl test experiments/02-failure-output.pkl
+amends "pkl:test"
+
+local function add(a: Int, b: Int): Int = a + b
+
+facts {
+  ["passes"] {
+    add(2, 3) == 5
+  }
+  ["fails on bad arithmetic"] {
+    add(2, 3) == 6   // intentional fail
+  }
+  ["fails inside a chained expression"] {
+    add(add(1, 2), add(3, 4)) == 99   // intentional fail
+  }
+}
+
+examples {
+  ["mismatched snapshot would fail"] {
+    new { x = 1; y = 2 }
+  }
+}

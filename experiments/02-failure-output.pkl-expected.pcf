@@ -1,0 +1,8 @@
+examples {
+  ["mismatched snapshot would fail"] {
+    new {
+      x = 1
+      y = 2
+    }
+  }
+}

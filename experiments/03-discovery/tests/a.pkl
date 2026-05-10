@@ -1,0 +1,2 @@
+amends "pkl:test"
+facts { ["a passes"] { 1 + 1 == 2 } }

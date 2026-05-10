@@ -1,0 +1,2 @@
+amends "pkl:test"
+facts { ["c fails on purpose"] { 0 == 1 } }

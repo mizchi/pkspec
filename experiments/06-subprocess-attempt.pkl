@@ -1,0 +1,39 @@
+/// Probe 06: can pkl invoke external processes?
+///
+/// Hypothesis: NO. Pkl is intentionally side-effect-free; the only
+/// I/O that can run during evaluation is `read()` against registered
+/// resource schemes. Anything that would change the world (run a
+/// program, write a file) is unavailable by design.
+///
+/// Confirm by trying every escape hatch we can think of.
+amends "pkl:test"
+
+// 1. Direct shell read — should be rejected.
+local shellOut: String? = module.catch(() -> read("shell:echo hi").text)
+
+// 2. exec: scheme — also unregistered.
+local execOut: String? = module.catch(() -> read("exec:echo hi").text)
+
+// 3. env: is a *value* lookup. Note: read("env:VAR") returns a String
+//    directly, NOT a Resource — so there's NO `.text`. file: returns a
+//    Resource that does have `.text` / `.bytes`. Inconsistent but
+//    documented in `read()`'s stdlib docs.
+local envOut: String = read("env:PATH")
+
+// 4. file: with a non-existent path — error, not silent miss.
+local fileOut: String? = module.catch(() -> read("file:/no/such/file").text)
+
+facts {
+  ["shell: scheme is rejected"] {
+    shellOut != null
+  }
+  ["exec: scheme is rejected"] {
+    execOut != null
+  }
+  ["env: works (it's a value lookup, not execution)"] {
+    envOut.length > 0
+  }
+  ["missing file: raises an error rather than returning null"] {
+    fileOut != null
+  }
+}

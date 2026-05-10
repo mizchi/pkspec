@@ -1,0 +1,7 @@
+amends "pkl:Project"
+
+tests {
+  "tests/a.pkl"
+  "tests/b.pkl"
+  "tests/c.pkl"
+}

@@ -1,0 +1,35 @@
+/// Probe 05: glob imports and file reads.
+///
+/// `import*("path/**.pkl")` brings in every match as a Mapping<String, Module>;
+/// `read("path")` materializes any registered resource scheme — `file:`,
+/// `env:`, `prop:`, and (with --allowed-resources) custom schemes.
+amends "pkl:test"
+
+import "pkl:reflect"
+
+local globbed = import*("fixtures/**.pkl")
+
+local fileBody: String = read("fixtures/data.txt").text
+local envHome: String = read("env:HOME").text
+local missingProp: String? = read?("prop:does.not.exist")?.text
+
+facts {
+  ["import* sees all matching modules"] {
+    globbed.keys.toList().length > 0
+  }
+  ["read('file:...') returns the actual bytes"] {
+    fileBody.contains("hello pkl")
+  }
+  ["read('env:HOME') resolves at evaluation time"] {
+    envHome.startsWith("/")
+  }
+  ["read?('prop:...') returns null for missing resources"] {
+    missingProp == null
+  }
+}
+
+examples {
+  ["globbed module URIs"] {
+    globbed.keys
+  }
+}

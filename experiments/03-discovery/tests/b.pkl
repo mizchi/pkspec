@@ -1,0 +1,2 @@
+amends "pkl:test"
+facts { ["b passes"] { "x".length == 1 } }

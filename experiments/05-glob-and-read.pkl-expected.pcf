@@ -1,0 +1,5 @@
+examples {
+  ["globbed module URIs"] {
+    Set("fixtures/sample.pkl")
+  }
+}
