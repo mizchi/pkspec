@@ -1,51 +1,94 @@
-/// pkthunder Test schema (Phase 2: basic subprocess assertions).
+/// pkthunder Test schema (Phase 2.5: steps + background + parallel).
 ///
-/// Authoring model mirrors pkfire's: each test is a `local Test`
-/// instance, all listed in `tests { ... }`. The Pkl side is purely
-/// declarative; the runner (`pkt exec`) reads the rendered output
-/// and executes the subprocesses.
+/// A `Test` declares exactly one of `cmd`, `steps`, or `parallelSteps`,
+/// optionally with one or more `background` processes that the runner
+/// starts before the body and kills (with SIGTERM → grace → SIGKILL)
+/// after the body finishes. Resource cleanup is enforced by the runner;
+/// authors do not write `trap` plumbing.
 @ModuleInfo { minPklVersion = "0.31.0" }
 open module pkthunder.Test
 
-class Test {
-  /// Identifier. Used as the Mapping key in the rendered output and
-  /// as the visible name in `pkt list` / reporting.
-  name: String(matches(Regex(#"^[a-zA-Z][a-zA-Z0-9_:.\-/ ]*$"#)))
+/// One step inside a `steps` (sequential) or `parallelSteps` (concurrent)
+/// list.
+class Step {
+  /// Optional name for reporting. Defaults to the cmd's first chars.
+  name: String? = null
 
-  /// Shell command to execute (run via `<shell> -c <cmd>`).
   cmd: String(length > 0)
-
-  /// Shell binary used to run `cmd`. Defaults to `bash`.
   shell: String = "bash"
-
-  /// Optional stdin fed to the process.
   stdin: String? = null
-
-  /// Environment variables exposed to `cmd`. Merged on top of
-  /// `defaults.env`; absent keys inherit from the runner's ambient
-  /// environment so PATH etc. are findable.
   env: Mapping<String, String> = new {}
-
-  /// Working directory relative to the Test module's directory.
-  /// Null means the module's directory.
   workdir: String? = null
-
-  /// Maximum wall-clock seconds for one execution. Exceeding this
-  /// counts as `errored`, not `failed`.
   timeoutSec: Int(this > 0) = 60
 
-  /// Expected process exit code. Default 0.
   expectExitCode: Int = 0
-
-  /// If set, the captured stdout must equal this string verbatim.
-  /// (Regex / reference matchers land in later phases.)
   expectStdout: String? = null
-
-  /// If set, the captured stderr must equal this string verbatim.
   expectStderr: String? = null
 
-  /// Free-form description for reports.
+  /// When set on a *sequential* step, store the step's stdout into the
+  /// named environment variable so subsequent steps can `$VAR` it. The
+  /// captured value loses a single trailing newline (echo-friendly).
+  captureStdout: String? = null
+  captureExitCode: String? = null
+
+  /// When true, run this step even if a previous sequential step
+  /// failed. Use for cleanup. Ignored inside `parallelSteps`.
+  always: Boolean = false
+}
+
+/// A long-running process the runner starts before the test body and
+/// terminates after it. Typical use: spinning up a dev server for an
+/// E2E run.
+class Background {
+  name: String? = null
+
+  cmd: String(length > 0)
+  shell: String = "bash"
+  env: Mapping<String, String> = new {}
+  workdir: String? = null
+
+  /// Optional readiness probe — the runner polls this command every
+  /// 200ms and proceeds when it exits 0. Mutually informative with
+  /// `readyStdoutMatches`; set whichever fits the process. If neither
+  /// is set, the runner gives the background a brief grace period and
+  /// proceeds optimistically.
+  readyProbe: String? = null
+
+  /// Alternative readiness signal: the literal substring must appear
+  /// in the background's stdout.
+  readyStdoutMatches: String? = null
+
+  readyTimeoutSec: Int(this > 0) = 30
+
+  /// Seconds to wait between SIGTERM and SIGKILL on shutdown.
+  graceTimeoutSec: Int(this > 0) = 5
+}
+
+/// A single test. Choose exactly one of `cmd`, `steps`, `parallelSteps`.
+class Test {
+  name: String(matches(Regex(#"^[a-zA-Z][a-zA-Z0-9_:.\-/ ]*$"#)))
   description: String? = null
+
+  shell: String = "bash"
+  env: Mapping<String, String> = new {}
+  workdir: String? = null
+
+  /// Wall-clock timeout for the entire test body (steps + cmd, NOT
+  /// counting background lifetime).
+  timeoutSec: Int(this > 0) = 60
+
+  // ── Body: pick exactly one ─────────────────────────────────────
+  cmd: (String(length > 0))? = null
+  stdin: String? = null
+  expectExitCode: Int = 0
+  expectStdout: String? = null
+  expectStderr: String? = null
+
+  steps: Listing<Step> = new {}
+  parallelSteps: Listing<Step> = new {}
+  // ───────────────────────────────────────────────────────────────
+
+  background: Listing<Background> = new {}
 }
 
 class Defaults {
@@ -53,7 +96,8 @@ class Defaults {
   env: Mapping<String, String> = new {}
 }
 
-class RenderedTest {
+class RenderedStep {
+  name: String?
   cmd: String
   shell: String
   stdin: String?
@@ -63,7 +107,39 @@ class RenderedTest {
   expectExitCode: Int
   expectStdout: String?
   expectStderr: String?
+  captureStdout: String?
+  captureExitCode: String?
+  always: Boolean
+}
+
+class RenderedBackground {
+  name: String?
+  cmd: String
+  shell: String
+  env: Mapping<String, String>
+  workdir: String?
+  readyProbe: String?
+  readyStdoutMatches: String?
+  readyTimeoutSec: Int
+  graceTimeoutSec: Int
+}
+
+class RenderedTest {
   description: String?
+  shell: String
+  env: Mapping<String, String>
+  workdir: String?
+  timeoutSec: Int
+
+  cmd: String?
+  stdin: String?
+  expectExitCode: Int
+  expectStdout: String?
+  expectStderr: String?
+
+  steps: Listing<RenderedStep>
+  parallelSteps: Listing<RenderedStep>
+  background: Listing<RenderedBackground>
 }
 
 class Rendered {
@@ -73,10 +149,6 @@ class Rendered {
 
 defaults: Defaults = new {}
 
-/// Authored test list. Append in user modules with
-/// `tests { newTest; ... }`. Forgetting to add a declared `local`
-/// to this listing is the most common pitfall — same caveat as
-/// pkfire's `tasks`.
 tests: Listing<Test> = new {}
 
 local testNames: List<String> = tests.toList().map((t) -> t.name)
@@ -85,19 +157,56 @@ local duplicateNames: List<String> = testNames
   .filter((n) -> testNames.count((m) -> m == n) > 1)
   .distinct
 
+local function renderStep(s: Step): RenderedStep = new {
+  name = s.name
+  cmd = s.cmd
+  shell = s.shell
+  stdin = s.stdin
+  env = s.env
+  workdir = s.workdir
+  timeoutSec = s.timeoutSec
+  expectExitCode = s.expectExitCode
+  expectStdout = s.expectStdout
+  expectStderr = s.expectStderr
+  captureStdout = s.captureStdout
+  captureExitCode = s.captureExitCode
+  always = s.always
+}
+
+local function renderBackground(b: Background): RenderedBackground = new {
+  name = b.name
+  cmd = b.cmd
+  shell = b.shell
+  env = b.env
+  workdir = b.workdir
+  readyProbe = b.readyProbe
+  readyStdoutMatches = b.readyStdoutMatches
+  readyTimeoutSec = b.readyTimeoutSec
+  graceTimeoutSec = b.graceTimeoutSec
+}
+
 local rendered: Mapping<String, RenderedTest> = new Mapping {
   for (t in tests) {
     [t.name] = new RenderedTest {
-      cmd = t.cmd
+      description = t.description
       shell = t.shell
-      stdin = t.stdin
       env = t.env
       workdir = t.workdir
       timeoutSec = t.timeoutSec
+      cmd = t.cmd
+      stdin = t.stdin
       expectExitCode = t.expectExitCode
       expectStdout = t.expectStdout
       expectStderr = t.expectStderr
-      description = t.description
+      steps = new Listing<RenderedStep> {
+        for (s in t.steps) { renderStep(s) }
+      }
+      parallelSteps = new Listing<RenderedStep> {
+        for (s in t.parallelSteps) { renderStep(s) }
+      }
+      background = new Listing<RenderedBackground> {
+        for (b in t.background) { renderBackground(b) }
+      }
     }
   }
 }

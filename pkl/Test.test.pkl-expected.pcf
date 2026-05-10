@@ -2,19 +2,22 @@ examples {
   ["minimal Test"] {
     new {
       name = "tcp"
-      cmd = "curl -fsS http://localhost:8080/health"
+      description = null
       shell = "bash"
-      stdin = null
       env {}
       workdir = null
       timeoutSec = 60
+      cmd = "curl -fsS http://localhost:8080/health"
+      stdin = null
       expectExitCode = 0
       expectStdout = """
         ok
         
         """
       expectStderr = null
-      description = null
+      steps {}
+      parallelSteps {}
+      background {}
     }
   }
 }
