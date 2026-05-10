@@ -128,6 +128,11 @@ type Options struct {
 	// the live capture, regardless of whether it currently matches.
 	// Equivalent to `pkl test --overwrite`, scoped to subprocess output.
 	RefreshSnapshots bool
+	// RefreshAi forces every Step.expectAi to re-invoke its judge cmd
+	// and rewrite the cached verdict, even when the prompt+body hash
+	// would otherwise hit the cache. Useful after upgrading the
+	// underlying model or fixing a buggy judge.
+	RefreshAi bool
 }
 
 // Executor runs a Plan. Phase 2.5 is still serial across tests; parallel
@@ -1220,6 +1225,12 @@ type aiSnapshot struct {
 	// Explanation is the judge's stdout, surfaced in the report on
 	// fail (and inspected by humans reviewing the snapshot file).
 	Explanation string `json:"explanation"`
+	// Cmd is the judge command that produced this verdict. Stored
+	// for diagnostic purposes only — it is *not* part of the cache
+	// key, but a mismatch between this and the current cmd triggers
+	// a "stale cache" warning so users notice when they have changed
+	// judges without refreshing snapshots.
+	Cmd string `json:"cmd,omitempty"`
 	// PromptPreview is the first 240 chars of the prompt — enough
 	// for a human reading the snapshot to recognise what was asked
 	// without re-deriving the hash.
@@ -1251,8 +1262,26 @@ func (e *Executor) evaluateAi(ctx context.Context, a *config.AiAssertion, body [
 	digest := aiDigest(a.Prompt, body)
 	path := e.aiSnapshotPath(a.SnapshotName)
 
-	if cached, ok := readAiSnapshot(path); ok && cached.Hash == digest {
-		return cached.Verdict == "pass", cached.Explanation, true, nil
+	// Hold an exclusive flock for the read-judge-write sequence.
+	// Parallel steps that share a snapshotName therefore serialise on
+	// the cache, eliminating the obvious "two writers truncate each
+	// other" race. Lock is per-snapshot, so independent snapshots run
+	// concurrently as before.
+	lock, err := acquireAiLock(path)
+	if err != nil {
+		return false, "", false, fmt.Errorf("acquire ai lock: %w", err)
+	}
+	defer lock.release()
+
+	if !e.opts.RefreshAi {
+		if cached, ok := readAiSnapshot(path); ok && cached.Hash == digest {
+			if cached.Cmd != "" && cached.Cmd != a.Cmd {
+				fmt.Fprintf(e.opts.Stderr,
+					"[pkt] warning: ai snapshot %q reuses verdict from a different judge (cached cmd %q, current cmd %q); run --refresh-ai to re-evaluate\n",
+					a.SnapshotName, cached.Cmd, a.Cmd)
+			}
+			return cached.Verdict == "pass", cached.Explanation, true, nil
+		}
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -1292,6 +1321,7 @@ func (e *Executor) evaluateAi(ctx context.Context, a *config.AiAssertion, body [
 		Hash:          digest,
 		Verdict:       verdict,
 		Explanation:   explanation,
+		Cmd:           a.Cmd,
 		PromptPreview: preview,
 		UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
@@ -1339,6 +1369,39 @@ func writeAiSnapshot(path string, s aiSnapshot) error {
 func isExitError(err error) bool {
 	var ee *exec.ExitError
 	return errors.As(err, &ee)
+}
+
+// aiLock is an exclusive file lock guarding the read-judge-write
+// sequence on a single AI snapshot file. It uses the per-snapshot
+// path `<snapshot>.lock` rather than locking the snapshot itself —
+// the snapshot file is rewritten atomically (`.tmp` + rename), so
+// holding flock on it directly would lose the lock on rename.
+type aiLock struct {
+	f *os.File
+}
+
+func acquireAiLock(snapshotPath string) (*aiLock, error) {
+	if err := os.MkdirAll(filepath.Dir(snapshotPath), 0o755); err != nil {
+		return nil, err
+	}
+	lockPath := snapshotPath + ".lock"
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return &aiLock{f: f}, nil
+}
+
+func (l *aiLock) release() {
+	if l == nil || l.f == nil {
+		return
+	}
+	_ = syscall.Flock(int(l.f.Fd()), syscall.LOCK_UN)
+	_ = l.f.Close()
 }
 
 // syncBuffer is a thread-safe bytes.Buffer for background stdout capture.

@@ -96,3 +96,44 @@ Partial writes never leave a corrupted snapshot behind.
 - **Side effects in the judge are your responsibility.** If your
   judge logs to a service or rate-limits an API, the cache layer is
   what keeps you from paying that cost on every run.
+
+## Refreshing the cache
+
+`pkt exec --refresh-ai` ignores existing snapshots, re-invokes every
+judge, and rewrites every snapshot in one pass. Use it after:
+
+- upgrading the underlying model behind your judge,
+- fixing a bug in the judge wrapper,
+- deciding a previously-cached "pass" was actually wrong.
+
+The flag is the explicit counterpart to the cache-key-excludes-cmd
+decision: identical inputs reuse cached verdicts indefinitely until
+you opt back into a fresh judgement.
+
+## Stale-cmd warning
+
+Each snapshot also stores the `cmd` string that produced it (purely
+diagnostic — `cmd` is *not* part of the cache key). When the runner
+returns a cached verdict produced by a different cmd from the one
+currently in the Pkl module, it emits:
+
+```
+[pkt] warning: ai snapshot "<name>" reuses verdict from a different
+       judge (cached cmd "<old>", current cmd "<new>"); run --refresh-ai
+       to re-evaluate
+```
+
+The test still passes on the cached verdict — the warning is not a
+failure signal — but it surfaces the case where someone swapped
+judges without intentionally accepting that the existing snapshots
+are still authoritative.
+
+## Concurrency
+
+The read-judge-write sequence is wrapped in a per-snapshot
+`flock(LOCK_EX)` against `<snapshot>.lock`. Two test bodies that
+share a snapshotName therefore serialise on the cache, never
+truncating each other's writes. Independent snapshots run fully
+concurrently. The lock is process-level (filesystem flock), so it
+also covers two `pkt exec` invocations against the same workdir.
+

@@ -5,6 +5,38 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 11 — operational ergonomics around `expectAi`
+
+- **`--refresh-ai` is the right shape; per-snapshot path filters are
+  not.** The usual reason to refresh is "I changed something about
+  the judge / model and want to re-evaluate everything," which maps
+  cleanly to a global flag. A per-name allowlist (`--refresh-ai
+  greeting-says-hello,...`) felt more surgical but solves a problem
+  no one has yet — `rm` of the specific snapshot file does the same
+  job, and the global flag is the path users actually reach for.
+- **Stale-cmd is a warning, not a failure.** The cache key
+  intentionally excludes `cmd`, so reusing a cached verdict produced
+  by a different judge is *by design* — but silently doing so is
+  bad ergonomics. Storing `cmd` in the snapshot (off-key) and
+  warning when it differs strikes the balance: the test still passes
+  on the cached verdict, but the runner tells you "your current
+  judge has not actually been consulted."
+- **Per-snapshot flock, not whole-cache flock.** Locking the entire
+  `ai-snapshots` directory would have serialised every AI step in a
+  test even if they touched independent snapshot files; locking each
+  `<snapshot>.lock` keeps independent verdicts parallel and only
+  serialises the genuinely-shared case (multiple steps writing the
+  same snapshotName, or two `pkt exec` invocations racing against
+  the same workdir). Filesystem flock is also process-level, so it
+  covers cross-invocation races for free.
+- **Lock the lockfile, not the snapshot.** Snapshots are written
+  atomically (`.tmp` + rename), which would lose any flock held on
+  the snapshot file the moment the rename swaps the inode. The
+  separate `<snapshot>.lock` file outlives renames and keeps the
+  exclusive region intact.
+
+---
+
 ## Phase 10 — `Step.expectAi` with snapshot-cached judge
 
 - **Shell-out beats embedded SDK for the judge.** Embedding an

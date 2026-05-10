@@ -165,6 +165,7 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	file := fs.String("f", "Test.pkl", "path to the Test.pkl module")
 	fs.StringVar(file, "file", "Test.pkl", "path to the Test.pkl module")
 	refresh := fs.Bool("refresh-snapshots", false, "(re)write every reference snapshot file")
+	refreshAi := fs.Bool("refresh-ai", false, "force every Step.expectAi to re-run its judge and rewrite the cached snapshot")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -186,6 +187,7 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 		Workdir:          filepath.Dir(abs),
 		Stderr:           stderr,
 		RefreshSnapshots: *refresh,
+		RefreshAi:        *refreshAi,
 	})
 	results, tally, err := exe.Run(ctx, plan)
 	if err != nil {
