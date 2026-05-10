@@ -1,11 +1,21 @@
 # pkthunder
 
-> A language-agnostic test runner that extends `pkl test`.
+> **[experimental]** Design notebook for a language-agnostic test
+> runner that extends `pkl test`. Not a usable runner yet.
 
-**Status: exploration.** This repository is currently a notebook of
-experiments against Apple's [`pkl test`](https://pkl-lang.org/blog/testing-in-pkl.html)
-to figure out exactly which capabilities are reusable for the broader
-"declare tests in Pkl, run any external tool" goal.
+This repository is public so others can read along, but every file
+is subject to change without notice. The schema, the CLI name, the
+flag set, the exit-code semantics — all of it is up for revision.
+There is no release, no binary, no API stability promise. If you are
+looking for a real task runner, see
+[mizchi/pkfire](https://github.com/mizchi/pkfire); pkthunder is its
+testing-focused sibling, currently in the "what does `pkl test`
+actually do?" phase.
+
+The contents right now are probes against Apple's
+[`pkl test`](https://pkl-lang.org/blog/testing-in-pkl.html), captured
+to find out which capabilities are reusable for the broader "declare
+tests in Pkl, run any external tool" goal.
 
 ## Goal
 
