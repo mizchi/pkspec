@@ -45,9 +45,27 @@ already does well, and where it falls short.
 
 ```
 .
-├── experiments/           # one Pkl module per probe of `pkl test`
-└── findings.md            # accumulating notes (one bullet per experiment)
+├── experiments/                         # one Pkl module per probe of `pkl test`
+├── findings.md                          # raw, time-ordered probe log
+└── docs/notes/
+    ├── pkl-test.md                      # capabilities + limits of `pkl test`
+    ├── external-readers.md              # the `--external-resource-reader` hatch
+    └── runner-design.md                 # pkthunder's two-architecture plan
 ```
+
+Read order if you are landing here for the first time:
+
+1. [`docs/notes/pkl-test.md`](./docs/notes/pkl-test.md) — what `pkl test`
+   already does and where it falls short. Headlined by the unreliable
+   exit code that motivates the wrapper.
+2. [`docs/notes/external-readers.md`](./docs/notes/external-readers.md)
+   — the msgpack-RPC escape hatch that turns subprocess execution from
+   "impossible" into "implementable", informing pkthunder's option B.
+3. [`docs/notes/runner-design.md`](./docs/notes/runner-design.md) —
+   the two architectures (wrapper vs external reader), schema sketch,
+   discovery rules, concurrency model, implementation order.
+4. [`findings.md`](./findings.md) — the raw observations behind the
+   notes above; each probe lives in `experiments/` for reproduction.
 
 Once the design space is understood, the runner itself will land in
 `cmd/pkt/` and the schema in `pkl/Test.pkl`.
