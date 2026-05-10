@@ -19,6 +19,7 @@ package executor
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,9 +27,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/apple/pkl-go/pkl"
+	"github.com/tidwall/gjson"
 	"sync"
 	"syscall"
 	"time"
@@ -495,6 +500,16 @@ func (e *Executor) runSteps(ctx context.Context, res *Result, t *config.Test, de
 			if step.CaptureStatus != nil {
 				state[*step.CaptureStatus] = strconv.Itoa(sr.ExitCode)
 			}
+			// HTTP-only: jsonpath captures. sr.Stdout holds the response
+			// body for HTTP steps, so reusing the lookup helper here is
+			// safe; for shell steps with no JSON output the result will
+			// just be empty / non-existent and the var won't be set.
+			for path, varName := range step.CaptureBodyJsonPath {
+				result := jsonPathLookup([]byte(sr.Stdout), path)
+				if result.Exists() {
+					state[varName] = result.String()
+				}
+			}
 		}
 		res.Steps = append(res.Steps, sr)
 		if sr.Outcome != OutcomePassed {
@@ -615,8 +630,31 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 	url := expandEnv(h.URL, envMap)
 
 	var body io.Reader
-	if h.Body != nil {
+	autoContentType := ""
+	switch {
+	case h.Body != nil && h.BodyJson != nil:
+		sr.Outcome = OutcomeErrored
+		sr.Reasons = []string{"http request: set either body or bodyJson, not both"}
+		sr.Duration = time.Since(start)
+		return sr
+	case h.Body != nil:
 		body = strings.NewReader(*h.Body)
+	case h.BodyJson != nil:
+		// pkl-go decodes untyped Pkl objects (Mapping / Listing /
+		// Dynamic) as `pkl.Object` with separate Properties / Entries /
+		// Elements buckets. expandJsonValue flattens those into a
+		// JSON-marshalable shape and substitutes `$VAR` on every string
+		// leaf so captured values flow through.
+		expanded := expandJsonValue(h.BodyJson, envMap)
+		encoded, err := json.Marshal(expanded)
+		if err != nil {
+			sr.Outcome = OutcomeErrored
+			sr.Reasons = []string{fmt.Sprintf("encode bodyJson: %v", err)}
+			sr.Duration = time.Since(start)
+			return sr
+		}
+		body = bytes.NewReader(encoded)
+		autoContentType = "application/json"
 	}
 	req, err := http.NewRequestWithContext(reqCtx, h.Method, url, body)
 	if err != nil {
@@ -627,6 +665,9 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 	}
 	for k, v := range h.Headers {
 		req.Header.Set(k, expandEnv(v, envMap))
+	}
+	if autoContentType != "" && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", autoContentType)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -650,6 +691,16 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 		sr.Reasons = append(sr.Reasons,
 			fmt.Sprintf("expected status %d, got %d", *step.ExpectStatus, resp.StatusCode))
 	}
+	if len(step.ExpectStatusBetween) == 2 {
+		lo, hi := step.ExpectStatusBetween[0], step.ExpectStatusBetween[1]
+		if resp.StatusCode < lo || resp.StatusCode > hi {
+			sr.Reasons = append(sr.Reasons,
+				fmt.Sprintf("expected status in [%d, %d], got %d", lo, hi, resp.StatusCode))
+		}
+	} else if len(step.ExpectStatusBetween) > 0 {
+		sr.Reasons = append(sr.Reasons,
+			fmt.Sprintf("expectStatusBetween needs exactly 2 entries, got %d", len(step.ExpectStatusBetween)))
+	}
 	if step.ExpectBodyEquals != nil && string(bodyBytes) != *step.ExpectBodyEquals {
 		sr.Reasons = append(sr.Reasons, fmt.Sprintf("body mismatch:\n%s",
 			diff(*step.ExpectBodyEquals, string(bodyBytes))))
@@ -665,6 +716,25 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 				fmt.Sprintf("header %q expected %q, got %q", k, v, got))
 		}
 	}
+	for path, expected := range step.ExpectBodyJsonPath {
+		// Expand $VAR on string expectations so users can compare
+		// against captured values from earlier steps. Keep numeric /
+		// bool / null expectations untouched.
+		expectedExpanded := expected
+		if s, ok := expected.(string); ok {
+			expectedExpanded = expandEnv(s, envMap)
+		}
+		result := jsonPathLookup(bodyBytes, path)
+		if !result.Exists() {
+			sr.Reasons = append(sr.Reasons,
+				fmt.Sprintf("jsonpath %q: not found", path))
+			continue
+		}
+		if !jsonValuesEqual(result, expectedExpanded) {
+			sr.Reasons = append(sr.Reasons,
+				fmt.Sprintf("jsonpath %q expected %v, got %s", path, expectedExpanded, result.Raw))
+		}
+	}
 
 	if len(sr.Reasons) > 0 {
 		sr.Outcome = OutcomeFailed
@@ -672,6 +742,108 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 		sr.Outcome = OutcomePassed
 	}
 	return sr
+}
+
+// expandJsonValue recursively walks a Pkl-decoded value tree and
+// returns a JSON-marshalable copy. Three transformations happen:
+//
+//   - `pkl.Object` (the catch-all pkl-go type for untyped Pkl
+//     Mapping/Listing/Dynamic) is flattened: Mapping `Entries` and
+//     typed `Properties` become a `map[string]any`; Listing
+//     `Elements` becomes a `[]any`.
+//   - `map[interface{}]interface{}` (msgpack's default for untyped
+//     maps) is normalized to `map[string]any`.
+//   - String leaves go through `expandEnv` with the provided env so
+//     `bodyJson` templates can reference prior captures via `$VAR`.
+func expandJsonValue(v any, env map[string]string) any {
+	switch x := v.(type) {
+	case string:
+		return expandEnv(x, env)
+	case pkl.Object:
+		return expandPklObject(x, env)
+	case *pkl.Object:
+		if x == nil {
+			return nil
+		}
+		return expandPklObject(*x, env)
+	case map[interface{}]interface{}:
+		out := make(map[string]any, len(x))
+		for k, val := range x {
+			out[fmt.Sprintf("%v", k)] = expandJsonValue(val, env)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, val := range x {
+			out[k] = expandJsonValue(val, env)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, val := range x {
+			out[i] = expandJsonValue(val, env)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+// expandPklObject converts a pkl.Object into a JSON-marshalable shape.
+// Pkl Listings (only Elements populated) become arrays; Mappings
+// (Entries populated) and typed objects (Properties populated) become
+// string-keyed maps. Mixed shapes merge Properties and Entries into
+// the same map, with Entries winning on conflict.
+func expandPklObject(o pkl.Object, env map[string]string) any {
+	if len(o.Elements) > 0 && len(o.Entries) == 0 && len(o.Properties) == 0 {
+		out := make([]any, len(o.Elements))
+		for i, val := range o.Elements {
+			out[i] = expandJsonValue(val, env)
+		}
+		return out
+	}
+	out := make(map[string]any, len(o.Properties)+len(o.Entries))
+	for k, val := range o.Properties {
+		out[k] = expandJsonValue(val, env)
+	}
+	for k, val := range o.Entries {
+		out[fmt.Sprintf("%v", k)] = expandJsonValue(val, env)
+	}
+	return out
+}
+
+// jsonPathLookup evaluates `path` against `body` (parsed as JSON).
+// Leading `$.` and `.` are stripped so users can write either gjson-
+// native form (`user.name`) or JSONPath-flavored (`$.user.name`).
+func jsonPathLookup(body []byte, path string) gjson.Result {
+	p := strings.TrimPrefix(path, "$.")
+	p = strings.TrimPrefix(p, "$")
+	p = strings.TrimPrefix(p, ".")
+	return gjson.GetBytes(body, p)
+}
+
+// jsonValuesEqual compares the gjson Result against an interface{}
+// value coming from Pkl. Because Pkl numbers decode as float64 / int
+// and gjson surfaces every leaf typed, we normalize both sides to a
+// JSON-roundtripped form before comparison — that way 1 == 1.0,
+// "abc" == "abc", and {"a":1} == {"a":1.0}.
+func jsonValuesEqual(actual gjson.Result, expected any) bool {
+	expBytes, err := json.Marshal(expected)
+	if err != nil {
+		return false
+	}
+	var expNorm any
+	if err := json.Unmarshal(expBytes, &expNorm); err != nil {
+		return false
+	}
+	var actNorm any
+	if err := json.Unmarshal([]byte(actual.Raw), &actNorm); err != nil {
+		// If actual is not valid JSON (a primitive that gjson surfaces
+		// without quotes), fall back to comparing with the gjson
+		// String() form.
+		return fmt.Sprintf("%v", expected) == actual.String()
+	}
+	return reflect.DeepEqual(expNorm, actNorm)
 }
 
 // mergedMap is `mergeEnv` minus the inherited PATH/HOME/etc. — used

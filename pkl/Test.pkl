@@ -17,7 +17,17 @@ class HttpRequest {
   method: String(matches(Regex(#"^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$"#))) = "GET"
   url: String(length > 0)
   headers: Mapping<String, String> = new {}
+
+  /// Raw request body. Mutually exclusive with `bodyJson`.
   body: String? = null
+
+  /// Convenience: when non-null, the runner JSON-encodes this value
+  /// into the request body and adds `Content-Type: application/json`
+  /// unless already set in `headers`. Mutually exclusive with `body`.
+  /// Author with `bodyJson = new { ["k"] = v; ["nested"] { ... } }`;
+  /// scalars and Listings work too.
+  bodyJson: Any? = null
+
   /// Per-request timeout. Independent of `Step.timeoutSec`.
   timeoutSec: Int(this > 0) = 30
 }
@@ -47,9 +57,24 @@ class Step {
 
   // ── HTTP expectations ──────────────────────────────────────────
   expectStatus: Int? = null
+
+  /// Inclusive [low, high] status range. Combined (AND) with
+  /// `expectStatus` when both are set. Use a 2-element Listing:
+  /// `expectStatusBetween { 200; 299 }`. Empty (the default) means
+  /// "no range check"; any length other than 0 or 2 is rejected by
+  /// the runner.
+  expectStatusBetween: Listing<Int> = new {}
+
   expectBodyEquals: String? = null
   expectBodyContains: String? = null
   expectHeaderEquals: Mapping<String, String> = new {}
+
+  /// Map of JSON path → expected value. Each path is evaluated
+  /// against the response body parsed as JSON; every entry must
+  /// match. Path syntax is gjson dot-style: `user.name`,
+  /// `items.0.id`, `users.#(active==true).name`. Leading `$.` or
+  /// `.` is accepted but optional.
+  expectBodyJsonPath: Mapping<String, Any> = new {}
 
   /// When set on a sequential step, store the step's stdout (shell)
   /// or body (http) into the named environment variable so subsequent
@@ -59,6 +84,11 @@ class Step {
   captureExitCode: String? = null
   captureBody: String? = null
   captureStatus: String? = null
+
+  /// Map of JSON path → env-var name. The string value at that path
+  /// in the response body is stored, available as `$VAR` in
+  /// subsequent steps. Same path syntax as `expectBodyJsonPath`.
+  captureBodyJsonPath: Mapping<String, String> = new {}
 
   /// When true, run this step even if a previous sequential step
   /// failed. Use for cleanup. Ignored inside `parallelSteps`.
@@ -176,6 +206,7 @@ class RenderedHttpRequest {
   url: String
   headers: Mapping<String, String>
   body: String?
+  bodyJson: Any?
   timeoutSec: Int
 }
 
@@ -192,13 +223,16 @@ class RenderedStep {
   expectStdout: String?
   expectStderr: String?
   expectStatus: Int?
+  expectStatusBetween: Listing<Int>
   expectBodyEquals: String?
   expectBodyContains: String?
   expectHeaderEquals: Mapping<String, String>
+  expectBodyJsonPath: Mapping<String, Any>
   captureStdout: String?
   captureExitCode: String?
   captureBody: String?
   captureStatus: String?
+  captureBodyJsonPath: Mapping<String, String>
   always: Boolean
 }
 
@@ -262,6 +296,7 @@ local function renderHttp(h: HttpRequest): RenderedHttpRequest = new {
   url = h.url
   headers = h.headers
   body = h.body
+  bodyJson = h.bodyJson
   timeoutSec = h.timeoutSec
 }
 
@@ -278,13 +313,16 @@ local function renderStep(s: Step): RenderedStep = new {
   expectStdout = s.expectStdout
   expectStderr = s.expectStderr
   expectStatus = s.expectStatus
+  expectStatusBetween = s.expectStatusBetween
   expectBodyEquals = s.expectBodyEquals
   expectBodyContains = s.expectBodyContains
   expectHeaderEquals = s.expectHeaderEquals
+  expectBodyJsonPath = s.expectBodyJsonPath
   captureStdout = s.captureStdout
   captureExitCode = s.captureExitCode
   captureBody = s.captureBody
   captureStatus = s.captureStatus
+  captureBodyJsonPath = s.captureBodyJsonPath
   always = s.always
 }
 

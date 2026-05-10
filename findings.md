@@ -5,6 +5,36 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 8.2 — JSON path assertions and `bodyJson` encoding
+
+- **`Mapping<String, Any>` is not a stable contract for pkl-go.** When a
+  Pkl property is typed `Any?` (or `Any`), pkl-go decodes nested untyped
+  objects as a `pkl.Object` value with three buckets:
+  `Properties map[string]any`, `Entries map[interface{}]interface{}`,
+  `Elements []interface{}`. Pkl Mappings populate `Entries`, Listings
+  populate `Elements`, and typed objects use `Properties`. `json.Marshal`
+  refuses `map[interface{}]interface{}` directly, so the runner has to
+  flatten `pkl.Object` itself before encoding (see
+  `executor.expandPklObject`).
+- **A nullable Listing inside Pkl needs an explicit constructor.** The
+  block-literal form `expectStatusBetween { 200; 299 }` only works when
+  the field is non-nullable with a default, e.g.
+  `expectStatusBetween: Listing<Int> = new {}`. With `Listing<Int>?` Pkl
+  rejects the bare block and requires `new Listing<Int> { ... }`. We
+  pick non-nullable + `length == 0` as the "off" sentinel.
+- **`expectBodyJsonPath` expectations need the same env expansion as
+  the rest of the HTTP DSL.** A scenario that captures `name` from one
+  request and asserts the next request echoes it back must compare
+  `expandEnv("$USER_NAME")` against the response, not the literal
+  `$USER_NAME`. We expand only string expectations; numbers / bools /
+  nulls pass through untouched so `["count"] = 5` still works.
+- **`gjson` over `tidwall/sjson` for read-only path lookup.** `gjson`
+  accepts both `$.user.tags.0` and the bare `user.tags.0`; we strip the
+  leading `$.` / `$` / `.` so authors can write either form. No JSONPath
+  filter syntax (`[?(@.x>1)]`) yet — out of scope for plain assertion.
+
+---
+
 ## Probe 12 — `experiments/12-quickcheck/`
 
 - **Verdict — QuickCheck-style property testing fits in pure Pkl.**

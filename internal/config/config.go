@@ -20,6 +20,7 @@ type HttpRequest struct {
 	URL        string            `pkl:"url"`
 	Headers    map[string]string `pkl:"headers"`
 	Body       *string           `pkl:"body"`
+	BodyJson   any               `pkl:"bodyJson"`
 	TimeoutSec int               `pkl:"timeoutSec"`
 }
 
@@ -39,15 +40,18 @@ type Step struct {
 	ExpectStdout   *string `pkl:"expectStdout"`
 	ExpectStderr   *string `pkl:"expectStderr"`
 
-	ExpectStatus       *int              `pkl:"expectStatus"`
-	ExpectBodyEquals   *string           `pkl:"expectBodyEquals"`
-	ExpectBodyContains *string           `pkl:"expectBodyContains"`
-	ExpectHeaderEquals map[string]string `pkl:"expectHeaderEquals"`
+	ExpectStatus        *int              `pkl:"expectStatus"`
+	ExpectStatusBetween []int             `pkl:"expectStatusBetween"`
+	ExpectBodyEquals    *string           `pkl:"expectBodyEquals"`
+	ExpectBodyContains  *string           `pkl:"expectBodyContains"`
+	ExpectHeaderEquals  map[string]string `pkl:"expectHeaderEquals"`
+	ExpectBodyJsonPath  map[string]any    `pkl:"expectBodyJsonPath"`
 
-	CaptureStdout   *string `pkl:"captureStdout"`
-	CaptureExitCode *string `pkl:"captureExitCode"`
-	CaptureBody     *string `pkl:"captureBody"`
-	CaptureStatus   *string `pkl:"captureStatus"`
+	CaptureStdout       *string           `pkl:"captureStdout"`
+	CaptureExitCode     *string           `pkl:"captureExitCode"`
+	CaptureBody         *string           `pkl:"captureBody"`
+	CaptureStatus       *string           `pkl:"captureStatus"`
+	CaptureBodyJsonPath map[string]string `pkl:"captureBodyJsonPath"`
 
 	Always bool `pkl:"always"`
 }
