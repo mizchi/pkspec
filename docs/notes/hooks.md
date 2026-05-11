@@ -96,6 +96,17 @@ time afterEach runs, the body has already produced its verdict. A
 failed teardown surfaces as a status line on stderr but doesn't make
 a green test red.
 
+## Pending tests bypass per-test hooks
+
+A test declared `pending = true` skips both its `beforeEach` and
+`afterEach` hooks. Pending is a tracked gap (no body, no state
+mutation), so running setup / teardown around it is wasted work and
+surprising. `scope = "all"` hooks still run — they're for the whole
+suite, not any one test.
+
+This mirrors `it.skip` in vitest / jest, where lifecycle hooks
+likewise don't fire around a skipped test.
+
 ## Capture flow
 
 `Hook.captureStdout = "VAR"` writes the hook's stdout (single trailing

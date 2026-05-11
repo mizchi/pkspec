@@ -373,6 +373,18 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 			continue
 		}
 
+		// Pending tests bypass all per-test hooks. Pending is a
+		// tracked gap, not work to do; running TRUNCATEs / seeds /
+		// cleanup for a test whose body never executes is wasted at
+		// best and surprising at worst. Mirrors vitest's `it.skip`.
+		if plan.Tests[name].Pending {
+			res := Result{Name: name, Outcome: OutcomePending}
+			results = append(results, res)
+			tally.Pending++
+			formatResult(e.opts.Stderr, res)
+			continue
+		}
+
 		// Per-test state seeded with run-level captures.
 		testState := make(map[string]string, len(runState))
 		for k, v := range runState {
