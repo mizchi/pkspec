@@ -5,6 +5,104 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 20 — `expectConsole`: console assertion for the playwright kind
+
+- **Closes the last open feature for the `playwright` kind.**
+  Phase 18.1 shipped the harness + screenshot; 19.3 closed
+  pixel diff; 19.4 closed the eventually-validation footgun;
+  20 closes `expectConsole`. The `playwright` kind now has
+  no flagged-as-missing features other than "network mocking
+  from Pkl" — which is a designed-out concern, not a TODO
+  (authors use `page.route(...)` inside the script).
+- **`ConsoleAssertion` is a 2-axis substring assertion.**
+  `containsAll: Listing<String>` — every named substring must
+  appear in at least one console entry. `containsNone:
+  Listing<String>` — no entry may contain any named substring.
+  Both default empty (no assertion). Substring rather than
+  regex on purpose; the typical assertion is "did 'init
+  complete' get logged?" or "any `[error]` entries?". Pkl
+  already gives the user template literals if they want
+  composed strings.
+- **Entry encoding: `text [type]`.** The harness joins
+  `msg.text()` with `[${msg.type()}]` so `console.error("x")`
+  becomes `"x [error]"`. Authors then forbid errors with
+  `containsNone { "[error]" }` — a single substring covers
+  every error-level message. The type tag also includes
+  `pageerror` (uncaught throws, attached via
+  `page.on('pageerror', ...)`) so promise rejections and
+  runtime exceptions are catchable through the same
+  mechanism as `console.error`.
+- **Capture is unconditional, capped at 1000 entries.** A
+  Step without `expectConsole` still has the listener
+  attached; cost is one closure per console event, negligible
+  relative to the browser launch. 1000-entry cap is a
+  defensive limit for runaway pages (infinite log loops);
+  reaching it silently drops subsequent messages but does
+  not fail the Step. The Go side gets the array verbatim
+  via the existing harness response schema (new
+  `output.console: []string` field).
+- **Listener placement matters.** Attached on `page` *before*
+  the user's script runs (we listen, then load the script,
+  then dispatch). Messages logged during the script's
+  execution are captured; messages from before
+  `await context.newPage()` aren't visible by definition.
+  Worth knowing if a regression test wants to assert on a
+  console message that fires on page construction.
+- **3-scenario smoke green.** (1) Clean page logs "init
+  complete" + no errors → `containsAll{"init complete"};
+  containsNone{"[error]", "[pageerror]"}` passes. (2) Same
+  clean page, but assertion requires a missing substring →
+  Failed with "console: expected substring 'X' missing from
+  N entry/entries". (3) Page with `console.error` +
+  uncaught throw → `containsNone{"[error]", "[pageerror]"}`
+  fails on the first match with the entry text surfaced.
+- **Why substring, not regex.** Regex would tempt authors
+  into encoding business logic in the matcher. The right
+  shape for console-as-an-assertion is "is the breadcrumb
+  there or not" — a fixed string is enough. Authors who
+  need fuzzy matching can post-process the entries in
+  follow-up logic (or just emit a more specific
+  breadcrumb).
+- **What this does NOT do.** No filtering by type — all
+  entries land in the array regardless of `console.log` vs
+  `.error` vs `.debug`. The author filters at assertion
+  time by including `[error]` (or whatever) in the
+  substring. Could add `levels: Listing<String>` later for
+  capture-side filtering (drop debug entirely, etc.) but
+  the assertion-side filter handles the common case
+  cleaner — one knob instead of two.
+
+---
+
+## Phase 19.4 — Short-circuit `validateStepKind` before `eventually`
+
+- **Fixes the phase 19.2 sharp edge.** When `eventually` wrapped
+  a Step with a kind-incompatible expectation, the validation
+  error was returned by `runStepOnce` and seen as "not passed"
+  by `runStepEventually`'s poll loop. Result: 8.337s wall clock
+  for a single authoring mistake. Validation errors don't
+  change between retries; they're a configuration error, not
+  a transient assertion.
+- **The fix is 15 lines.** Moved `validateStepKind` to
+  `runStep`'s entry — before the eventually-vs-once decision.
+  Validation failure short-circuits with Errored and the
+  error reason; the poll loop never sees the Step. Removed
+  the duplicate check from `runStepOnce` so the validation
+  rule lives in one place (single entry point both for
+  direct dispatch and for the inner poll loop).
+- **Verified: 0s.** Re-ran the phase 19.2 fixture
+  (playwright + `expectStdout = "x"` + 6s eventually budget).
+  Previously 8.337s of retries; now Errored at 0s with the
+  same reason. The 1.21s wall time is pkl evaluator startup,
+  not retries.
+- **Generalises to all kinds.** The same fix protects shell,
+  http, playwright, and playwright-test against
+  eventually-wrapped configuration errors. The validation
+  logic was already kind-uniform; only the dispatch site
+  changed.
+
+---
+
 ## Phase 19.3 — Pixel diff in the playwright harness
 
 - **Closes a TODO from phase 18.1.** `thresholdPct` was parsed

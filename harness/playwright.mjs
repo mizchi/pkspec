@@ -63,6 +63,25 @@ async function main() {
     const context = await browser.newContext();
     const page = await context.newPage();
 
+    // Console capture. Attached unconditionally — capture is cheap
+    // relative to the browser launch itself, and a Step that
+    // doesn't set `expectConsole` simply ignores the array. Cap at
+    // 1000 entries so a runaway page doesn't blow up memory.
+    const consoleEntries = [];
+    const CONSOLE_LIMIT = 1000;
+    page.on('console', msg => {
+      if (consoleEntries.length >= CONSOLE_LIMIT) return;
+      try {
+        consoleEntries.push(`${msg.text()} [${msg.type()}]`);
+      } catch {
+        consoleEntries.push(`<unreadable> [${msg.type?.() ?? '?'}]`);
+      }
+    });
+    page.on('pageerror', err => {
+      if (consoleEntries.length >= CONSOLE_LIMIT) return;
+      consoleEntries.push(`${err.message || String(err)} [pageerror]`);
+    });
+
     let mod;
     try {
       mod = await import(cfg.scriptPath);
@@ -141,6 +160,8 @@ async function main() {
     } else if (result && result.output != null) {
       output.text = JSON.stringify(result.output);
     }
+
+    output.console = consoleEntries;
 
     process.stdout.write(JSON.stringify({ status: 'ok', output }));
     process.exit(0);

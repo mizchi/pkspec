@@ -231,6 +231,33 @@ class PlaywrightSpec {
   /// Same storage layout as `ReferenceSnapshot` but `.png` instead
   /// of `.bytes` so review tooling renders the diff.
   expectScreenshot: ScreenshotSnapshot? = null
+
+  /// Console message assertions. Harness attaches `page.on('console',
+  /// ...)` for the duration of the script and forwards every entry
+  /// to Go for evaluation. Use this to assert that a page logs
+  /// certain breadcrumbs, or to gate on the absence of error-level
+  /// messages.
+  expectConsole: ConsoleAssertion? = null
+}
+
+/// Assertions over the playwright page's console stream. Both
+/// `containsAll` and `containsNone` operate as substring matches
+/// against the message text (the result of `msg.text()` joined
+/// with the message type tag, e.g. `"login failed [error]"`).
+///
+/// Use `containsAll` for required breadcrumbs ("the page must log
+/// 'init complete'"), `containsNone` for forbidden patterns ("no
+/// uncaught errors").
+class ConsoleAssertion {
+  /// Each substring must appear in at least one console entry.
+  /// Empty (default) means no positive assertion.
+  containsAll: Listing<String> = new {}
+
+  /// No console entry may contain any of these substrings.
+  /// Empty (default) means no negative assertion. Common values:
+  /// "[error]" to forbid console.error, "Uncaught" to catch
+  /// rejected promises.
+  containsNone: Listing<String> = new {}
 }
 
 /// @playwright/test invocation spec. The runner shells out to
@@ -499,6 +526,12 @@ class RenderedPlaywrightSpec {
   script: String
   browser: String
   expectScreenshot: RenderedScreenshotSnapshot?
+  expectConsole: RenderedConsoleAssertion?
+}
+
+class RenderedConsoleAssertion {
+  containsAll: Listing<String>
+  containsNone: Listing<String>
 }
 
 class RenderedPlaywrightTestSpec {
@@ -645,6 +678,10 @@ local function renderPlaywright(p: PlaywrightSpec): RenderedPlaywrightSpec = new
   expectScreenshot = if (p.expectScreenshot == null) null else new RenderedScreenshotSnapshot {
     name = p.expectScreenshot.name
     thresholdPct = p.expectScreenshot.thresholdPct
+  }
+  expectConsole = if (p.expectConsole == null) null else new RenderedConsoleAssertion {
+    containsAll = p.expectConsole.containsAll
+    containsNone = p.expectConsole.containsNone
   }
 }
 

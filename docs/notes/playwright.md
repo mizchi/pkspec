@@ -143,6 +143,46 @@ installed separately via `pnpm exec playwright install <name>`.
 The harness imports `playwright` (not `playwright-core`) so the
 package's built-in browser launcher is what's used.
 
+## Console assertions
+
+Phase 20 adds `expectConsole` for asserting against the page's
+console stream. The harness attaches `page.on('console', ...)` and
+`page.on('pageerror', ...)` for the lifetime of the script and
+forwards every entry to Go as `<text> [<type>]`. The type is the
+return of `msg.type()` (`log` / `info` / `warning` / `error` /
+`debug`) or `pageerror` for uncaught throws.
+
+```pkl
+new Step {
+  playwright = new PlaywrightSpec {
+    script = "scripts/login.mjs"
+    expectConsole = new ConsoleAssertion {
+      containsAll { "init complete"; "auth ready" }
+      containsNone { "[error]"; "[pageerror]"; "Uncaught" }
+    }
+  }
+}
+```
+
+Both axes are substring matches against the entry text (no
+regex). `containsAll` requires each substring to appear in at
+least one entry; `containsNone` fails on the first match.
+
+Common patterns:
+
+- **Required breadcrumbs**: `containsAll { "init complete" }` —
+  asserts your app finished bootstrapping.
+- **Forbid console.error / console.warn**: `containsNone { "[error]"; "[warning]" }`
+  — catch regressions in log hygiene.
+- **Forbid uncaught errors**: `containsNone { "[pageerror]"; "Uncaught" }`
+  — covers both runtime exceptions and rejected promises.
+
+Capture is unconditional (always attached) so a Step without
+`expectConsole` pays the same cost as one with — the cost is
+negligible relative to the browser launch. Cap is 1000 entries
+per Step; a runaway page hitting that limit silently drops
+subsequent messages but does not fail.
+
 ## `eventually` polling around a playwright step
 
 `Step.eventually` works the same way for playwright as for shell /
@@ -184,9 +224,6 @@ identical on every attempt.
 
 ## What's NOT yet implemented
 
-- Console message capture / `expectConsole` (schema slot
-  reserved; harness does not yet stream `page.on('console', ...)`
-  back to Go).
 - Network mocking from Pkl. If you need request interception, do
   it inside the script via `page.route(...)` for now.
 - Parallel playwright steps share `<workdir>/.pkthunder/` for

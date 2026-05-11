@@ -41,6 +41,12 @@ type HttpRequest struct {
 	TimeoutSec int               `pkl:"timeoutSec"`
 }
 
+// ConsoleAssertion mirrors `pkthunder.Test#RenderedConsoleAssertion`.
+type ConsoleAssertion struct {
+	ContainsAll  []string `pkl:"containsAll"`
+	ContainsNone []string `pkl:"containsNone"`
+}
+
 // PlaywrightSpec mirrors `pkthunder.Test#RenderedPlaywrightSpec`.
 // Implementation lands in a later phase; today the executor returns
 // an errored Step result with "not yet implemented" when this slot
@@ -49,6 +55,7 @@ type PlaywrightSpec struct {
 	Script           string              `pkl:"script"`
 	Browser          string              `pkl:"browser"`
 	ExpectScreenshot *ScreenshotSnapshot `pkl:"expectScreenshot"`
+	ExpectConsole    *ConsoleAssertion   `pkl:"expectConsole"`
 }
 
 // ScreenshotSnapshot mirrors `pkthunder.Test#RenderedScreenshotSnapshot`.
@@ -205,6 +212,7 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedPlaywrightSpec", PlaywrightSpec{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedScreenshotSnapshot", ScreenshotSnapshot{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedPlaywrightTestSpec", PlaywrightTestSpec{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedConsoleAssertion", ConsoleAssertion{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

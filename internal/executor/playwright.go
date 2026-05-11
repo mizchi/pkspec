@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mizchi/pkthunder/harness"
@@ -146,6 +147,7 @@ func (e *Executor) runPlaywrightStep(ctx context.Context, step *config.Step, t *
 		Output struct {
 			ScreenshotBase64 string   `json:"screenshotBase64"`
 			Text             string   `json:"text"`
+			Console          []string `json:"console"`
 			DiffPct          *float64 `json:"diffPct"`
 			DiffPng          string   `json:"diffPng"`
 			DiffError        string   `json:"diffError"`
@@ -201,8 +203,60 @@ func (e *Executor) runPlaywrightStep(ctx context.Context, step *config.Step, t *
 		}
 	}
 
+	if pw.ExpectConsole != nil {
+		if reason := checkConsole(pw.ExpectConsole, resp.Output.Console); reason != "" {
+			sr.Outcome = OutcomeFailed
+			sr.Reasons = append(sr.Reasons, reason)
+			return sr
+		}
+	}
+
 	sr.Outcome = OutcomePassed
 	return sr
+}
+
+// checkConsole evaluates ConsoleAssertion against the collected
+// console entries. Returns "" on pass, a one-line reason on fail.
+// Both axes are substring matches against the entry text (which is
+// `msg.text() + " [" + msg.type() + "]"`); containsAll requires
+// every named substring to appear in at least one entry,
+// containsNone fails on the first match.
+func checkConsole(c *config.ConsoleAssertion, entries []string) string {
+	for _, needle := range c.ContainsAll {
+		if !anyContains(entries, needle) {
+			return fmt.Sprintf(
+				"console: expected substring %q missing from %d entry/entries",
+				needle, len(entries),
+			)
+		}
+	}
+	for _, forbidden := range c.ContainsNone {
+		if i, entry := firstContains(entries, forbidden); i >= 0 {
+			return fmt.Sprintf(
+				"console: forbidden substring %q present in entry %d (%q)",
+				forbidden, i, entry,
+			)
+		}
+	}
+	return ""
+}
+
+func anyContains(haystacks []string, needle string) bool {
+	for _, h := range haystacks {
+		if strings.Contains(h, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstContains(haystacks []string, needle string) (int, string) {
+	for i, h := range haystacks {
+		if strings.Contains(h, needle) {
+			return i, h
+		}
+	}
+	return -1, ""
 }
 
 // checkScreenshot compares the screenshot bytes captured this run
