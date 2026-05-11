@@ -56,10 +56,11 @@ class Step {
   expectStderr: String? = null
 
   /// Inline snapshot of step stdout. Same semantics as
-  /// `Test.inlineStdout` — write `null` initially, run with
-  /// `--update-inline-snapshots` to populate, subsequent runs do an
-  /// exact compare. Only meaningful for shell steps; HTTP steps
-  /// should use `expectBodyEquals` / `expectBodyJsonPath` instead.
+  /// `Test.inlineStdout`: opt in by setting to `""` (or any string),
+  /// run with `--update-inline-snapshots` to populate, subsequent
+  /// runs do an exact compare. `null` (default) means "skip". Only
+  /// meaningful for shell steps; HTTP steps should use
+  /// `expectBodyEquals` / `expectBodyJsonPath` instead.
   inlineStdout: String? = null
 
   // ── HTTP expectations ──────────────────────────────────────────
@@ -251,11 +252,16 @@ class Test {
   expectStdoutSnapshot: ReferenceSnapshot? = null
   expectStderrSnapshot: ReferenceSnapshot? = null
 
-  /// Inline snapshot of stdout. Authored as `inlineStdout = null` on
-  /// first commit; the runner reports the missing snapshot as a
-  /// failure and rewrites this field in-place inside the Test.pkl
-  /// source when invoked with `--update-inline-snapshots`. On
-  /// subsequent runs the captured stdout must match exactly.
+  /// Inline snapshot of stdout. Opt in by setting this to any string
+  /// (typically `""` on first authoring); the runner then rewrites
+  /// the field in-place inside the Test.pkl source on a mismatch when
+  /// invoked with `--update-inline-snapshots`. On subsequent runs the
+  /// captured stdout must match exactly.
+  ///
+  /// `null` (the default) means "no inline assertion here" — the
+  /// runner skips this field entirely. We can't distinguish a missing
+  /// field from one explicitly written as `null` via pkl-go decoding,
+  /// so `""` is the opt-in sentinel.
   ///
   /// Composes with `expectStdout` — both checks run if both are set.
   /// Distinct from `expectStdoutSnapshot`, which stores bytes in a

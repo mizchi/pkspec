@@ -1264,21 +1264,28 @@ func diff(expected, actual string) string {
 
 // checkInline implements the assertion side of an inline snapshot.
 //
-//   - field == nil + UpdateInlineSnapshots: rewrite the source so the
-//     field is populated with the captured value; no reason added (the
-//     test passes on this run).
-//   - field == nil without the flag: reason describing the missing
-//     snapshot, asking the user to re-run with the flag.
+// Opt-in is by setting the inline field to any string (commonly `""`
+// on first authoring). The schema default of `null` is treated as
+// "no inline assertion on this field" — pkl-go cannot distinguish a
+// missing field from one explicitly written as `null`, and silently
+// failing every test without inline configured is hostile.
+//
+//   - field == nil: skip entirely. --update-inline-snapshots does
+//     NOT populate fields the author hasn't opted into; otherwise a
+//     single update flag run would dump stdout into every test.
+//   - field != nil + actual == *field: no reason (assertion holds).
 //   - field != nil + actual != *field + UpdateInlineSnapshots:
 //     overwrite the source with the new value; no reason added.
 //   - field != nil + actual != *field without the flag: reason with a
 //     readable diff.
-//   - field != nil + actual == *field: no reason (the assertion holds).
 //
 // The empty string return signals "this assertion contributed no
 // failure on this run."
 func (e *Executor) checkInline(blockName, fieldName string, expected *string, actual string) string {
-	if expected != nil && *expected == actual {
+	if expected == nil {
+		return ""
+	}
+	if *expected == actual {
 		return ""
 	}
 	if e.opts.UpdateInlineSnapshots {
@@ -1288,10 +1295,6 @@ func (e *Executor) checkInline(blockName, fieldName string, expected *string, ac
 		fmt.Fprintf(e.opts.Stderr, "[pkt] %s for %q updated (%d bytes)\n",
 			fieldName, blockName, len(actual))
 		return ""
-	}
-	if expected == nil {
-		return fmt.Sprintf("%s is null; run --update-inline-snapshots to populate it (captured %d bytes)",
-			fieldName, len(actual))
 	}
 	return fmt.Sprintf("%s mismatch:\n%s", fieldName, diff(*expected, actual))
 }

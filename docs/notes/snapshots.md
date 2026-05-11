@@ -40,12 +40,13 @@ Skip when:
 
 ## `inline` (`inlineStdout` / `inlineStderr`)
 
-Per-test (Test.cmd output) and per-step (Step.cmd stdout). Authored
-as `inlineStdout = null` initially. The runner reports a missing
-inline snapshot as a failure with instructions to re-run with
-`pkt exec --update-inline-snapshots`. The flag rewrites the Pkl
-source in place, replacing the `null` (or any prior value) with the
-captured bytes encoded as a Pkl double-quoted string.
+Per-test (Test.cmd output) and per-step (Step.cmd stdout). Opt in by
+setting the field to `""` (or any other string). The runner then
+reports a mismatch on subsequent runs and, when invoked with
+`pkt exec --update-inline-snapshots`, rewrites the Pkl source
+in-place replacing the prior value with the captured bytes encoded
+as a Pkl double-quoted string. The default value `null` means "no
+inline assertion here" — the runner skips it entirely.
 
 The Test or Step must have a `name` field — that is what the rewriter
 uses to find the right object literal in the source. Anonymous steps

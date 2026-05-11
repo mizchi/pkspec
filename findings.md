@@ -5,6 +5,28 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 13.1 — inline-snapshot default fix
+
+- **Bug.** Phase 12 left `inlineStdout: String? = null` as the schema
+  default, and the runner treated `nil` as "user opted in, populate
+  me." Result: every Test that didn't explicitly handle inline
+  snapshots failed on its very first run with
+  "inlineStdout is null; run --update-inline-snapshots."
+- **Root cause is a pkl-go invariant, not a runner bug.** Pkl-go
+  decodes both "field absent" and "field set to null" into the same
+  `*string == nil` value. There is no way to distinguish "didn't opt
+  in" from "explicitly opted in with null sentinel" — so the runner
+  has to pick one meaning for nil.
+- **Fix.** Nil = skip. Opt in by writing `inlineStdout = ""` (or any
+  string). `--update-inline-snapshots` only acts on fields that the
+  author has already set, which also prevents a flag run from
+  injecting stdout into every test in the suite.
+- **Docs.** Schema docstring and `docs/notes/snapshots.md` updated to
+  describe the `""` opt-in. No code change to step-level rewriter
+  (the "step name required" guard was already independent of nil).
+
+---
+
 ## Phase 13 — `--only` test filter
 
 - **Substring over regex.** `vitest -t` / `jest -t` semantics, not
