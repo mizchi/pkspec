@@ -5,6 +5,97 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 19 — `playwrightTest` kind: @playwright/test wrapper
+
+- **Why add a second playwright kind instead of extending the first.**
+  The Phase 18 `playwright` kind is a thin script driver: one `.mjs`,
+  one Page, one screenshot. Building visual-regression features on
+  top of it (pixel diff with thresholdPct, retry, trace, video,
+  fixtures) is loss-making — `@playwright/test` already ships all of
+  them. The choice: rewrite playwright-test inside pkt, or shell out
+  to it. Shell out wins on ~3 axes (feature parity comes free, less
+  code, less drift over time) and loses on one (the user has two
+  playwright APIs to choose between). The two-kind design accepts
+  the choice cost as the price of not reimplementing a mature test
+  runner.
+- **Architecture: pkt is the harness, playwright-test is the runner.**
+  Per-Step: pkt builds the argv, sets `PLAYWRIGHT_JUNIT_OUTPUT_NAME`
+  to a tmp path, spawns `npx playwright test --reporter=junit ...`,
+  parses the resulting `<testsuites><testsuite>...` XML, and
+  aggregates inner-test results into one Step outcome. Standard
+  pkt aggregation rules (all-pass→Passed, any-fail→Failed,
+  all-skip→Pending, 0-tests→Errored) apply; the JUnit XML is the
+  authoritative source.
+- **Trust the XML, not the exit code.** playwright-test exits
+  non-zero whenever any inner test fails — that's expected. The
+  runner only treats exec-level errors as Errored when the XML
+  wasn't produced at all (config error, missing binary, etc.).
+  This is the same pattern as pkt run's `pkl test` wrapper: a
+  reporter-faithful tool whose exit code reflects test outcomes,
+  not infrastructure state.
+- **--update-snapshots arg signature changed in playwright 1.50+.**
+  First implementation passed `--update-snapshots` as a boolean
+  flag; smoke surfaced the breakage immediately. The current
+  playwright-test CLI requires a value (`all` / `changed` /
+  `missing` / `none`) and consumes the next positional arg as the
+  value if none is provided — which made our `specPath` get
+  swallowed as the snapshot-update mode. Switched to
+  `--update-snapshots=all` for parity with pkt's other
+  "unconditional rewrite" refresh flags. Worth documenting that
+  CLI tools change their flag signatures across minor versions
+  even when the long-form flag name stays the same.
+- **JUnit parser had to handle two shapes.** playwright-test emits
+  `<testsuites><testsuite>...` (the spec-compliant nested form);
+  some older configs emit a bare `<testsuite>` root. The
+  loadPlaywrightTestJunit function tries the nested form first
+  and falls back to the bare form. The pkthunder internal/junit
+  package only knew about bare `<testsuite>` (it was built for
+  `pkl test --junit-reports`); rather than widening that
+  package's responsibility, the wrapper struct stays local to
+  playwrighttest.go.
+- **`PLAYWRIGHT_JUNIT_OUTPUT_NAME` env beats CLI plumbing.**
+  Could have used the playwright-test CLI to route the JUnit
+  file (`--reporter=junit --output=path` doesn't work for
+  reporter output specifically), but the env var
+  `PLAYWRIGHT_JUNIT_OUTPUT_NAME` is the documented way and
+  bypasses any user config that might be redirecting reporters.
+  Keeps the CLI arg list short.
+- **5-scenario smoke: all hit expected outcomes.**
+  (1) 2 pass + 1 fail + 1 skip → Step failed, fail's
+  inner-test name + message in Reasons.
+  (2) 3 pass + 1 skip → Step passed.
+  (3) `grep = "ping"` → only 1 of 3 ran (755ms vs 1.249s for full),
+  filter forwarded correctly.
+  (4) `toHaveScreenshot` first run → Step failed with playwright-
+  test's own "snapshot doesn't exist, writing actual" message.
+  (5) `--refresh-snapshots` second pass → `--update-snapshots=all`
+  forwarded, baseline written, subsequent run passed (783ms).
+- **Two-kind design pays off in `pkt spec`.** A `playwright` Step
+  shows up in the SPEC with `script = ...` and `expectScreenshot
+  = ...` visible — reviewers see what the inline test does.
+  A `playwrightTest` Step shows up with `specPath = "..."` — the
+  inner test details live in the `.spec.ts` files and `pkt spec`
+  doesn't pretend to know about them. Different appropriate
+  reads for different appropriate uses.
+- **What's NOT in scope for `playwrightTest`.** No artifact
+  collection (`test-results/` is the user's problem to
+  archive). No trace-viewer integration (separate `pnpm exec
+  playwright show-trace` invocation). No multiple reporters at
+  once (forced `--reporter=junit`). These are all things
+  playwright-test does well already; pkt doesn't try to wrap
+  them.
+- **The flat Step + kind dispatch held up.** Phase 18 chose
+  proposal D (extend Step, don't subclass) and bet on
+  `Step.kind` as a discriminator that would stay clean. Phase
+  19 added one more kind — one new validateStepKind case, one
+  new dispatch arm, one runner file. No friction. The exit
+  criterion in `docs/notes/task-interface-future.md` mentions
+  "a fifth built-in kind" as a trigger to revisit the
+  proposals; we're at 4 kinds (shell, http, playwright,
+  playwright-test). Still comfortably inside D's sweet spot.
+
+---
+
 ## Phase 18.2 — Playwright runner parallel validation
 
 - **Question.** Phase 18.1 verified the runner against a single

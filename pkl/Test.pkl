@@ -51,17 +51,28 @@ class Step {
   http: HttpRequest? = null
 
   /// Playwright script — pick exactly one of `cmd` / `http` /
-  /// `playwright`. The runner spawns a Node process that drives a
-  /// browser via the playwright library; per-script expectations
-  /// (screenshot match, console assertions) live on the spec.
-  /// Implementation arrives in a later phase; today the schema is
-  /// in place but the dispatch returns an "errored: not yet
-  /// implemented" result so fixtures can already be authored.
+  /// `playwright` / `playwrightTest`. The runner spawns a Node
+  /// process that drives a browser via the playwright library
+  /// directly; per-script expectations (screenshot match, console
+  /// assertions) live on the spec. Use this for **lightweight**
+  /// browser smoke / spec — one page, one script, one screenshot.
+  /// Use `playwrightTest` (below) when you want trace, retry,
+  /// pixel-diff, or other features of the @playwright/test runner.
   playwright: PlaywrightSpec? = null
 
-  /// Computed discriminator. Set by the schema based on which of
-  /// `cmd` / `http` / `playwright` is non-null. The runner reads it
-  /// for dispatch and validation; users never write to it.
+  /// @playwright/test invocation — pick exactly one of `cmd` /
+  /// `http` / `playwright` / `playwrightTest`. The runner shells out
+  /// to `npx playwright test`, forces `--reporter=junit`, parses the
+  /// XML, and aggregates the inner test results into this Step's
+  /// outcome (all-pass → Passed, any-fail → Failed, only-skip →
+  /// Pending). Use this for visual-regression suites, retry / trace
+  /// / video flows, and anything that wants the @playwright/test
+  /// feature set rather than a one-shot browser driver.
+  playwrightTest: PlaywrightTestSpec? = null
+
+  /// Computed discriminator. Set by the schema based on which body
+  /// slot is non-null. The runner reads it for dispatch and
+  /// validation; users never write to it.
   ///
   /// Pre-positioned for a future task-interface refactor — if the
   /// flat `Step` becomes `abstract class Task` with subclasses, this
@@ -71,6 +82,7 @@ class Step {
     if (cmd != null) "shell"
     else if (http != null) "http"
     else if (playwright != null) "playwright"
+    else if (playwrightTest != null) "playwright-test"
     else "invalid"
 
   env: Mapping<String, String> = new {}
@@ -219,6 +231,63 @@ class PlaywrightSpec {
   /// Same storage layout as `ReferenceSnapshot` but `.png` instead
   /// of `.bytes` so review tooling renders the diff.
   expectScreenshot: ScreenshotSnapshot? = null
+}
+
+/// @playwright/test invocation spec. The runner shells out to
+/// `npx playwright test` with `--reporter=junit` forced; results
+/// are aggregated into one Step outcome.
+///
+/// Authoring side: the user writes `*.spec.ts` files using
+/// `@playwright/test`'s normal authoring conventions and a
+/// `playwright.config.ts` if the defaults don't fit. pkthunder
+/// does not look inside the spec files; it only routes the run
+/// and consumes the JUnit output.
+///
+/// Inner test results collapse into the Step outcome as follows:
+///
+///   - every inner test passed   → Step passed
+///   - any inner test failed     → Step failed; reasons include
+///                                 each failing test's name + message
+///   - every inner test skipped  → Step pending
+///   - mix of pass + skip        → Step passed (skipped tests
+///                                 are pkthunder's "pending"
+///                                 bucket; non-actionable)
+///
+/// When the runner is invoked with `--refresh-snapshots`, the
+/// `--update-snapshots` flag is forwarded to playwright-test so
+/// `toHaveScreenshot()` and snapshot files get regenerated.
+class PlaywrightTestSpec {
+  /// Spec file or directory to pass as a positional argument to
+  /// `npx playwright test`. Resolved relative to the Step workdir.
+  /// Use a directory to run a whole suite, a single file to run
+  /// only that spec; standard playwright-test path semantics.
+  specPath: String(length > 0)
+
+  /// Optional config file (`playwright.config.ts` / `.js`). When
+  /// null, playwright-test uses its own discovery rules from the
+  /// workdir. Set this when the config lives outside the workdir,
+  /// or when one project has multiple config files for different
+  /// suites.
+  configPath: String? = null
+
+  /// Optional `--grep <pattern>` filter applied at playwright-test
+  /// level (not pkt's `--only`). Use this when the suite has more
+  /// tests than you want this Step to run.
+  grep: String? = null
+
+  /// Optional `--project <name>` filter. Repeatable in
+  /// playwright-test; each entry here is forwarded as its own
+  /// `--project` argument.
+  project: Listing<String> = new {}
+
+  /// Optional `--workers <n>` override. Null leaves
+  /// playwright-test's auto-sizing in effect.
+  workers: Int? = null
+
+  /// Optional `--shard <i/n>` for distributing the suite across
+  /// CI runners. Format: "1/3", "2/3", etc. — same as
+  /// playwright-test.
+  shard: String? = null
 }
 
 /// Screenshot snapshot reference. Stored at
@@ -432,6 +501,15 @@ class RenderedPlaywrightSpec {
   expectScreenshot: RenderedScreenshotSnapshot?
 }
 
+class RenderedPlaywrightTestSpec {
+  specPath: String
+  configPath: String?
+  grep: String?
+  project: Listing<String>
+  workers: Int?
+  shard: String?
+}
+
 class RenderedScreenshotSnapshot {
   name: String
   thresholdPct: Float
@@ -445,6 +523,7 @@ class RenderedStep {
   stdin: String?
   http: RenderedHttpRequest?
   playwright: RenderedPlaywrightSpec?
+  playwrightTest: RenderedPlaywrightTestSpec?
   env: Mapping<String, String>
   workdir: String?
   timeoutSec: Int
@@ -569,6 +648,15 @@ local function renderPlaywright(p: PlaywrightSpec): RenderedPlaywrightSpec = new
   }
 }
 
+local function renderPlaywrightTest(p: PlaywrightTestSpec): RenderedPlaywrightTestSpec = new {
+  specPath = p.specPath
+  configPath = p.configPath
+  grep = p.grep
+  project = p.project
+  workers = p.workers
+  shard = p.shard
+}
+
 local function renderStep(s: Step): RenderedStep = new {
   name = s.name
   kind = s.kind
@@ -577,6 +665,7 @@ local function renderStep(s: Step): RenderedStep = new {
   stdin = s.stdin
   http = if (s.http == null) null else renderHttp(s.http)
   playwright = if (s.playwright == null) null else renderPlaywright(s.playwright)
+  playwrightTest = if (s.playwrightTest == null) null else renderPlaywrightTest(s.playwrightTest)
   env = s.env
   workdir = s.workdir
   timeoutSec = s.timeoutSec

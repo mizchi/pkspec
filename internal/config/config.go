@@ -57,6 +57,18 @@ type ScreenshotSnapshot struct {
 	ThresholdPct float64 `pkl:"thresholdPct"`
 }
 
+// PlaywrightTestSpec mirrors `pkthunder.Test#RenderedPlaywrightTestSpec`.
+// The runner shells out to `npx playwright test` and aggregates the
+// JUnit XML output into a single Step outcome.
+type PlaywrightTestSpec struct {
+	SpecPath   string   `pkl:"specPath"`
+	ConfigPath *string  `pkl:"configPath"`
+	Grep       *string  `pkl:"grep"`
+	Project    []string `pkl:"project"`
+	Workers    *int     `pkl:"workers"`
+	Shard      *string  `pkl:"shard"`
+}
+
 // Step mirrors `pkthunder.Test#RenderedStep`. Exactly one of `Cmd`,
 // `Http`, or `Playwright` is set; the executor dispatches on `Kind`.
 type Step struct {
@@ -65,9 +77,10 @@ type Step struct {
 	Cmd             *string           `pkl:"cmd"`
 	Shell           string            `pkl:"shell"`
 	Stdin           *string           `pkl:"stdin"`
-	Http            *HttpRequest      `pkl:"http"`
-	Playwright      *PlaywrightSpec   `pkl:"playwright"`
-	Env             map[string]string `pkl:"env"`
+	Http            *HttpRequest        `pkl:"http"`
+	Playwright      *PlaywrightSpec     `pkl:"playwright"`
+	PlaywrightTest  *PlaywrightTestSpec `pkl:"playwrightTest"`
+	Env             map[string]string   `pkl:"env"`
 	Workdir         *string           `pkl:"workdir"`
 	TimeoutSec      int               `pkl:"timeoutSec"`
 
@@ -191,6 +204,7 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedHook", Hook{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedPlaywrightSpec", PlaywrightSpec{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedScreenshotSnapshot", ScreenshotSnapshot{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedPlaywrightTestSpec", PlaywrightTestSpec{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

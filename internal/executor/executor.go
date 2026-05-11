@@ -841,13 +841,15 @@ func (e *Executor) runStepOnce(ctx context.Context, step *config.Step, t *config
 		return e.runHttpStep(ctx, step, t, defaults, state)
 	case "playwright":
 		return e.runPlaywrightStep(ctx, step, t, defaults, state)
+	case "playwright-test":
+		return e.runPlaywrightTestStep(ctx, step, t, defaults, state)
 	case "shell":
 		return e.runShellStep(ctx, step, t, defaults, state)
 	default:
 		return StepResult{
 			Name:    stepDisplayName(step),
 			Outcome: OutcomeErrored,
-			Reasons: []string{"step has no body: set exactly one of cmd / http / playwright"},
+			Reasons: []string{"step has no body: set exactly one of cmd / http / playwright / playwrightTest"},
 		}
 	}
 }
@@ -894,6 +896,19 @@ func validateStepKind(step *config.Step) string {
 			step.InlineStdout != nil {
 			return "playwright step uses its own expectations (expectScreenshot in the playwright spec) — http/shell expectations on the Step are not applied to a browser script"
 		}
+	case "playwright-test":
+		if step.ExpectStatus != nil ||
+			len(step.ExpectStatusBetween) > 0 ||
+			step.ExpectBodyEquals != nil ||
+			step.ExpectBodyContains != nil ||
+			len(step.ExpectHeaderEquals) > 0 ||
+			len(step.ExpectBodyJsonPath) > 0 ||
+			step.Cassette != nil ||
+			step.ExpectStdout != nil ||
+			step.ExpectStderr != nil ||
+			step.InlineStdout != nil {
+			return "playwrightTest step delegates assertions to @playwright/test — http/shell expectations on the Step are not applied to the suite"
+		}
 	}
 	return ""
 }
@@ -914,6 +929,10 @@ func stepDisplayName(step *config.Step) string {
 	case "playwright":
 		if step.Playwright != nil {
 			return "playwright:" + step.Playwright.Script
+		}
+	case "playwright-test":
+		if step.PlaywrightTest != nil {
+			return "playwright-test:" + step.PlaywrightTest.SpecPath
 		}
 	}
 	return "<unnamed step>"
