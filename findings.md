@@ -5,6 +5,59 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 19.2 — `eventually` × playwright kind smoke
+
+- **Question.** `runStepEventually` polls `runStepOnce` until pass
+  or timeout. After phase 18's kind dispatch, does this work
+  cleanly for the playwright kind? The shell + http cases have
+  been live since phase 9 / phase 8 respectively.
+- **Smoke shape.** A background shell process increments
+  `/tmp/pkt-evt-counter` every 400ms (`1 → 2 → 3`, then holds at
+  3). The playwright script reads that file and `throw`s unless
+  the value is `"3"`. Step is wrapped in `eventually {
+  intervalMs = 300; timeoutSec = 6 }`.
+- **Result.** Step passed in 1.086s. The counter reached `3` after
+  ~800ms of background runtime; the playwright step polled at
+  300ms intervals and succeeded on the 3rd or 4th attempt. Each
+  attempt is a fresh node + chromium launch (~250ms), so the
+  total is dominated by attempts × per-attempt cost. Authoring
+  caveat: heavy polling intervals for playwright kind aren't
+  free — a 100ms interval times 10 attempts is 2.5s of wasted
+  browser launches.
+- **Side discovery: validation errors are retried.** First
+  attempt at the fixture set `expectStdout = "3"` on a
+  playwright step. `validateStepKind` rejected it (correctly —
+  expectStdout is shell-only). But the result was 28 attempts
+  over 8s, each returning the same Errored "playwright step
+  uses its own expectations". `eventually` treats any non-Passed
+  outcome as a retry trigger; validation errors are
+  indistinguishable from "assertion not yet passing" at the
+  retry layer.
+- **Should validation errors short-circuit `eventually`?**
+  Probably yes — they don't change between attempts, so retrying
+  is purely waste. But the fix is a small executor change
+  (`validateStepKind != ""` should skip the retry loop and
+  return Errored immediately) and the user-visible cost is
+  bounded by `Eventually.timeoutSec`. Logged here; not changed
+  in this phase. The right place to fix is the `runStep`
+  switch, where the polling vs single-shot decision is already
+  being made — adding a pre-validation gate is ~5 lines.
+- **`playwright-test` × eventually was not smoked.** Each
+  playwright-test attempt launches the full test runner (~1s),
+  so a 6s timeout admits ~5 attempts. The runner-of-runner
+  story is awkward (you're polling a test runner for "are the
+  tests passing yet?") and arguably not the right use case.
+  Documented as a "you can but probably shouldn't" pattern in
+  playwright.md.
+- **Authoring contract for `eventually` + playwright.** Updated
+  docs/notes/playwright.md: `throw` from the script signals
+  "retry me", `return` signals "passed". This mirrors how
+  `eventually` on a shell step uses exit code 0/non-0; the
+  per-kind translation lives in the script author's head, not
+  in pkt.
+
+---
+
 ## Phase 19.1 — Mixed-kind parallel smoke
 
 - **Question.** Phase 18.2 verified parallel playwright steps;

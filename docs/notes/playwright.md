@@ -131,6 +131,45 @@ installed separately via `pnpm exec playwright install <name>`.
 The harness imports `playwright` (not `playwright-core`) so the
 package's built-in browser launcher is what's used.
 
+## `eventually` polling around a playwright step
+
+`Step.eventually` works the same way for playwright as for shell /
+http: the runner re-invokes `runStepOnce` on every interval until
+either the assertion passes or the timeout elapses. Each attempt
+spawns its own `node` + browser, so the cost per poll is ~250ms
+plus whatever the script does.
+
+To signal "not yet ready, poll again" from the script, **throw**.
+The harness catches the throw and returns a `fail` status, which
+counts as a failed attempt for `eventually`. To signal "ready",
+return normally.
+
+```pkl
+new Step {
+  playwright = new PlaywrightSpec { script = "scripts/poll.mjs" }
+  eventually = new Eventually {
+    intervalMs = 300
+    timeoutSec = 6
+  }
+}
+```
+
+```js
+// scripts/poll.mjs
+export default async ({page, ctx}) => {
+  const state = await fetch(ctx.env.STATE_URL).then(r => r.text());
+  if (state !== 'ready') throw new Error('not ready, got ' + state);
+  // ...do the real work...
+};
+```
+
+Caveat: a configuration error caught by `validateStepKind`
+(e.g., `expectStatus` set on a shell-or-playwright Step) still
+counts as an Errored attempt and `eventually` will keep retrying
+until the budget runs out. Authoring tip: fix the validation
+error rather than waiting for the timeout — the error message is
+identical on every attempt.
+
 ## What's NOT yet implemented
 
 - Pixel-level diff (`thresholdPct` is parsed but the compare is
