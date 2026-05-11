@@ -115,6 +115,19 @@ class Step {
   /// changes — same body, same verdict, no API call.
   expectAi: AiAssertion? = null
 
+  /// HTTP record-and-replay cassette name. When set on an HTTP step,
+  /// the response (status / headers / body) is cached on first run
+  /// to `<workdir>/.pkthunder/http/<cassette>.json` keyed by
+  /// `sha256(method + url + body)` and replayed on subsequent runs
+  /// with the same key. Hermetic by default after recording.
+  ///
+  /// Refresh with `--refresh-http`. Force replay-only (cassette
+  /// miss = error, never dispatch real requests) with
+  /// `--http-replay-only` — the CI-side hardening.
+  ///
+  /// Ignored for shell steps; only meaningful when `http` is set.
+  cassette: String(matches(Regex(#"^[a-zA-Z0-9_-]+$"#)))? = null
+
   /// When true, run this step even if a previous sequential step
   /// failed. Use for cleanup. Ignored inside `parallelSteps`.
   always: Boolean = false
@@ -366,6 +379,7 @@ class RenderedStep {
   captureBodyJsonPath: Mapping<String, String>
   eventually: RenderedEventually?
   expectAi: RenderedAiAssertion?
+  cassette: String?
   always: Boolean
 }
 
@@ -492,6 +506,7 @@ local function renderStep(s: Step): RenderedStep = new {
     cmd = s.expectAi.cmd
     snapshotName = s.expectAi.snapshotName
   }
+  cassette = s.cassette
   always = s.always
 }
 

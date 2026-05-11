@@ -73,6 +73,7 @@ type Step struct {
 
 	Eventually *Eventually  `pkl:"eventually"`
 	ExpectAi   *AiAssertion `pkl:"expectAi"`
+	Cassette   *string      `pkl:"cassette"`
 	Always     bool         `pkl:"always"`
 }
 

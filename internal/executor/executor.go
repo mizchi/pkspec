@@ -145,6 +145,14 @@ type Options struct {
 	// substring (not regex) — matching `vitest -t` rather than
 	// `go test -run`.
 	Only []string
+	// RefreshHttp forces every HTTP step with a `cassette` to redispatch
+	// the live request and rewrite the cassette, regardless of whether
+	// the current cassette key matches. Mirrors --refresh-ai.
+	RefreshHttp bool
+	// HttpReplayOnly disables live HTTP for cassette'd steps: a missing
+	// cassette becomes an errored step. Use in CI where hitting real
+	// APIs is forbidden.
+	HttpReplayOnly bool
 }
 
 // Executor runs a Plan. Phase 2.5 is still serial across tests; parallel
@@ -935,7 +943,7 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 	envMap := mergedMap(defaultsEnv(defaults), t.Env, state, step.Env)
 	url := expandEnv(h.URL, envMap)
 
-	var body io.Reader
+	var reqBodyBytes []byte
 	autoContentType := ""
 	switch {
 	case h.Body != nil && h.BodyJson != nil:
@@ -944,7 +952,7 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 		sr.Duration = time.Since(start)
 		return sr
 	case h.Body != nil:
-		body = strings.NewReader(*h.Body)
+		reqBodyBytes = []byte(*h.Body)
 	case h.BodyJson != nil:
 		// pkl-go decodes untyped Pkl objects (Mapping / Listing /
 		// Dynamic) as `pkl.Object` with separate Properties / Entries /
@@ -959,64 +967,44 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 			sr.Duration = time.Since(start)
 			return sr
 		}
-		body = bytes.NewReader(encoded)
+		reqBodyBytes = encoded
 		autoContentType = "application/json"
 	}
-	req, err := http.NewRequestWithContext(reqCtx, h.Method, url, body)
-	if err != nil {
-		sr.Outcome = OutcomeErrored
-		sr.Reasons = []string{fmt.Sprintf("build request: %v", err)}
-		sr.Duration = time.Since(start)
-		return sr
-	}
-	for k, v := range h.Headers {
-		req.Header.Set(k, expandEnv(v, envMap))
-	}
-	if autoContentType != "" && req.Header.Get("Content-Type") == "" {
-		req.Header.Set("Content-Type", autoContentType)
-	}
 
-	resp, err := http.DefaultClient.Do(req)
+	status, respHeaders, respBody, dispatchErr := e.httpDispatch(reqCtx, step, h, url, reqBodyBytes, envMap, autoContentType, timeout)
 	sr.Duration = time.Since(start)
-	if err != nil {
-		if errors.Is(reqCtx.Err(), context.DeadlineExceeded) {
-			sr.Outcome = OutcomeErrored
-			sr.Reasons = []string{fmt.Sprintf("timed out after %s", timeout)}
-		} else {
-			sr.Outcome = OutcomeErrored
-			sr.Reasons = []string{fmt.Sprintf("request failed: %v", err)}
-		}
+	if dispatchErr != nil {
+		sr.Outcome = OutcomeErrored
+		sr.Reasons = []string{dispatchErr.Error()}
 		return sr
 	}
-	defer resp.Body.Close()
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	sr.ExitCode = resp.StatusCode
-	sr.Stdout = string(bodyBytes)
+	sr.ExitCode = status
+	sr.Stdout = string(respBody)
 
-	if step.ExpectStatus != nil && resp.StatusCode != *step.ExpectStatus {
+	if step.ExpectStatus != nil && status != *step.ExpectStatus {
 		sr.Reasons = append(sr.Reasons,
-			fmt.Sprintf("expected status %d, got %d", *step.ExpectStatus, resp.StatusCode))
+			fmt.Sprintf("expected status %d, got %d", *step.ExpectStatus, status))
 	}
 	if len(step.ExpectStatusBetween) == 2 {
 		lo, hi := step.ExpectStatusBetween[0], step.ExpectStatusBetween[1]
-		if resp.StatusCode < lo || resp.StatusCode > hi {
+		if status < lo || status > hi {
 			sr.Reasons = append(sr.Reasons,
-				fmt.Sprintf("expected status in [%d, %d], got %d", lo, hi, resp.StatusCode))
+				fmt.Sprintf("expected status in [%d, %d], got %d", lo, hi, status))
 		}
 	} else if len(step.ExpectStatusBetween) > 0 {
 		sr.Reasons = append(sr.Reasons,
 			fmt.Sprintf("expectStatusBetween needs exactly 2 entries, got %d", len(step.ExpectStatusBetween)))
 	}
-	if step.ExpectBodyEquals != nil && string(bodyBytes) != *step.ExpectBodyEquals {
+	if step.ExpectBodyEquals != nil && string(respBody) != *step.ExpectBodyEquals {
 		sr.Reasons = append(sr.Reasons, fmt.Sprintf("body mismatch:\n%s",
-			diff(*step.ExpectBodyEquals, string(bodyBytes))))
+			diff(*step.ExpectBodyEquals, string(respBody))))
 	}
-	if step.ExpectBodyContains != nil && !strings.Contains(string(bodyBytes), *step.ExpectBodyContains) {
+	if step.ExpectBodyContains != nil && !strings.Contains(string(respBody), *step.ExpectBodyContains) {
 		sr.Reasons = append(sr.Reasons,
 			fmt.Sprintf("body does not contain %q", *step.ExpectBodyContains))
 	}
 	for k, v := range step.ExpectHeaderEquals {
-		got := resp.Header.Get(k)
+		got := respHeaders.Get(k)
 		if got != v {
 			sr.Reasons = append(sr.Reasons,
 				fmt.Sprintf("header %q expected %q, got %q", k, v, got))
@@ -1030,7 +1018,7 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 		if s, ok := expected.(string); ok {
 			expectedExpanded = expandEnv(s, envMap)
 		}
-		result := jsonPathLookup(bodyBytes, path)
+		result := jsonPathLookup(respBody, path)
 		if !result.Exists() {
 			sr.Reasons = append(sr.Reasons,
 				fmt.Sprintf("jsonpath %q: not found", path))
@@ -1048,6 +1036,154 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 		sr.Outcome = OutcomePassed
 	}
 	return sr
+}
+
+// httpDispatch consults the cassette cache (if step.Cassette is set)
+// and otherwise sends a real HTTP request. The return shape lets
+// runHttpStep apply its assertions against status/headers/body
+// without caring which path produced them.
+//
+// Mode interaction:
+//   - cassette set + key matches + !RefreshHttp: cached read.
+//   - cassette set + miss + HttpReplayOnly: error (CI hardening).
+//   - cassette set + miss otherwise: real dispatch + cassette write.
+//   - cassette unset: real dispatch, no caching.
+//
+// The cache key is sha256(method + url + body). Headers do NOT
+// affect the key — they're carried into the cassette and replayed
+// verbatim, but a header change does not invalidate.
+func (e *Executor) httpDispatch(
+	ctx context.Context,
+	step *config.Step,
+	h *config.HttpRequest,
+	url string,
+	reqBody []byte,
+	envMap map[string]string,
+	autoContentType string,
+	timeout time.Duration,
+) (status int, headers http.Header, body []byte, err error) {
+	cassetteName := ""
+	if step.Cassette != nil {
+		cassetteName = *step.Cassette
+	}
+
+	if cassetteName != "" && !e.opts.RefreshHttp {
+		digest := httpDigest(h.Method, url, reqBody)
+		path := e.cassettePath(cassetteName)
+		if cached, ok := readHttpCassette(path); ok && cached.Hash == digest {
+			h := cached.Headers
+			if h == nil {
+				h = http.Header{}
+			}
+			return cached.Status, h, []byte(cached.Body), nil
+		}
+		if e.opts.HttpReplayOnly {
+			return 0, nil, nil, fmt.Errorf("cassette %q: miss + --http-replay-only set", cassetteName)
+		}
+	} else if cassetteName != "" && e.opts.RefreshHttp && e.opts.HttpReplayOnly {
+		// User asked for both refresh AND replay-only — contradictory.
+		// Surface rather than silently ignore one.
+		return 0, nil, nil, fmt.Errorf("cassette %q: --refresh-http and --http-replay-only are mutually exclusive", cassetteName)
+	}
+
+	// Real dispatch.
+	var bodyReader io.Reader
+	if reqBody != nil {
+		bodyReader = bytes.NewReader(reqBody)
+	}
+	req, rerr := http.NewRequestWithContext(ctx, h.Method, url, bodyReader)
+	if rerr != nil {
+		return 0, nil, nil, fmt.Errorf("build request: %v", rerr)
+	}
+	for k, v := range h.Headers {
+		req.Header.Set(k, expandEnv(v, envMap))
+	}
+	if autoContentType != "" && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", autoContentType)
+	}
+
+	resp, doErr := http.DefaultClient.Do(req)
+	if doErr != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return 0, nil, nil, fmt.Errorf("timed out after %s", timeout)
+		}
+		return 0, nil, nil, fmt.Errorf("request failed: %v", doErr)
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+
+	// Cassette write on miss / refresh.
+	if cassetteName != "" {
+		digest := httpDigest(h.Method, url, reqBody)
+		cas := httpCassette{
+			Hash:        digest,
+			Method:      h.Method,
+			URL:         url,
+			RequestBody: string(reqBody),
+			Status:      resp.StatusCode,
+			Headers:     resp.Header,
+			Body:        string(bodyBytes),
+			UpdatedAt:   time.Now().UTC().Format(time.RFC3339),
+		}
+		if werr := writeHttpCassette(e.cassettePath(cassetteName), cas); werr != nil {
+			fmt.Fprintf(e.opts.Stderr, "[pkt] warning: write cassette %s: %v\n", cassetteName, werr)
+		}
+	}
+
+	return resp.StatusCode, resp.Header, bodyBytes, nil
+}
+
+// httpCassette is the on-disk shape of a recorded HTTP exchange.
+type httpCassette struct {
+	Hash        string      `json:"hash"`
+	Method      string      `json:"method"`
+	URL         string      `json:"url"`
+	RequestBody string      `json:"request_body,omitempty"`
+	Status      int         `json:"status"`
+	Headers     http.Header `json:"headers,omitempty"`
+	Body        string      `json:"body"`
+	UpdatedAt   string      `json:"updated_at"`
+}
+
+func httpDigest(method, url string, body []byte) string {
+	hash := sha256.New()
+	hash.Write([]byte(method))
+	hash.Write([]byte("\n"))
+	hash.Write([]byte(url))
+	hash.Write([]byte("\n"))
+	hash.Write(body)
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+func (e *Executor) cassettePath(name string) string {
+	return filepath.Join(filepath.Dir(e.opts.SnapshotsDir), "http", name+".json")
+}
+
+func readHttpCassette(path string) (httpCassette, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return httpCassette{}, false
+	}
+	var c httpCassette
+	if err := json.Unmarshal(data, &c); err != nil {
+		return httpCassette{}, false
+	}
+	return c, true
+}
+
+func writeHttpCassette(path string, c httpCassette) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // expandJsonValue recursively walks a Pkl-decoded value tree and

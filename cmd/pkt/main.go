@@ -167,6 +167,8 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	fs.StringVar(file, "file", "Test.pkl", "path to the Test.pkl module")
 	refresh := fs.Bool("refresh-snapshots", false, "(re)write every reference snapshot file")
 	refreshAi := fs.Bool("refresh-ai", false, "force every Step.expectAi to re-run its judge and rewrite the cached snapshot")
+	refreshHttp := fs.Bool("refresh-http", false, "force every cassette'd HTTP step to redispatch and rewrite the cassette")
+	replayOnly := fs.Bool("http-replay-only", false, "fail cassette'd HTTP steps on cache miss instead of dispatching a real request (CI hardening)")
 	updateInline := fs.Bool("update-inline-snapshots", false, "rewrite Test.pkl inline snapshot fields (inlineStdout / inlineStderr) from the live capture")
 	junitDir := fs.String("junit-reports", "", "directory to write a JUnit XML report into (filename is <module-basename>.xml)")
 	var only multiString
@@ -193,6 +195,8 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 		Stderr:                stderr,
 		RefreshSnapshots:      *refresh,
 		RefreshAi:             *refreshAi,
+		RefreshHttp:           *refreshHttp,
+		HttpReplayOnly:        *replayOnly,
 		UpdateInlineSnapshots: *updateInline,
 		Only:                  []string(only),
 	})

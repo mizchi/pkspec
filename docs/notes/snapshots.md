@@ -7,11 +7,12 @@ snapshot is really protecting.
 
 ## At a glance
 
-| kind         | what it captures                              | where it lives                                          | how to update                  |
-| ------------ | --------------------------------------------- | ------------------------------------------------------- | ------------------------------ |
-| `byte`       | exact bytes of stdout / stderr                | `<workdir>/.pkthunder/snapshots/<name>.bytes`           | `pkt run --refresh-snapshots` (and `pkt exec --refresh-snapshots` for the subprocess path) |
-| `inline`     | exact bytes of test or step stdout / stderr   | inside the `Test.pkl` source itself (`inlineStdout = "..."`) | `pkt exec --update-inline-snapshots` |
-| `ai-verdict` | a fuzzy pass/fail judgement on a body         | `<workdir>/.pkthunder/ai-snapshots/<name>.json`         | `pkt exec --refresh-ai`        |
+| kind          | what it captures                              | where it lives                                          | how to update                  |
+| ------------- | --------------------------------------------- | ------------------------------------------------------- | ------------------------------ |
+| `byte`        | exact bytes of stdout / stderr                | `<workdir>/.pkthunder/snapshots/<name>.bytes`           | `pkt run --refresh-snapshots` (and `pkt exec --refresh-snapshots` for the subprocess path) |
+| `inline`      | exact bytes of test or step stdout / stderr   | inside the `Test.pkl` source itself (`inlineStdout = "..."`) | `pkt exec --update-inline-snapshots` |
+| `ai-verdict`  | a fuzzy pass/fail judgement on a body         | `<workdir>/.pkthunder/ai-snapshots/<name>.json`         | `pkt exec --refresh-ai`        |
+| `http`        | the full response (status / headers / body) of one HTTP request | `<workdir>/.pkthunder/http/<name>.json`                 | `pkt exec --refresh-http` (and `--http-replay-only` for CI) — see `docs/notes/cassettes.md` |
 
 These never stack; a single test pins or polls or judges, but the
 runner has no opinion on which it should be. Authors choose per-Test

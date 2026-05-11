@@ -5,6 +5,47 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 16 — HTTP record / replay cassettes
+
+- **Snapshot kind 4: HTTP cassette.** Per-Step opt-in via
+  `Step.cassette = "name"`. The runner records the full response
+  (status / headers / body) on first dispatch and replays from
+  `<workdir>/.pkthunder/http/<name>.json` thereafter. Slots into
+  the existing taxonomy alongside byte / inline / ai-verdict.
+- **Key = `sha256(method + url + body)`, headers excluded.** Headers
+  carry credentials and tracing metadata that rotate per-run; making
+  them part of the key would invalidate cassettes constantly. The
+  recorded headers replay verbatim, so assertions on response
+  headers still work — the narrower key just stops Authorization
+  rotation from invalidating the cache.
+- **Three modes, two flags.** Default (record on miss, replay on
+  hit) is the developer loop. `--refresh-http` forces re-record
+  (use after an upstream contract change). `--http-replay-only`
+  errors on cassette miss instead of dispatching — the CI
+  hardening flag. Combining `--refresh-http` and `--http-replay-only`
+  is rejected at dispatch (contradictory; surface rather than
+  silently honour one).
+- **Refactored runHttpStep around httpDispatch.** Previously the
+  function inlined `http.NewRequest` → `Do` → assertions in one
+  ~150-line body. Extracted dispatch into a helper that returns
+  `(status, headers, body, err)` so cassette load and real dispatch
+  produce the same shape; assertions then run on that shape and
+  don't care which path filled it.
+- **Body bytes captured before becoming a Reader.** Previously
+  bodyJson was JSON-encoded straight into an `io.Reader` and the
+  raw bytes weren't visible. For cassette keying we need the bytes,
+  so the encoding step now stores `[]byte` and wraps it in a Reader
+  at dispatch time. Mild churn, no behaviour change.
+- **Interaction with `eventually`: cassette hit short-circuits
+  polling.** A cassette'd request inside `eventually` returns the
+  same response on every poll, so the loop passes on the first
+  attempt. Acceptable: cassettes can't capture a sequence of
+  changing responses anyway; the recommended pattern is to record
+  the final successful state. Documented in
+  `docs/notes/cassettes.md`.
+
+---
+
 ## Phase 15 — JUnit reports for `pkt exec`
 
 - **Output-format alignment is the only viable bridge to pkl test.**
