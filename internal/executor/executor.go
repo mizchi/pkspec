@@ -819,14 +819,121 @@ func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Tes
 	return e.runStepEventually(ctx, step, t, defaults, state)
 }
 
-// runStepOnce dispatches a single attempt of `step` to the shell or
-// HTTP engine. It is also the unit `runStepEventually` re-invokes
-// inside its polling loop.
+// runStepOnce dispatches a single attempt of `step` based on its
+// `Kind` discriminator. It is also the unit `runStepEventually`
+// re-invokes inside its polling loop.
+//
+// Kind-incompatible expectations are caught here as an Errored
+// result, not silently ignored. This is the "future-proof D" hedge:
+// when the schema later migrates from a flat Step to subclasses, the
+// validation rules become subclass-private; today they sit in one
+// switch and prevent authoring mistakes early.
 func (e *Executor) runStepOnce(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
-	if step.Http != nil {
-		return e.runHttpStep(ctx, step, t, defaults, state)
+	if reason := validateStepKind(step); reason != "" {
+		return StepResult{
+			Name:    stepDisplayName(step),
+			Outcome: OutcomeErrored,
+			Reasons: []string{reason},
+		}
 	}
-	return e.runShellStep(ctx, step, t, defaults, state)
+	switch step.Kind {
+	case "http":
+		return e.runHttpStep(ctx, step, t, defaults, state)
+	case "playwright":
+		return e.runPlaywrightStep(ctx, step, t, defaults, state)
+	case "shell":
+		return e.runShellStep(ctx, step, t, defaults, state)
+	default:
+		return StepResult{
+			Name:    stepDisplayName(step),
+			Outcome: OutcomeErrored,
+			Reasons: []string{"step has no body: set exactly one of cmd / http / playwright"},
+		}
+	}
+}
+
+// validateStepKind returns "" when the Step's kind-specific
+// expectations are consistent with its body, or a one-line reason
+// otherwise. The check is non-exhaustive on purpose — pkl-go cannot
+// tell "user wrote 0" from "default 0" for int fields like
+// ExpectExitCode, so those are skipped. The pointer / slice / map
+// fields below have a clear "set vs default" distinction.
+func validateStepKind(step *config.Step) string {
+	switch step.Kind {
+	case "shell":
+		if step.ExpectStatus != nil ||
+			len(step.ExpectStatusBetween) > 0 ||
+			step.ExpectBodyEquals != nil ||
+			step.ExpectBodyContains != nil ||
+			len(step.ExpectHeaderEquals) > 0 ||
+			len(step.ExpectBodyJsonPath) > 0 ||
+			step.CaptureBody != nil ||
+			step.CaptureStatus != nil ||
+			len(step.CaptureBodyJsonPath) > 0 ||
+			step.Cassette != nil {
+			return "shell step has http-only expectation/capture set (expect{Status,Body,Header}*, captureBody*, cassette) — split into separate steps"
+		}
+	case "http":
+		if step.ExpectStdout != nil ||
+			step.ExpectStderr != nil ||
+			step.InlineStdout != nil ||
+			step.CaptureStdout != nil ||
+			step.CaptureExitCode != nil {
+			return "http step has shell-only expectation/capture set (expectStdout, expectStderr, inlineStdout, captureStdout, captureExitCode) — http steps assert on response body, not stdout"
+		}
+	case "playwright":
+		if step.ExpectStatus != nil ||
+			len(step.ExpectStatusBetween) > 0 ||
+			step.ExpectBodyEquals != nil ||
+			step.ExpectBodyContains != nil ||
+			len(step.ExpectHeaderEquals) > 0 ||
+			len(step.ExpectBodyJsonPath) > 0 ||
+			step.Cassette != nil ||
+			step.ExpectStdout != nil ||
+			step.ExpectStderr != nil ||
+			step.InlineStdout != nil {
+			return "playwright step uses its own expectations (expectScreenshot in the playwright spec) — http/shell expectations on the Step are not applied to a browser script"
+		}
+	}
+	return ""
+}
+
+// runPlaywrightStep is the phase 18 stub. The Pkl schema accepts
+// `playwright = new { ... }`, and fixtures can be authored against
+// it, but the actual Node harness (script spawn, screenshot diff,
+// console capture) lands in a later phase. Returning an errored
+// result with a clear reason lets authors lay out the spec layer
+// without claiming a working implementation.
+func (e *Executor) runPlaywrightStep(_ context.Context, step *config.Step, _ *config.Test, _ *config.Defaults, _ map[string]string) StepResult {
+	name := stepDisplayName(step)
+	return StepResult{
+		Name:    name,
+		Outcome: OutcomeErrored,
+		Reasons: []string{
+			"playwright runner not yet implemented (schema landed in phase 18; runner arrives later)",
+		},
+	}
+}
+
+func stepDisplayName(step *config.Step) string {
+	if step.Name != nil && *step.Name != "" {
+		return *step.Name
+	}
+	switch step.Kind {
+	case "shell":
+		if step.Cmd != nil {
+			return *step.Cmd
+		}
+	case "http":
+		if step.Http != nil {
+			return step.Http.Method + " " + step.Http.URL
+		}
+	case "playwright":
+		if step.Playwright != nil {
+			return "playwright:" + step.Playwright.Script
+		}
+	}
+	return "<unnamed step>"
 }
 
 // runStepEventually polls runStepOnce on `step.Eventually.IntervalMs`

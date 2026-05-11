@@ -5,6 +5,83 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 18 — task-interface bake-off; ship D with A-compatible scaffolding
+
+- **Methodology: 4 design proposals, 3 subagent reviewers, 3
+  personas.** Wrote four candidate schemas (`A: abstract class +
+  subclass`, `B: tagged union slots`, `C: open protocol + runner
+  registry`, `D: extend the existing Step`) in
+  `docs/proposals/task-interface/`. Same three scenarios (1-line
+  smoke / HTTP capture / Playwright screenshot) authored against
+  each, so the *authoring experience* was directly comparable.
+  Dispatched three `general-purpose` subagents in parallel, each
+  with a fixed persona: new user reading the manual cold, migration
+  maintainer of a ~50-fixture suite, framework maintainer thinking
+  18 months out.
+- **Result split cleanly along the time axis.** New-user picked A
+  ("fields live on the type that owns them"). Migration picked D
+  ("kind #5 isn't here yet, pay the cost when it shows up").
+  18-month picked C ("only C makes 'third-party runner not
+  upstreamed' a first-class state"). Three personas, three
+  recommendations — same proposal-set.
+- **Decision: D, with A-compatible affordances.** The migration
+  view's argument was the strongest for *today*: three kinds is
+  not the point where a flat schema collapses; speculative redesign
+  costs current fixture churn for hypothetical future ergonomics.
+  But the new-user view's complaint about D (the god-class) and
+  the long-term view's complaint about D (no external extension)
+  are both real — so D ships with two hedges that make A/C cheap
+  to walk to later.
+- **Hedge 1: `kind: String` computed field on Step.** Set by the
+  schema (`if (cmd != null) "shell" else if ...`) so consumers
+  (executor dispatch, reporter, JUnit, `pkt spec`) read one
+  discriminator instead of three nil checks. When (if) we refactor
+  to `abstract class Task` with subclasses, the discriminator is
+  already in place — call sites don't move.
+- **Hedge 2: kind-incompatible expectations are runner errors.**
+  A `cmd` Step with `expectStatus = 200` was proposal D's worst
+  inherited weakness ("silently ignored" was the original
+  description). `validateStepKind` in `runStepOnce` catches all
+  the false-positive combinations (`http-only` on shell,
+  `shell-only` on http, both on playwright) and returns an
+  Errored StepResult with a one-line reason. The schema can't say
+  "only when http is set"; the runner can, and now does.
+- **Playwright is schema-only, runner stubbed.** `PlaywrightSpec`
+  + `ScreenshotSnapshot` classes land. `runPlaywrightStep` returns
+  an Errored StepResult with "playwright runner not yet
+  implemented (schema landed in phase 18; runner arrives later)."
+  Authors can already write Playwright Steps and have `pkt spec`
+  render them with `[x]` checkboxes; only `pkt exec` short-circuits
+  with the not-yet-implemented marker. This lets spec-driven
+  authoring move ahead of the implementation cycle.
+- **Exit criterion documented.** `docs/notes/task-interface-future.md`
+  names the three triggers that re-open the proposals: (1) a fifth
+  built-in kind being added, (2) an external author wanting to
+  register a runner, (3) a cross-kind feature having to be
+  threaded through dispatch by hand for the second time. Without
+  this, D would quietly become permanent and the god-class
+  complaint would grow from theoretical to real.
+- **Why not asking the user to choose between A/B/C/D first.** The
+  bake-off itself was the deliverable. Writing four manuals and
+  three persona reviews surfaced trade-offs that a free-form
+  "what do you think?" wouldn't have. The user's final pick
+  ("ship D with A-compatible scaffolding") drew on all three
+  reviews — the new-user complaint became the validation work,
+  the migration view became the staging decision, the long-term
+  view became the exit criterion.
+- **Proposals retained as decision record.** `docs/proposals/task-interface/`
+  is preserved verbatim. When one of the exit-criterion triggers
+  fires, the alternative designs and the three subagent reviews
+  are immediately available — no re-elicitation needed.
+- **Two-axis cost recap.** Phase 18 cost: 1 Pkl class, 1 Go
+  struct, 1 dispatch branch, 1 validation function, 1 stub, 1
+  decision note. Cost we *did not* pay: rewriting 50+ fixtures,
+  migrating Spec.pkl, retraining authors, breaking inline
+  ergonomics, polymorphic pkl-go decoding. We can pay the latter
+  cost when a concrete trigger demands it.
+
+---
+
 ## Phase 17 — `Test.tags`, spec-tag auto-pending, `pkt spec`
 
 - **`Test.tags: Listing<String>` replaces an enum draft.** First pass

@@ -41,14 +41,32 @@ type HttpRequest struct {
 	TimeoutSec int               `pkl:"timeoutSec"`
 }
 
-// Step mirrors `pkthunder.Test#RenderedStep`. Either `Cmd` (shell) or
-// `Http` (HTTP request) is set; the executor branches on which one.
+// PlaywrightSpec mirrors `pkthunder.Test#RenderedPlaywrightSpec`.
+// Implementation lands in a later phase; today the executor returns
+// an errored Step result with "not yet implemented" when this slot
+// is set.
+type PlaywrightSpec struct {
+	Script           string              `pkl:"script"`
+	Browser          string              `pkl:"browser"`
+	ExpectScreenshot *ScreenshotSnapshot `pkl:"expectScreenshot"`
+}
+
+// ScreenshotSnapshot mirrors `pkthunder.Test#RenderedScreenshotSnapshot`.
+type ScreenshotSnapshot struct {
+	Name         string  `pkl:"name"`
+	ThresholdPct float64 `pkl:"thresholdPct"`
+}
+
+// Step mirrors `pkthunder.Test#RenderedStep`. Exactly one of `Cmd`,
+// `Http`, or `Playwright` is set; the executor dispatches on `Kind`.
 type Step struct {
 	Name            *string           `pkl:"name"`
+	Kind            string            `pkl:"kind"`
 	Cmd             *string           `pkl:"cmd"`
 	Shell           string            `pkl:"shell"`
 	Stdin           *string           `pkl:"stdin"`
 	Http            *HttpRequest      `pkl:"http"`
+	Playwright      *PlaywrightSpec   `pkl:"playwright"`
 	Env             map[string]string `pkl:"env"`
 	Workdir         *string           `pkl:"workdir"`
 	TimeoutSec      int               `pkl:"timeoutSec"`
@@ -171,6 +189,8 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedEventually", Eventually{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedAiAssertion", AiAssertion{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedHook", Hook{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedPlaywrightSpec", PlaywrightSpec{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedScreenshotSnapshot", ScreenshotSnapshot{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

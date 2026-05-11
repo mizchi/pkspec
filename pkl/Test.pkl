@@ -33,18 +33,45 @@ class HttpRequest {
 }
 
 /// One step inside a `steps` (sequential) or `parallelSteps` (concurrent)
-/// list. Choose exactly one of `cmd` (shell) or `http` (HTTP request).
+/// list. Choose exactly one of `cmd` (shell), `http` (HTTP request),
+/// or `playwright` (browser script). The runner validates that the
+/// kind-specific expectations on a Step match the chosen body — an
+/// `expectStatus` on a `cmd` step is reported as an authoring error,
+/// not silently ignored.
 class Step {
   /// Optional name for reporting. Defaults to the cmd / URL preview.
   name: String? = null
 
-  /// Shell command — pick this OR `http`, not both.
+  /// Shell command — pick exactly one of `cmd` / `http` / `playwright`.
   cmd: (String(length > 0))? = null
   shell: String = "bash"
   stdin: String? = null
 
-  /// HTTP request — pick this OR `cmd`, not both.
+  /// HTTP request — pick exactly one of `cmd` / `http` / `playwright`.
   http: HttpRequest? = null
+
+  /// Playwright script — pick exactly one of `cmd` / `http` /
+  /// `playwright`. The runner spawns a Node process that drives a
+  /// browser via the playwright library; per-script expectations
+  /// (screenshot match, console assertions) live on the spec.
+  /// Implementation arrives in a later phase; today the schema is
+  /// in place but the dispatch returns an "errored: not yet
+  /// implemented" result so fixtures can already be authored.
+  playwright: PlaywrightSpec? = null
+
+  /// Computed discriminator. Set by the schema based on which of
+  /// `cmd` / `http` / `playwright` is non-null. The runner reads it
+  /// for dispatch and validation; users never write to it.
+  ///
+  /// Pre-positioned for a future task-interface refactor — if the
+  /// flat `Step` becomes `abstract class Task` with subclasses, this
+  /// field is the discriminator that survives the migration without
+  /// touching the executor or the reporter.
+  kind: String =
+    if (cmd != null) "shell"
+    else if (http != null) "http"
+    else if (playwright != null) "playwright"
+    else "invalid"
 
   env: Mapping<String, String> = new {}
   workdir: String? = null
@@ -169,6 +196,39 @@ class Eventually {
 
   /// Maximum total wait, including the first attempt.
   timeoutSec: Int(this > 0) = 5
+}
+
+/// Playwright task spec. The `script` is a `.mjs` file resolved
+/// relative to the Test module's directory. The runner spawns
+/// `node` against the script with an injected harness that gives the
+/// script a `{page, ctx}` argument; the script's return value
+/// becomes the task output bytes (typically `{screenshot: Buffer}`
+/// for visual tests, or a JSON-serialisable object for non-visual
+/// playwright checks).
+///
+/// Out of scope for the phase 18 schema-only landing: the actual
+/// Node harness, screenshot diffing, and console-stream capture.
+/// Authoring with `playwright = new { ... }` today returns an
+/// errored Step result with a clear "not yet implemented" reason.
+class PlaywrightSpec {
+  script: String(length > 0)
+  browser: String(matches(Regex(#"^(chromium|firefox|webkit)$"#))) = "chromium"
+
+  /// Visual regression: capture a screenshot from the script's
+  /// return value and compare against a committed PNG snapshot.
+  /// Same storage layout as `ReferenceSnapshot` but `.png` instead
+  /// of `.bytes` so review tooling renders the diff.
+  expectScreenshot: ScreenshotSnapshot? = null
+}
+
+/// Screenshot snapshot reference. Stored at
+/// `<workdir>/.pkthunder/screenshots/<name>.png`. The `thresholdPct`
+/// is the percentage of pixels that may differ before the assertion
+/// fails — small fonts and anti-aliasing rarely produce a 0% match,
+/// so a few tenths of a percent is the practical floor.
+class ScreenshotSnapshot {
+  name: String(matches(Regex(#"^[a-zA-Z0-9_\-]+$"#)))
+  thresholdPct: Float(this >= 0.0 && this <= 100.0) = 0.5
 }
 
 /// Reference to a committed snapshot file. The runner stores expected
@@ -366,12 +426,25 @@ class RenderedAiAssertion {
   snapshotName: String
 }
 
+class RenderedPlaywrightSpec {
+  script: String
+  browser: String
+  expectScreenshot: RenderedScreenshotSnapshot?
+}
+
+class RenderedScreenshotSnapshot {
+  name: String
+  thresholdPct: Float
+}
+
 class RenderedStep {
   name: String?
+  kind: String
   cmd: String?
   shell: String
   stdin: String?
   http: RenderedHttpRequest?
+  playwright: RenderedPlaywrightSpec?
   env: Mapping<String, String>
   workdir: String?
   timeoutSec: Int
@@ -487,12 +560,23 @@ local function renderHttp(h: HttpRequest): RenderedHttpRequest = new {
   timeoutSec = h.timeoutSec
 }
 
+local function renderPlaywright(p: PlaywrightSpec): RenderedPlaywrightSpec = new {
+  script = p.script
+  browser = p.browser
+  expectScreenshot = if (p.expectScreenshot == null) null else new RenderedScreenshotSnapshot {
+    name = p.expectScreenshot.name
+    thresholdPct = p.expectScreenshot.thresholdPct
+  }
+}
+
 local function renderStep(s: Step): RenderedStep = new {
   name = s.name
+  kind = s.kind
   cmd = s.cmd
   shell = s.shell
   stdin = s.stdin
   http = if (s.http == null) null else renderHttp(s.http)
+  playwright = if (s.playwright == null) null else renderPlaywright(s.playwright)
   env = s.env
   workdir = s.workdir
   timeoutSec = s.timeoutSec
