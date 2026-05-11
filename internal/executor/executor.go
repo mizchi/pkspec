@@ -140,6 +140,11 @@ type Options struct {
 	// whose field is `null` is reported as a failure with
 	// instructions to re-run with the flag.
 	UpdateInlineSnapshots bool
+	// Only restricts the run to tests whose name contains any of these
+	// substrings. Empty slice means "run everything". Case-sensitive,
+	// substring (not regex) — matching `vitest -t` rather than
+	// `go test -run`.
+	Only []string
 }
 
 // Executor runs a Plan. Phase 2.5 is still serial across tests; parallel
@@ -293,11 +298,22 @@ func (t Tally) IsGreen() bool { return t.Failed == 0 && t.Errored == 0 }
 // Run executes every test in `plan` in alphabetical order. Returns the
 // per-test results plus a Tally for the caller to format / use for
 // exit code decisions.
+//
+// When Options.Only is set, only tests whose name contains any of the
+// listed substrings run. A non-empty Only that matches zero tests is
+// an error — silent-skip is the wrong default for CI, where a typo'd
+// filter would otherwise turn the run green by running nothing.
 func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally, error) {
 	e.sourcePath = plan.SourcePath
 	names := make([]string, 0, len(plan.Tests))
 	for n := range plan.Tests {
-		names = append(names, n)
+		if matchesAny(n, e.opts.Only) {
+			names = append(names, n)
+		}
+	}
+	if len(e.opts.Only) > 0 && len(names) == 0 {
+		return nil, Tally{}, fmt.Errorf("--only %v matched no tests (have: %v)",
+			e.opts.Only, sortedKeys(plan.Tests))
 	}
 	sort.Strings(names)
 
@@ -1487,6 +1503,33 @@ func (l *aiLock) release() {
 	}
 	_ = syscall.Flock(int(l.f.Fd()), syscall.LOCK_UN)
 	_ = l.f.Close()
+}
+
+// matchesAny reports whether name contains any of the substring
+// patterns. An empty slice matches everything (filter inactive).
+// Case-sensitive substring match — chosen over regex to keep CLI
+// quoting predictable and to mirror `vitest -t` / `jest -t`.
+func matchesAny(name string, patterns []string) bool {
+	if len(patterns) == 0 {
+		return true
+	}
+	for _, p := range patterns {
+		if strings.Contains(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// sortedKeys returns the keys of m in sorted order. Used for the
+// "no test matched" error so the message is reproducible.
+func sortedKeys(m map[string]*config.Test) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // syncBuffer is a thread-safe bytes.Buffer for background stdout capture.

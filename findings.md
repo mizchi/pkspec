@@ -5,6 +5,33 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 13 — `--only` test filter
+
+- **Substring over regex.** `vitest -t` / `jest -t` semantics, not
+  `go test -run`. Substring is predictable under shell quoting and
+  almost always what users actually want; regex bites the moment a
+  test name contains a literal `.` or `(`. If we ever need anchored
+  matches we can layer a second flag (e.g. `--only-regex`) instead of
+  reinterpreting `--only`.
+- **Repeated flag, OR semantics.** `--only login --only ping` runs
+  any test that matches *either* substring. Easier to compose in
+  scripts than a comma-split convention, and avoids the "what if a
+  test name contains a comma" footgun.
+- **Zero-match is an error, not silent skip.** Returning green with
+  no tests run is the exact failure mode CI is supposed to catch; a
+  typo in `--only` would otherwise pass the build. The error message
+  echoes the active patterns and the available test names so the
+  user can correct without re-running.
+- **Filtering lives in `Executor.Run`, not `cmdExec`.** Push it down
+  so future entry points (programmatic / IDE) inherit the same
+  semantics for free, and the "zero match = error" rule has one
+  enforcement site.
+- **Step-level filtering deliberately skipped.** Tests are the unit
+  authors care about; "run just step X of test Y" is an unusual ask
+  that's better served by extracting the step into its own Test.
+
+---
+
 ## Phase 12 — inline snapshots and three-kind taxonomy
 
 - **Hand-written rewriter beat trying to parse Pkl.** pkl-go has no

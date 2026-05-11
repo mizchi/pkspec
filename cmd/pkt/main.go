@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/apple/pkl-go/pkl"
@@ -167,6 +168,8 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	refresh := fs.Bool("refresh-snapshots", false, "(re)write every reference snapshot file")
 	refreshAi := fs.Bool("refresh-ai", false, "force every Step.expectAi to re-run its judge and rewrite the cached snapshot")
 	updateInline := fs.Bool("update-inline-snapshots", false, "rewrite Test.pkl inline snapshot fields (inlineStdout / inlineStderr) from the live capture")
+	var only multiString
+	fs.Var(&only, "only", "only run tests whose name contains this substring (repeatable; case-sensitive)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -185,11 +188,12 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	}
 
 	exe := executor.New(executor.Options{
-		Workdir:                filepath.Dir(abs),
-		Stderr:                 stderr,
-		RefreshSnapshots:       *refresh,
-		RefreshAi:              *refreshAi,
-		UpdateInlineSnapshots:  *updateInline,
+		Workdir:               filepath.Dir(abs),
+		Stderr:                stderr,
+		RefreshSnapshots:      *refresh,
+		RefreshAi:             *refreshAi,
+		UpdateInlineSnapshots: *updateInline,
+		Only:                  []string(only),
 	})
 	results, tally, err := exe.Run(ctx, plan)
 	if err != nil {
@@ -271,6 +275,22 @@ func (r *cmdResourceReader) Read(u url.URL) ([]byte, error) {
 		return nil, fmt.Errorf("cmd %q: %w", cmdLine, err)
 	}
 	return out, nil
+}
+
+// multiString is a flag.Value that accumulates repeated occurrences of
+// the same flag into a slice. Used for `--only foo --only bar`.
+type multiString []string
+
+func (m *multiString) String() string {
+	if m == nil {
+		return ""
+	}
+	return strings.Join(*m, ",")
+}
+
+func (m *multiString) Set(v string) error {
+	*m = append(*m, v)
+	return nil
 }
 
 // snapshotHint returns a short hint of which suites wrote snapshots so
