@@ -5,6 +5,36 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 15 — JUnit reports for `pkt exec`
+
+- **Output-format alignment is the only viable bridge to pkl test.**
+  pkl test's reporter has no extension point — feeding pkthunder
+  results back as `facts { [name] { bool } }` to re-run `pkl test`
+  works mechanically but loses subprocess context and adds a heavy
+  round trip. Writing JUnit XML directly from `pkt exec` produces
+  what `pkt run` already produces, so CI tooling sees a single
+  unified runner without pkthunder having to embed pkl.
+- **`<error>` vs `<failure>` matters.** Errored tests (couldn't
+  start, timed out, beforeAll failed) get `<error>` per JUnit
+  convention; assertion failures get `<failure>`. Tools like Jenkins
+  + Buildkite + GitHub Actions colour-code them differently, so
+  conflating the two destroys signal at the dashboard layer.
+- **Reasons go in both attr and body.** First reason becomes the
+  short `message` attribute (single-line, truncated at 200 chars);
+  the full reason list + per-step detail goes in the element body.
+  XML attribute parsers reject embedded newlines, so the trim is not
+  optional.
+- **Classname = source path, not module name.** pkl test uses
+  `<module>.facts` / `<module>.examples` as classname to separate
+  the two test kinds inside a module. pkthunder has only one kind
+  per Test, so I use the source `.pkl`'s absolute path instead —
+  reviewers clicking through CI output land on the right file.
+- **Atomic write via `.tmp` + rename.** Same pattern the AI snapshot
+  cache uses; cheap insurance against partial writes when the
+  process dies mid-report.
+
+---
+
 ## Phase 14 — lifecycle hooks (`before` / `after`)
 
 - **Shape aligned with `pkl test` facts.** Hooks are

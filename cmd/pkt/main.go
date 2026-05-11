@@ -168,6 +168,7 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	refresh := fs.Bool("refresh-snapshots", false, "(re)write every reference snapshot file")
 	refreshAi := fs.Bool("refresh-ai", false, "force every Step.expectAi to re-run its judge and rewrite the cached snapshot")
 	updateInline := fs.Bool("update-inline-snapshots", false, "rewrite Test.pkl inline snapshot fields (inlineStdout / inlineStderr) from the live capture")
+	junitDir := fs.String("junit-reports", "", "directory to write a JUnit XML report into (filename is <module-basename>.xml)")
 	var only multiString
 	fs.Var(&only, "only", "only run tests whose name contains this substring (repeatable; case-sensitive)")
 	if err := fs.Parse(args); err != nil {
@@ -199,7 +200,14 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	_ = results // kept for future structured reporters
+
+	if *junitDir != "" {
+		junitPath := filepath.Join(*junitDir,
+			strings.TrimSuffix(filepath.Base(abs), filepath.Ext(abs))+".xml")
+		if werr := junit.WriteSuite(junitPath, buildSuite(abs, results, tally)); werr != nil {
+			fmt.Fprintf(stderr, "pkt: warning: write junit report: %v\n", werr)
+		}
+	}
 
 	fmt.Fprintf(stderr,
 		"pkt: %d passed, %d flaky, %d pending, %d failed, %d errored (of %d)\n",
@@ -209,6 +217,76 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("%d test(s) failed, %d errored", tally.Failed, tally.Errored)
 	}
 	return nil
+}
+
+// buildSuite converts the executor's per-test results into a JUnit
+// Suite. The classname carries the source module's absolute path so
+// downstream tooling can navigate back to it; suite name is the
+// module basename without extension, matching pkl test's convention.
+func buildSuite(sourcePath string, results []executor.Result, tally executor.Tally) junit.Suite {
+	suiteName := strings.TrimSuffix(filepath.Base(sourcePath), filepath.Ext(sourcePath))
+	cases := make([]junit.Case, 0, len(results))
+	for _, r := range results {
+		c := junit.Case{
+			Classname: sourcePath,
+			Name:      r.Name,
+			TimeSec:   r.Duration.Seconds(),
+		}
+		switch r.Outcome {
+		case executor.OutcomeFailed:
+			c.Failure = &junit.Failure{
+				Message: firstReason(r.Reasons, "failed"),
+				Body:    joinReasonsWithSteps(r),
+			}
+		case executor.OutcomeErrored:
+			c.Error = &junit.Failure{
+				Message: firstReason(r.Reasons, "errored"),
+				Body:    joinReasonsWithSteps(r),
+			}
+		case executor.OutcomePending:
+			c.Skipped = &junit.Skipped{Message: "pending"}
+		}
+		cases = append(cases, c)
+	}
+	return junit.Suite{
+		Name:     suiteName,
+		Tests:    tally.Total(),
+		Failures: tally.Failed,
+		Errors:   tally.Errored,
+		Skipped:  tally.Pending,
+		Cases:    cases,
+	}
+}
+
+func firstReason(reasons []string, fallback string) string {
+	if len(reasons) == 0 {
+		return fallback
+	}
+	// Trim newlines so the attribute stays single-line for XML readers
+	// that don't tolerate embedded line breaks in attribute values.
+	r := strings.ReplaceAll(reasons[0], "\n", " ")
+	if len(r) > 200 {
+		r = r[:200] + "…"
+	}
+	return r
+}
+
+func joinReasonsWithSteps(r executor.Result) string {
+	var b strings.Builder
+	for _, reason := range r.Reasons {
+		b.WriteString(reason)
+		b.WriteByte('\n')
+	}
+	for _, sr := range r.Steps {
+		if sr.Outcome == executor.OutcomePassed || sr.Outcome == executor.OutcomeSkipped {
+			continue
+		}
+		fmt.Fprintf(&b, "  step %q: %s\n", sr.Name, sr.Outcome)
+		for _, sreason := range sr.Reasons {
+			fmt.Fprintf(&b, "    %s\n", sreason)
+		}
+	}
+	return b.String()
 }
 
 // cmdReaderHelper is the worker mode of pkthunder. When `pkt run --allow-cmd`

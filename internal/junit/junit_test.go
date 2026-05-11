@@ -3,6 +3,7 @@ package junit_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mizchi/pkthunder/internal/junit"
@@ -126,5 +127,62 @@ func TestSummarizeSplitsHardFailuresFromSnapshotWrites(t *testing.T) {
 	}
 	if tally.HardFailures != 2 {
 		t.Errorf("HardFailures = %d, want 2", tally.HardFailures)
+	}
+}
+
+func TestWriteSuiteRoundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.xml")
+	suite := junit.Suite{
+		Name:     "Test.pkl",
+		Tests:    4,
+		Failures: 1,
+		Errors:   1,
+		Skipped:  1,
+		TimeSec:  0.123,
+		Cases: []junit.Case{
+			{Name: "passed_case", TimeSec: 0.01},
+			{Name: "failed_case", TimeSec: 0.02, Failure: &junit.Failure{
+				Message: "stdout mismatch", Body: "expected: x\nactual: y",
+			}},
+			{Name: "errored_case", Error: &junit.Failure{
+				Message: "could not start", Body: "exec: not found",
+			}},
+			{Name: "pending_case", Skipped: &junit.Skipped{Message: "pending"}},
+		},
+	}
+	if err := junit.WriteSuite(path, suite); err != nil {
+		t.Fatalf("WriteSuite: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	body := string(data)
+	if !strings.HasPrefix(body, "<?xml") {
+		t.Errorf("missing XML header: %q", body[:40])
+	}
+	for _, want := range []string{
+		`name="Test.pkl"`,
+		`tests="4"`,
+		`failures="1"`,
+		`errors="1"`,
+		`skipped="1"`,
+		`<failure message="stdout mismatch">`,
+		`<error message="could not start">`,
+		`<skipped message="pending">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("output missing %q\n---\n%s", want, body)
+		}
+	}
+
+	// Roundtrip via LoadDir.
+	suites, err := junit.LoadDir(dir)
+	if err != nil {
+		t.Fatalf("LoadDir: %v", err)
+	}
+	if len(suites) != 1 || suites[0].Name != "Test.pkl" || len(suites[0].Cases) != 4 {
+		t.Fatalf("roundtrip mismatch: %+v", suites)
 	}
 }

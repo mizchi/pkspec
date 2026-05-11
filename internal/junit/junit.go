@@ -22,26 +22,40 @@ import (
 
 // Suite mirrors `<testsuite>`. Only the fields pkthunder needs are decoded.
 type Suite struct {
-	Name     string `xml:"name,attr"`
-	Tests    int    `xml:"tests,attr"`
-	Failures int    `xml:"failures,attr"`
-	Cases    []Case `xml:"testcase"`
+	XMLName  xml.Name `xml:"testsuite"`
+	Name     string   `xml:"name,attr"`
+	Tests    int      `xml:"tests,attr"`
+	Failures int      `xml:"failures,attr"`
+	Errors   int      `xml:"errors,attr,omitempty"`
+	Skipped  int      `xml:"skipped,attr,omitempty"`
+	TimeSec  float64  `xml:"time,attr,omitempty"`
+	Cases    []Case   `xml:"testcase"`
 }
 
 // Case mirrors `<testcase>`. `Failure` is nil for a passing case.
 type Case struct {
-	Classname string   `xml:"classname,attr"`
+	Classname string   `xml:"classname,attr,omitempty"`
 	Name      string   `xml:"name,attr"`
-	Failure   *Failure `xml:"failure"`
+	TimeSec   float64  `xml:"time,attr,omitempty"`
+	Failure   *Failure `xml:"failure,omitempty"`
+	Error     *Failure `xml:"error,omitempty"`
+	Skipped   *Skipped `xml:"skipped,omitempty"`
 }
 
 // Failure mirrors a `<failure message="…">…body…</failure>` element.
 // pkl uses `Fact Failure`, `Example Failure`, and `Example Output Written`
 // as message values; the body carries the power-assertion diagram or a
-// "wrote expected output" notice.
+// "wrote expected output" notice. The same shape carries `<error>`
+// elements (runtime errors as opposed to assertion failures).
 type Failure struct {
 	Message string `xml:"message,attr"`
 	Body    string `xml:",chardata"`
+}
+
+// Skipped mirrors `<skipped message="…"/>`. JUnit uses an empty element
+// here, but a `message` attribute is widely supported by consumers.
+type Skipped struct {
+	Message string `xml:"message,attr,omitempty"`
 }
 
 // LoadDir reads every `*.xml` under `dir` (non-recursively) and decodes
@@ -75,6 +89,29 @@ func LoadDir(dir string) ([]Suite, error) {
 		suites = append(suites, s)
 	}
 	return suites, nil
+}
+
+// WriteSuite marshals `suite` to XML and writes it to `path` atomically.
+// Parent directories are created with 0o755. The output uses two-space
+// indentation, matching the format pkl test emits — readable in diffs
+// and what CI consumers expect.
+func WriteSuite(path string, suite Suite) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create junit dir: %w", err)
+	}
+	body, err := xml.MarshalIndent(suite, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal junit: %w", err)
+	}
+	// xml.MarshalIndent doesn't prepend a header — add one so the file
+	// opens cleanly in XML-aware tooling.
+	out := append([]byte(xml.Header), body...)
+	out = append(out, '\n')
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // Tally summarizes a slice of suites for runner reporting.
