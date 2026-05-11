@@ -40,6 +40,13 @@ class Scenario {
   name: String(matches(Regex(#"^[a-zA-Z][a-zA-Z0-9_:.\-/ ]*$"#)))
   description: String? = null
 
+  /// Free-form classification tags propagated to the rendered Test.
+  /// Same semantics as `Test.tags` — see `docs/notes/spec.md`. A
+  /// Scenario tagged "spec" with all four step lists empty becomes
+  /// an auto-pending Test (the description / step descriptions stay
+  /// as the written-down intent).
+  tags: Listing<String> = new {}
+
   given: Listing<SpecStep> = new {}
   // `when` is a Pkl keyword (used by `when (cond) { ... }` constraint
   // blocks), so the field name must be backtick-quoted both in this
@@ -112,6 +119,7 @@ local function tagSteps(prefix: String, items: Listing<SpecStep>, runAlways: Boo
 local function scenarioToTest(s: Scenario): base.Test = new {
   name = s.name
   description = s.description
+  tags = s.tags
   shell = s.shell
   env = s.env
   workdir = s.workdir
