@@ -130,10 +130,26 @@ type Defaults struct {
 	Env   map[string]string `pkl:"env"`
 }
 
+// Hook mirrors `pkthunder.Test#RenderedHook` — a lifecycle hook
+// running before or after tests, scoped either "all" (once per Run)
+// or "each" (per test).
+type Hook struct {
+	Cmd           string            `pkl:"cmd"`
+	Scope         string            `pkl:"scope"`
+	Shell         string            `pkl:"shell"`
+	Env           map[string]string `pkl:"env"`
+	Workdir       *string           `pkl:"workdir"`
+	TimeoutSec    int               `pkl:"timeoutSec"`
+	CaptureStdout *string           `pkl:"captureStdout"`
+	AlwaysRun     bool              `pkl:"alwaysRun"`
+}
+
 // Plan is the decoded `Rendered` value the runner consumes.
 type Plan struct {
 	Defaults  *Defaults        `pkl:"defaults"`
 	Tests     map[string]*Test `pkl:"tests"`
+	Before    map[string]*Hook `pkl:"before"`
+	After     map[string]*Hook `pkl:"after"`
 	Canonical []byte           `pkl:"-"`
 	// SourcePath is the absolute path to the Pkl module that produced
 	// this plan. Inline-snapshot updates rewrite that file in place,
@@ -152,6 +168,7 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedHttpRequest", HttpRequest{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedEventually", Eventually{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedAiAssertion", AiAssertion{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedHook", Hook{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

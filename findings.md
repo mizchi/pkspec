@@ -5,6 +5,58 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 14 — lifecycle hooks (`before` / `after`)
+
+- **Shape aligned with `pkl test` facts.** Hooks are
+  `Mapping<String, Hook>` at the module's top level, mirroring how
+  facts and tests already work. The lifecycle position is encoded on
+  the Hook itself via `scope = "all" | "each"`, not in the
+  containing section name. Two sections × one knob beats four
+  sections (`beforeAll` / `beforeEach` / `afterAll` / `afterEach`) —
+  same expressive power with less schema surface.
+- **No `Describe` class.** Module hierarchy is the scope hierarchy.
+  A child module `amends` its parent and inherits the parent's
+  `before` / `after` Mappings via Pkl's normal merge semantics; the
+  runner sees one flat Mapping at evaluation time and doesn't need
+  any awareness of ancestry. We avoid carrying two scope systems
+  (Pkl module tree + pkthunder Describe class) for the same idea.
+- **Ordering is alphabetical by hook name, not by ancestry.** Pkl's
+  `amends` flattens parent + child entries into one Mapping; the
+  "parent before child" intent dies on the way out of Pkl. Users
+  needing ordering between modules prefix the key (`01_truncate`,
+  `02_seed`). Made the constraint explicit in `docs/notes/hooks.md`
+  rather than inventing an ordering field — adding one would tempt
+  authors to build deep hook DAGs in what should be flat setup.
+- **`extraEnv` plumbed through `runOne` / `runAttempt` / leaves.**
+  Hook captures need to reach the test body's env, and the existing
+  per-step `state` map only existed inside `runSteps`. Adding an
+  `extraEnv` parameter at each layer (with `runSteps` seeding its
+  state from it, `runCmd` merging it into the env, `runParallel`
+  copying it into per-goroutine state) was uglier than wishing the
+  Test had mutable env, but doesn't require sharing mutable state
+  across goroutines or mutating decoded config structs.
+- **After-hook failures don't downgrade test outcomes.** By the time
+  afterEach runs, the body has already been classified. Surfacing a
+  failed teardown as stderr noise but keeping the test green
+  matches what jest / vitest do and avoids the "teardown bug masks
+  the actual test passing" anti-pattern.
+- **`captureStdout` semantics: scope=all writes to runState (every
+  test sees), scope=each writes to per-test testState (only that
+  test sees).** The natural mapping from the lifecycle's reach to
+  the env's lifetime — and incidentally what makes parallel test
+  execution (Phase 15+) safe later: scope=each captures are already
+  per-test, so they won't collide across parallel siblings.
+- **Reporter alignment with `pkl test` is impractical, JUnit output
+  is the realistic bridge.** pkl test's reporter has no extension
+  point; feeding pkthunder results back through pkl test (write a
+  .pkl with `facts { [name] { true_or_false } }`, re-run `pkl test`)
+  works mechanically but loses subprocess context and adds a heavy
+  round trip. `pkt exec --junit-reports` (Phase 15-ish) matches the
+  output format that `pkt run` already produces, which is enough for
+  CI to treat them as one runner.
+
+---
+
 ## Phase 13.1 — inline-snapshot default fix
 
 - **Bug.** Phase 12 left `inlineStdout: String? = null` as the schema

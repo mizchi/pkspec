@@ -282,6 +282,44 @@ class Defaults {
   env: Mapping<String, String> = new {}
 }
 
+/// Lifecycle hook attached to a Plan's `before` or `after` section.
+///
+/// Hooks are named (via the Mapping key) and scoped:
+///
+///   - `scope = "all"`  — fires once per Run; before-hooks before any
+///     test, after-hooks after every test. Useful for shared
+///     fixtures (start a DB container, seed reference data).
+///   - `scope = "each"` — fires once per test; before-each before the
+///     test body, after-each after the body. Useful for state reset
+///     between tests (TRUNCATE table, clear cache).
+///
+/// Hooks compose across `amends`: a child module inherits parent
+/// hooks and runs in the merged set. Override is by key (child reuses
+/// the parent's key with new values), addition is by new key.
+class Hook {
+  /// Shell command to run. Same semantics as `Test.cmd`.
+  cmd: String(length > 0)
+
+  /// Lifecycle scope: "all" (once per Run) or "each" (per test).
+  scope: String(matches(Regex(#"^(all|each)$"#))) = "each"
+
+  shell: String = "bash"
+  env: Mapping<String, String> = new {}
+  workdir: String? = null
+  timeoutSec: Int(this > 0) = 60
+
+  /// When set, capture stdout into the named env var. For scope="all"
+  /// the capture lives for the whole Run and every test sees it; for
+  /// scope="each" the capture is rebuilt per test and only that
+  /// test's body sees it.
+  captureStdout: String? = null
+
+  /// after-hooks only. When true, the hook fires even if the
+  /// associated body failed (test body for scope="each", any test in
+  /// the suite for scope="all"). Ignored on before-hooks.
+  alwaysRun: Boolean = false
+}
+
 class RenderedHttpRequest {
   method: String
   url: String
@@ -373,14 +411,38 @@ class RenderedTest {
   background: Listing<RenderedBackground>
 }
 
+class RenderedHook {
+  cmd: String
+  scope: String
+  shell: String
+  env: Mapping<String, String>
+  workdir: String?
+  timeoutSec: Int
+  captureStdout: String?
+  alwaysRun: Boolean
+}
+
 class Rendered {
   defaults: Defaults
   tests: Mapping<String, RenderedTest>
+  before: Mapping<String, RenderedHook>
+  after: Mapping<String, RenderedHook>
 }
 
 defaults: Defaults = new {}
 
 tests: Listing<Test> = new {}
+
+/// Lifecycle hooks running before tests. Key is the hook name (used
+/// in reporter output and stable across `amends`); value is a Hook.
+/// Empty (the default) means "no before hooks". See `Hook` for scope
+/// semantics.
+before: Mapping<String, Hook> = new {}
+
+/// Lifecycle hooks running after tests. Same shape as `before`. Use
+/// `alwaysRun = true` for cleanup that must happen even when tests
+/// failed.
+after: Mapping<String, Hook> = new {}
 
 local testNames: List<String> = tests.toList().map((t) -> t.name)
 
@@ -493,10 +555,35 @@ local rendered: Mapping<String, RenderedTest> = new Mapping {
   }
 }
 
+local function renderHook(h: Hook): RenderedHook = new {
+  cmd = h.cmd
+  scope = h.scope
+  shell = h.shell
+  env = h.env
+  workdir = h.workdir
+  timeoutSec = h.timeoutSec
+  captureStdout = h.captureStdout
+  alwaysRun = h.alwaysRun
+}
+
+local renderedBefore: Mapping<String, RenderedHook> = new Mapping {
+  for (k, h in before) {
+    [k] = renderHook(h)
+  }
+}
+
+local renderedAfter: Mapping<String, RenderedHook> = new Mapping {
+  for (k, h in after) {
+    [k] = renderHook(h)
+  }
+}
+
 output {
   value = new Rendered {
     defaults = module.defaults
     tests = if (duplicateNames.isEmpty) rendered
       else throw("duplicate test names: \(duplicateNames.join(", "))")
+    before = renderedBefore
+    after = renderedAfter
   }
 }

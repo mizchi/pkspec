@@ -303,6 +303,22 @@ func (t Tally) IsGreen() bool { return t.Failed == 0 && t.Errored == 0 }
 // listed substrings run. A non-empty Only that matches zero tests is
 // an error — silent-skip is the wrong default for CI, where a typo'd
 // filter would otherwise turn the run green by running nothing.
+//
+// Lifecycle hooks (plan.Before / plan.After) wrap the test loop:
+//
+//   - scope="all" before-hooks run once, name-sorted, before any test;
+//     a failure short-circuits the rest of the suite and every test
+//     reports errored ("beforeAll failed").
+//   - scope="each" before-hooks run before each test in name order;
+//     a failure makes only that test errored.
+//   - scope="each" after-hooks run after each test in LIFO order;
+//     skipped when the body failed unless alwaysRun=true.
+//   - scope="all" after-hooks run once after every test in LIFO order;
+//     skipped when any test failed unless alwaysRun=true.
+//
+// Hook stdout can be captured into an env var (Hook.CaptureStdout);
+// scope="all" captures live for the whole Run, scope="each" captures
+// live for one test.
 func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally, error) {
 	e.sourcePath = plan.SourcePath
 	names := make([]string, 0, len(plan.Tests))
@@ -317,10 +333,78 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 	}
 	sort.Strings(names)
 
+	// Hook state. scope="all" captures live for the whole Run.
+	runState := make(map[string]string)
+	var beforeAllErr error
+	for _, hname := range sortedScopedHookNames(plan.Before, "all") {
+		h := plan.Before[hname]
+		hr := e.runHook(ctx, "before "+hname, h, runState, plan.Defaults)
+		if hr.Outcome != OutcomePassed {
+			beforeAllErr = fmt.Errorf("before hook %q failed: %s",
+				hname, strings.Join(hr.Reasons, "; "))
+			break
+		}
+		captureHookStdout(h, hr, runState)
+	}
+
 	results := make([]Result, 0, len(names))
 	tally := Tally{}
+	anyTestFailed := false
+
 	for _, name := range names {
-		res := e.runOne(ctx, name, plan.Tests[name], plan.Defaults)
+		if beforeAllErr != nil {
+			res := Result{
+				Name:    name,
+				Outcome: OutcomeErrored,
+				Reasons: []string{beforeAllErr.Error()},
+			}
+			results = append(results, res)
+			tally.Errored++
+			anyTestFailed = true
+			formatResult(e.opts.Stderr, res)
+			continue
+		}
+
+		// Per-test state seeded with run-level captures.
+		testState := make(map[string]string, len(runState))
+		for k, v := range runState {
+			testState[k] = v
+		}
+
+		beforeEachErr := ""
+		for _, hname := range sortedScopedHookNames(plan.Before, "each") {
+			h := plan.Before[hname]
+			hr := e.runHook(ctx, "beforeEach "+hname, h, testState, plan.Defaults)
+			if hr.Outcome != OutcomePassed {
+				beforeEachErr = fmt.Sprintf("beforeEach %q failed: %s",
+					hname, strings.Join(hr.Reasons, "; "))
+				break
+			}
+			captureHookStdout(h, hr, testState)
+		}
+
+		var res Result
+		if beforeEachErr != "" {
+			res = Result{
+				Name:    name,
+				Outcome: OutcomeErrored,
+				Reasons: []string{beforeEachErr},
+			}
+		} else {
+			res = e.runOne(ctx, name, plan.Tests[name], plan.Defaults, testState)
+		}
+
+		// afterEach in LIFO order. Skip when body failed unless alwaysRun.
+		bodyFailed := res.Outcome == OutcomeFailed || res.Outcome == OutcomeErrored
+		afterEachNames := sortedScopedHookNames(plan.After, "each")
+		for i := len(afterEachNames) - 1; i >= 0; i-- {
+			h := plan.After[afterEachNames[i]]
+			if bodyFailed && !h.AlwaysRun {
+				continue
+			}
+			_ = e.runHook(ctx, "afterEach "+afterEachNames[i], h, testState, plan.Defaults)
+		}
+
 		results = append(results, res)
 		switch res.Outcome {
 		case OutcomePassed:
@@ -331,12 +415,103 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 			tally.Pending++
 		case OutcomeErrored:
 			tally.Errored++
+			anyTestFailed = true
 		default:
 			tally.Failed++
+			anyTestFailed = true
 		}
 		formatResult(e.opts.Stderr, res)
 	}
+
+	// afterAll in LIFO order. Skip when the suite had failures unless
+	// alwaysRun. beforeAll failure also counts as "suite failed."
+	suiteFailed := anyTestFailed || beforeAllErr != nil
+	afterAllNames := sortedScopedHookNames(plan.After, "all")
+	for i := len(afterAllNames) - 1; i >= 0; i-- {
+		h := plan.After[afterAllNames[i]]
+		if suiteFailed && !h.AlwaysRun {
+			continue
+		}
+		_ = e.runHook(ctx, "afterAll "+afterAllNames[i], h, runState, plan.Defaults)
+	}
+
 	return results, tally, nil
+}
+
+// sortedScopedHookNames returns the names of `hooks` whose scope
+// matches `scope`, in alphabetical order. Caller iterates the result
+// forward for before-hooks and in reverse for after-hooks.
+func sortedScopedHookNames(hooks map[string]*config.Hook, scope string) []string {
+	out := make([]string, 0, len(hooks))
+	for name, h := range hooks {
+		if h != nil && h.Scope == scope {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// captureHookStdout writes the hook's captured stdout into `state`
+// when CaptureStdout is set. A single trailing newline is trimmed so
+// `$VAR` interpolation produces clean shell-style values.
+func captureHookStdout(h *config.Hook, sr StepResult, state map[string]string) {
+	if h.CaptureStdout == nil || *h.CaptureStdout == "" {
+		return
+	}
+	state[*h.CaptureStdout] = strings.TrimSuffix(sr.Stdout, "\n")
+}
+
+// runHook executes a single Hook and returns a StepResult-shaped
+// outcome. The displayName surfaces the hook's lifecycle role (e.g.
+// "beforeEach pg_up") in stderr; the underlying mechanics are the
+// same as a shell step.
+func (e *Executor) runHook(ctx context.Context, displayName string, h *config.Hook, state map[string]string, defaults *config.Defaults) StepResult {
+	start := time.Now()
+	sr := StepResult{Name: displayName}
+
+	shell := h.Shell
+	if shell == "" && defaults != nil {
+		shell = defaults.Shell
+	}
+	if shell == "" {
+		shell = "bash"
+	}
+
+	out := e.runShell(ctx, runShellInput{
+		Cmd:        h.Cmd,
+		Shell:      shell,
+		Env:        mergeEnv(defaultsEnv(defaults), h.Env, state),
+		Dir:        resolveDir(e.opts.Workdir, h.Workdir),
+		TimeoutSec: h.TimeoutSec,
+	})
+	sr.Duration = time.Since(start)
+	sr.ExitCode = out.ExitCode
+	sr.Stdout = out.Stdout
+	sr.Stderr = out.Stderr
+
+	switch {
+	case out.TimedOut:
+		sr.Outcome = OutcomeErrored
+		sr.Reasons = []string{fmt.Sprintf("timed out after %ds", h.TimeoutSec)}
+	case out.StartErr != nil:
+		sr.Outcome = OutcomeErrored
+		sr.Reasons = []string{fmt.Sprintf("could not start: %v", out.StartErr)}
+	case out.ExitCode != 0:
+		sr.Outcome = OutcomeFailed
+		sr.Reasons = []string{fmt.Sprintf("exit code %d (stderr: %q)", out.ExitCode, out.Stderr)}
+	default:
+		sr.Outcome = OutcomePassed
+	}
+
+	if sr.Outcome != OutcomePassed {
+		fmt.Fprintf(e.opts.Stderr, "[pkt] %s: %s (%s)\n",
+			displayName, sr.Outcome, sr.Duration.Round(time.Millisecond))
+		for _, r := range sr.Reasons {
+			fmt.Fprintf(e.opts.Stderr, "      %s\n", r)
+		}
+	}
+	return sr
 }
 
 // formatResult writes the per-test status line plus any failed-step
@@ -366,7 +541,7 @@ func formatResult(w io.Writer, res Result) {
 	}
 }
 
-func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defaults *config.Defaults) Result {
+func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defaults *config.Defaults, extraEnv map[string]string) Result {
 	start := time.Now()
 
 	if t.Pending {
@@ -410,7 +585,7 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 	passed := 0
 	for attempts < maxAttempts {
 		attempts++
-		last = e.runAttempt(ctx, name, mode, t, defaults)
+		last = e.runAttempt(ctx, name, mode, t, defaults, extraEnv)
 		if last.Outcome == OutcomePassed {
 			passed++
 			break
@@ -445,29 +620,29 @@ func classify(lastOutcome Outcome, attempts, passed int, flakyOK bool) Outcome {
 
 // runAttempt executes one round of the body with a fresh body context
 // so each attempt has its own timeout budget.
-func (e *Executor) runAttempt(ctx context.Context, name string, mode config.Mode, t *config.Test, defaults *config.Defaults) Result {
+func (e *Executor) runAttempt(ctx context.Context, name string, mode config.Mode, t *config.Test, defaults *config.Defaults, extraEnv map[string]string) Result {
 	res := Result{Name: name}
 	bodyCtx, cancel := context.WithTimeout(ctx, time.Duration(t.TimeoutSec)*time.Second)
 	defer cancel()
 	switch mode {
 	case config.ModeCmd:
-		e.runCmd(bodyCtx, name, &res, t, defaults)
+		e.runCmd(bodyCtx, name, &res, t, defaults, extraEnv)
 	case config.ModeSteps:
-		e.runSteps(bodyCtx, &res, t, defaults)
+		e.runSteps(bodyCtx, &res, t, defaults, extraEnv)
 	case config.ModeParallelSteps:
-		e.runParallel(bodyCtx, &res, t, defaults)
+		e.runParallel(bodyCtx, &res, t, defaults, extraEnv)
 	}
 	return res
 }
 
 // ── Body modes ────────────────────────────────────────────────────────
 
-func (e *Executor) runCmd(ctx context.Context, name string, res *Result, t *config.Test, defaults *config.Defaults) {
+func (e *Executor) runCmd(ctx context.Context, name string, res *Result, t *config.Test, defaults *config.Defaults, extraEnv map[string]string) {
 	out := e.runShell(ctx, runShellInput{
 		Cmd:        *t.Cmd,
 		Shell:      t.Shell,
 		Stdin:      t.Stdin,
-		Env:        mergeEnv(defaultsEnv(defaults), t.Env),
+		Env:        mergeEnv(defaultsEnv(defaults), t.Env, extraEnv),
 		Dir:        resolveDir(e.opts.Workdir, t.Workdir),
 		TimeoutSec: t.TimeoutSec,
 	})
@@ -515,8 +690,11 @@ func (e *Executor) runCmd(ctx context.Context, name string, res *Result, t *conf
 	}
 }
 
-func (e *Executor) runSteps(ctx context.Context, res *Result, t *config.Test, defaults *config.Defaults) {
+func (e *Executor) runSteps(ctx context.Context, res *Result, t *config.Test, defaults *config.Defaults, extraEnv map[string]string) {
 	state := make(map[string]string)
+	for k, v := range extraEnv {
+		state[k] = v
+	}
 	failedAlready := false
 
 	for _, step := range t.Steps {
@@ -585,14 +763,20 @@ func (e *Executor) runSteps(ctx context.Context, res *Result, t *config.Test, de
 	res.Outcome = aggregateOutcome(res.Steps)
 }
 
-func (e *Executor) runParallel(ctx context.Context, res *Result, t *config.Test, defaults *config.Defaults) {
+func (e *Executor) runParallel(ctx context.Context, res *Result, t *config.Test, defaults *config.Defaults, extraEnv map[string]string) {
 	results := make([]StepResult, len(t.ParallelSteps))
 	var wg sync.WaitGroup
 	for i, step := range t.ParallelSteps {
 		wg.Add(1)
 		go func(i int, step *config.Step) {
 			defer wg.Done()
-			results[i] = e.runStep(ctx, step, t, defaults, nil)
+			// Each goroutine gets its own copy of the hook captures so
+			// per-step captures (if any) don't leak across siblings.
+			perState := make(map[string]string, len(extraEnv))
+			for k, v := range extraEnv {
+				perState[k] = v
+			}
+			results[i] = e.runStep(ctx, step, t, defaults, perState)
 		}(i, step)
 	}
 	wg.Wait()
