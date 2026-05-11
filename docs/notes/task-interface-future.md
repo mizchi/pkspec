@@ -78,11 +78,13 @@ These are the trade-offs we are knowingly carrying:
 - New built-in kinds require a PR to pkthunder. There is no
   third-party runner registry; an external author who wants `grpc`
   must fork.
-- The `playwright` dispatch is a stub that returns Errored with
-  "not yet implemented." Authors can already write
-  `playwright = new PlaywrightSpec { ... }` and `pkt spec` renders
-  it, but `pkt exec` cannot pass such a Step. The actual Node
-  harness lands in a later phase.
+- ~~The `playwright` dispatch is a stub.~~ The Node harness
+  shipped in phase 18.1. Today: chromium/firefox/webkit launch,
+  script execution, byte-exact screenshot snapshot. Still NOT
+  implemented: pixel-level diff with `thresholdPct` (the field
+  is parsed but compare is byte-exact), and console capture /
+  `expectConsole` (schema slot is reserved). See
+  `docs/notes/playwright.md` for the current authoring contract.
 
 ## Adding a Playwright fixture today
 

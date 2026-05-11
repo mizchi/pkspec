@@ -898,23 +898,6 @@ func validateStepKind(step *config.Step) string {
 	return ""
 }
 
-// runPlaywrightStep is the phase 18 stub. The Pkl schema accepts
-// `playwright = new { ... }`, and fixtures can be authored against
-// it, but the actual Node harness (script spawn, screenshot diff,
-// console capture) lands in a later phase. Returning an errored
-// result with a clear reason lets authors lay out the spec layer
-// without claiming a working implementation.
-func (e *Executor) runPlaywrightStep(_ context.Context, step *config.Step, _ *config.Test, _ *config.Defaults, _ map[string]string) StepResult {
-	name := stepDisplayName(step)
-	return StepResult{
-		Name:    name,
-		Outcome: OutcomeErrored,
-		Reasons: []string{
-			"playwright runner not yet implemented (schema landed in phase 18; runner arrives later)",
-		},
-	}
-}
-
 func stepDisplayName(step *config.Step) string {
 	if step.Name != nil && *step.Name != "" {
 		return *step.Name

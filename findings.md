@@ -5,6 +5,79 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 18.1 — Playwright Node harness ships
+
+- **The stub became the implementation.** Phase 18 landed the Pkl
+  schema (`PlaywrightSpec`, `ScreenshotSnapshot`, `Step.kind`) and
+  a runner stub that returned "not yet implemented." 18.1 fills in
+  the runner: an embedded `.mjs` harness that the Go runner writes
+  to `<workdir>/.pkthunder/playwright-harness-*.mjs`, spawns
+  `node` against, and decodes a JSON response from. Authors can
+  now write `expectScreenshot` and have it actually compare.
+- **Harness must live next to the user's `node_modules`, not in
+  `/tmp`.** First smoke failed: harness in `os.CreateTemp("",...)`
+  → Node ESM resolver starts at the harness file's directory and
+  walks upward looking for `node_modules`. With the harness in
+  `/var/folders/...`, no upward path leads to the user's deps.
+  Fix: write the harness into `<workdir>/.pkthunder/`. Same dir
+  the snapshots / cassettes live in, so users already gitignore
+  it (or commit it intentionally). One MkdirAll on each
+  playwright step.
+- **Per-step Node process, not a long-lived worker.** Each
+  playwright Step spawns one `node` that launches one browser,
+  runs the script, closes the browser. ~250ms startup cost per
+  step. The alternative (worker process pkthunder talks to over
+  stdin/stdout) would amortise startup but couples browser
+  lifetime to runner lifetime, and complicates the "script throws
+  → next step starts clean" guarantee. Took the simpler shape
+  knowing the cost.
+- **Harness `status` field has three values, not two.** Originally
+  was just `ok` / `error`. Split `harness_error` (playwright not
+  installed, browser missing, script path wrong) from `fail`
+  (user script threw) so CI gating can tell environment trouble
+  from a real test failure. The Go runner maps the former to
+  Errored and the latter to Failed — different exit-code
+  implications.
+- **Screenshot compare is byte-exact today; `thresholdPct` is
+  preserved.** `ScreenshotSnapshot` has `thresholdPct: Float =
+  0.5` in the schema; the actual compare is `bytes.Equal`.
+  Mismatch reason surfaces both the saved actual path AND the
+  intended threshold — author sees what was *meant* even though
+  the runner acts on byte-exact. Pixel diff (resemblejs /
+  pixelmatch) is a Node-side concern that wants its own
+  evaluation; chose not to bundle it with the first ship to keep
+  one decision per phase.
+- **Default screenshot when the script does not return one.** If
+  `expectScreenshot` is set but the script returns no
+  `{screenshot: Buffer}`, the harness calls
+  `page.screenshot({fullPage: true})` itself. Lets the
+  simplest case ("render this URL and remember what it looked
+  like") not require any image-handling code in the user script.
+- **Same `--refresh-snapshots` flag drives screenshot refresh.**
+  Considered a separate `--refresh-screenshots` but the
+  semantics are identical (overwrite the committed file from
+  the live capture). Reusing the flag avoids one more knob; if
+  the workflows diverge later, splitting is cheap.
+- **Smoke: 1-line render passed (250ms), `expectScreenshot`
+  first run wrote `hello_h1.png` and failed with "review and
+  commit", second run passed, deliberately mutating the script
+  produced a clean mismatch reason + `hello_h1.png.actual` next
+  to the committed file. All three states (missing / match /
+  mismatch) reachable.
+- **The harness is `embed`-ded, not shipped separately.** Single
+  `pkt` binary, no external assets to install or sync. Trade-off
+  is harness changes require a `pkt` rebuild — fine; the
+  alternative ("look up harness on disk by some path") creates a
+  version drift footgun.
+- **What `docs/notes/playwright.md` covers vs. doesn't.** Wrote
+  the authoring contract (script export shape, page+ctx, return
+  conventions), the screenshot lifecycle, and what's NOT yet
+  built (pixel diff, console capture, network mocking from Pkl).
+  Explicit "what's still missing" section so the next person
+  reading it doesn't think the implementation is done.
+
+---
+
 ## Phase 18 — task-interface bake-off; ship D with A-compatible scaffolding
 
 - **Methodology: 4 design proposals, 3 subagent reviewers, 3
