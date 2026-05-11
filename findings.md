@@ -5,6 +5,78 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 17 — `Test.tags`, spec-tag auto-pending, `pkt spec`
+
+- **`Test.tags: Listing<String>` replaces an enum draft.** First pass
+  was `kind = "spec" | "unit" | "regression"`. Switched to free-form
+  Listing because real tests are multi-axis (a regression check can
+  also be the canonical spec for that behaviour) and because teams
+  invent their own buckets ("smoke", "integration", "perf",
+  "manual") that we shouldn't have to bless centrally. The trade-off
+  is no central consistency check — `"Spec"` and `"spec"` can
+  coexist if no one greps for it. Acceptable; the cost of a typo is
+  low (test misses a filter, gets caught in review) vs. the cost of
+  forcing every team's convention into one enum.
+- **Spec-tag auto-pending.** A test tagged `spec` with no body is
+  treated as pending instead of erroring. Without the tag, an empty
+  body is still an error (`specify exactly one of cmd / steps /
+  parallelSteps`). The tag is the explicit opt-in that says "the
+  expectation lives in the description / inline values, the body
+  comes later." Implementation is one helper, `isTestPending(t)`,
+  used by both the Run filter (so the test reports as pending
+  without invoking per-test hooks) and `runOne` (so the body path
+  short-circuits the same way `pending = true` does).
+- **`--tag` filter on `pkt exec`.** Repeatable, exact-match (not
+  substring — tags are identifiers, not English). ORs within itself,
+  ANDs with `--only`. Combining the two gives "spec items in the
+  billing area" or "regression checks named login_*". The
+  zero-match error message now mentions both filters so the user
+  sees which one excluded everything.
+- **`pkt spec` — static Markdown SPEC.** New subcommand. Takes one
+  or more `Test.pkl` paths, evaluates each via pkl-go, groups by
+  source-directory filesystem layout (`tests/` → `tests/users/` →
+  `tests/billing/`), and renders bullets with description as
+  blockquote + a sub-list of expectation labels. Output goes to
+  stdout by default; `--output SPEC.md` writes atomically (tmp +
+  rename). `--root <dir>` controls the relative path used in
+  section headings.
+- **SPEC is deliberately static.** First sketch had it merge JUnit
+  XML from the last run to mark `[pass]` / `[fail]` per bullet.
+  Dropped: the SPEC is supposed to be the source of truth for
+  *expected* behaviour, not a frozen snapshot of last night's run.
+  Committing a SPEC that includes "this passed at 03:47 UTC last
+  Tuesday" muddies the artifact. If you want CI status, look at
+  CI; if you want the spec, look at SPEC.md.
+- **Checkbox semantics.** `- [ ]` for pending, `- [x]` for active
+  (has a body). This makes the SPEC self-documenting as a punch
+  list: a PR that flips `[ ]` to `[x]` is "the body has been
+  implemented to match the spec." Reviewers don't need to read the
+  diff to know that — the checkbox is the headline.
+- **`internal/spec` is its own package.** Could have gone in
+  `cmd/pkt`, but the renderer has a non-trivial number of
+  branches (mode → expectations → step labels → inline encoding)
+  and benefits from being testable separately. 4 tests cover the
+  interesting paths: tag-filter, auto-pending classification,
+  inline-value quoting, directory grouping.
+- **What we did NOT add: a `description` field.** Already existed
+  (Phase 12 territory). The Phase 17 work just makes use of it.
+  Free win — the rendering picked it up without schema churn.
+- **What we did NOT add: an in-source `describe`/nesting scope.**
+  Same decision as Phase 14 hooks (which mapped onto the flat
+  `before` / `after` Mapping). Filesystem hierarchy + tags cover
+  the two real grouping axes (where the test lives, what kind of
+  test it is) without inventing a third scope inside the module.
+- **Smoke setup, kept ad-hoc.** Built a tmpdir fixture
+  (`tests/Test.pkl` + `tests/users/Test.pkl` + `tests/billing/Test.pkl`),
+  ran `pkt spec` with and without `--tag spec`, then ran
+  `pkt exec` against each module to confirm auto-pending and
+  `--tag` filtering. No script committed — the value is verifying
+  the integration once, not re-running it on every change (unit
+  tests cover the renderer; the integration is implicit in the
+  flag wiring).
+
+---
+
 ## Phase 16 — HTTP record / replay cassettes
 
 - **Snapshot kind 4: HTTP cassette.** Per-Step opt-in via

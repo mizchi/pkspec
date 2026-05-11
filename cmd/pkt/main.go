@@ -26,6 +26,7 @@ import (
 	"github.com/mizchi/pkthunder/internal/config"
 	"github.com/mizchi/pkthunder/internal/executor"
 	"github.com/mizchi/pkthunder/internal/junit"
+	"github.com/mizchi/pkthunder/internal/spec"
 )
 
 const version = "0.0.0"
@@ -53,6 +54,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return cmdRun(args[1:], stdout, stderr)
 	case "exec":
 		return cmdExec(args[1:], stdout, stderr)
+	case "spec":
+		return cmdSpec(args[1:], stdout, stderr)
 	case "--reader-helper":
 		// Hidden mode: pkthunder spawns itself as the external-reader
 		// helper that pkl talks to over msgpack. Users do not invoke
@@ -81,6 +84,10 @@ commands:
   exec -f Test.pkl            load a Test schema module via pkl-go and
                               execute each declared Test as a subprocess;
                               asserts exit code + literal stdout/stderr
+  spec [--tag X]... <path>... render a Markdown SPEC.md from one or more
+                              Test.pkl modules (filesystem-hierarchical;
+                              groups by source directory; --output to
+                              write to a file instead of stdout)
   version                     print pkt version
   help                        show this message
 
@@ -173,6 +180,8 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	junitDir := fs.String("junit-reports", "", "directory to write a JUnit XML report into (filename is <module-basename>.xml)")
 	var only multiString
 	fs.Var(&only, "only", "only run tests whose name contains this substring (repeatable; case-sensitive)")
+	var tags multiString
+	fs.Var(&tags, "tag", "only run tests whose `tags` Listing contains this exact value (repeatable; AND with --only)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -199,6 +208,7 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 		HttpReplayOnly:        *replayOnly,
 		UpdateInlineSnapshots: *updateInline,
 		Only:                  []string(only),
+		Tags:                  []string(tags),
 	})
 	results, tally, err := exe.Run(ctx, plan)
 	if err != nil {
@@ -220,6 +230,77 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	if !tally.IsGreen() {
 		return fmt.Errorf("%d test(s) failed, %d errored", tally.Failed, tally.Errored)
 	}
+	return nil
+}
+
+// cmdSpec renders one or more Test.pkl modules to a Markdown SPEC.
+// Multiple positional args are accepted so a single command can index
+// an entire `tests/` tree (`pkt spec tests/**/*.pkl`). Sections are
+// grouped by source directory relative to --root (default: cwd) so
+// rearranging the file layout updates the document without code
+// changes.
+func cmdSpec(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("pkt spec", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	output := fs.String("output", "", "write the SPEC to this path (default: stdout)")
+	root := fs.String("root", "", "make source paths relative to this directory (default: current dir)")
+	var tags multiString
+	fs.Var(&tags, "tag", "only include tests whose `tags` Listing contains this exact value (repeatable; OR)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	positional := fs.Args()
+	if len(positional) == 0 {
+		return fmt.Errorf("spec needs at least one Test.pkl path")
+	}
+
+	ctx := context.Background()
+	plans := make([]*config.Plan, 0, len(positional))
+	for _, p := range positional {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return err
+		}
+		plan, err := config.Load(ctx, abs)
+		if err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+		plans = append(plans, plan)
+	}
+
+	rootDir := *root
+	if rootDir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		rootDir = cwd
+	} else {
+		abs, err := filepath.Abs(rootDir)
+		if err != nil {
+			return err
+		}
+		rootDir = abs
+	}
+
+	entries := spec.Collect(plans, []string(tags))
+	doc := spec.Render(entries, rootDir)
+
+	if *output == "" {
+		_, err := io.WriteString(stdout, doc)
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(*output), 0o755); err != nil {
+		return err
+	}
+	tmp := *output + ".tmp"
+	if err := os.WriteFile(tmp, []byte(doc), 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, *output); err != nil {
+		return err
+	}
+	fmt.Fprintf(stderr, "pkt: wrote %s (%d entries)\n", *output, len(entries))
 	return nil
 }
 

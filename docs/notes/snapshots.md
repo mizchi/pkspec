@@ -116,6 +116,11 @@ Is the assertion fuzzy (semantic, not byte-exact)?
         └── byte (`expectStdoutSnapshot`)
 ```
 
+A fifth dimension — *what is intended to be checked but not yet
+implemented* — is covered by `tags { "spec" }` + empty body; see
+`docs/notes/spec.md`. The runner reports those as pending and `pkt
+spec` renders them with an unchecked checkbox.
+
 In all three cases the snapshot file (or rewritten source) is part of
 the test contract — commit it. A reviewer reading a change to
 `.pkthunder/snapshots/` or a moved `inlineStdout = "..."` line is the

@@ -102,6 +102,7 @@ type Background struct {
 // Test mirrors `pkthunder.Test#RenderedTest`.
 type Test struct {
 	Description     *string           `pkl:"description"`
+	Tags            []string          `pkl:"tags"`
 	Shell           string            `pkl:"shell"`
 	Env             map[string]string `pkl:"env"`
 	Workdir         *string           `pkl:"workdir"`

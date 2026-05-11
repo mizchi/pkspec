@@ -145,6 +145,11 @@ type Options struct {
 	// substring (not regex) — matching `vitest -t` rather than
 	// `go test -run`.
 	Only []string
+	// Tags restricts the run to tests whose `tags` Listing contains
+	// any of these exact strings. Empty slice means "no tag filter".
+	// Combines (AND) with Only: `--only login --tag spec` selects the
+	// intersection.
+	Tags []string
 	// RefreshHttp forces every HTTP step with a `cassette` to redispatch
 	// the live request and rewrite the cassette, regardless of whether
 	// the current cassette key matches. Mirrors --refresh-ai.
@@ -330,14 +335,14 @@ func (t Tally) IsGreen() bool { return t.Failed == 0 && t.Errored == 0 }
 func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally, error) {
 	e.sourcePath = plan.SourcePath
 	names := make([]string, 0, len(plan.Tests))
-	for n := range plan.Tests {
-		if matchesAny(n, e.opts.Only) {
+	for n, t := range plan.Tests {
+		if matchesAny(n, e.opts.Only) && matchesAnyTag(t.Tags, e.opts.Tags) {
 			names = append(names, n)
 		}
 	}
-	if len(e.opts.Only) > 0 && len(names) == 0 {
-		return nil, Tally{}, fmt.Errorf("--only %v matched no tests (have: %v)",
-			e.opts.Only, sortedKeys(plan.Tests))
+	if (len(e.opts.Only) > 0 || len(e.opts.Tags) > 0) && len(names) == 0 {
+		return nil, Tally{}, fmt.Errorf("--only %v / --tag %v matched no tests (have: %v)",
+			e.opts.Only, e.opts.Tags, sortedKeys(plan.Tests))
 	}
 	sort.Strings(names)
 
@@ -377,7 +382,10 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 		// tracked gap, not work to do; running TRUNCATEs / seeds /
 		// cleanup for a test whose body never executes is wasted at
 		// best and surprising at worst. Mirrors vitest's `it.skip`.
-		if plan.Tests[name].Pending {
+		// A test tagged "spec" with no body is also pending — spec
+		// tag is the opt-in that says "the expectation is the doc;
+		// the body comes later."
+		if isTestPending(plan.Tests[name]) {
 			res := Result{Name: name, Outcome: OutcomePending}
 			results = append(results, res)
 			tally.Pending++
@@ -564,7 +572,7 @@ func formatResult(w io.Writer, res Result) {
 func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defaults *config.Defaults, extraEnv map[string]string) Result {
 	start := time.Now()
 
-	if t.Pending {
+	if isTestPending(t) {
 		// Skip body, background, retry — the whole envelope. Pending
 		// is a tracked gap, not a runtime concern.
 		return Result{
@@ -1852,6 +1860,49 @@ func matchesAny(name string, patterns []string) bool {
 		if strings.Contains(name, p) {
 			return true
 		}
+	}
+	return false
+}
+
+// hasTag reports whether tags contains the given value. Case-sensitive
+// — tags are author-defined identifiers, not English words.
+func hasTag(tags []string, want string) bool {
+	for _, t := range tags {
+		if t == want {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesAnyTag reports whether tags overlaps with patterns. An empty
+// patterns slice matches everything (filter inactive); an empty tags
+// slice on a test never matches a non-empty filter. Exact-match (no
+// substring / regex) — tag values are short identifiers.
+func matchesAnyTag(tags, patterns []string) bool {
+	if len(patterns) == 0 {
+		return true
+	}
+	for _, p := range patterns {
+		if hasTag(tags, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// isTestPending reports whether the test should be reported as pending
+// without running its body. True for an explicit `pending = true`, and
+// also true for a test tagged "spec" with no body — the spec tag is the
+// opt-in that says "the expectation is the doc, the body comes later."
+// Without that tag, an empty body is still an authoring error so we
+// don't silently mask it.
+func isTestPending(t *config.Test) bool {
+	if t.Pending {
+		return true
+	}
+	if hasTag(t.Tags, "spec") && t.Mode() == config.ModeInvalid {
+		return true
 	}
 	return false
 }

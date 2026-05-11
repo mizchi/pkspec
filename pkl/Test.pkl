@@ -229,6 +229,19 @@ class Test {
   name: String(matches(Regex(#"^[a-zA-Z][a-zA-Z0-9_:.\-/ ]*$"#)))
   description: String? = null
 
+  /// Free-form classification tags. Used by `pkt exec --tag <name>` to
+  /// filter the run set and by `pkt spec` to group tests in the
+  /// generated SPEC. Conventional values: "spec" (high-level behaviour
+  /// to verify against the implementation), "unit" (small deterministic
+  /// check), "regression" (pinned around a fixed bug). Authors may
+  /// introduce other tags; the runner stores them verbatim.
+  ///
+  /// A test with the "spec" tag and no body (no `cmd`, no `steps`, no
+  /// `parallelSteps`) is automatically treated as pending — the
+  /// expected behaviour is documented via `description` and any
+  /// `inlineStdout` / `expect*` fields, the body is filled in later.
+  tags: Listing<String> = new {}
+
   shell: String = "bash"
   env: Mapping<String, String> = new {}
   workdir: String? = null
@@ -402,6 +415,7 @@ class RenderedSnapshot {
 
 class RenderedTest {
   description: String?
+  tags: Listing<String>
   shell: String
   env: Mapping<String, String>
   workdir: String?
@@ -528,6 +542,7 @@ local function renderBackground(b: Background): RenderedBackground = new {
 // cycle, but in practice generators are leaf shell invocations).
 local function renderTest(t: Test): RenderedTest = new {
   description = t.description
+  tags = t.tags
   shell = t.shell
   env = t.env
   workdir = t.workdir
