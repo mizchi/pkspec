@@ -5,6 +5,70 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 19.1 — Mixed-kind parallel smoke
+
+- **Question.** Phase 18.2 verified parallel playwright steps;
+  phase 19 added a fourth kind (`playwright-test`). Do all four
+  kinds (shell + http + playwright + playwright-test) actually
+  compose under `Test.parallelSteps` without dispatch / aggregate
+  surprises? Same Test.steps story for the sequential path?
+- **Smoke shape.** Three-kind fixture: a `sleep 0.3 && echo` shell
+  step, a one-line playwright Page render, a 2-test
+  @playwright/test spec. Same three steps run twice — once in
+  `steps` (sequential), once in `parallelSteps` (parallel). Same
+  config files, same Test.pkl, just the field swap. No http step
+  (would need a backgrounded server; cassettes / mocking is
+  separately validated, and the dispatch path doesn't care which
+  non-playwright kind sits next to playwright-test).
+- **Happy path: both passed, parallel saves ~220ms.** Sequential
+  1.405s, parallel 1.182s. The parallel speedup is modest because
+  playwright-test (~1s for browser launch + 2 tests) dominates;
+  shell and lightweight playwright hide behind it. Useful data
+  point: for fixtures whose dominant step is playwright-test, the
+  parallel-vs-sequential decision is marginal. Where the
+  speedup actually matters is fixtures with multiple
+  playwright-test steps or 5+ same-cost steps.
+- **Partial fail behaves identically across kinds.** Mutated the
+  @playwright/test spec to introduce one failing inner test;
+  ran parallel and sequential. Both surfaced "[pkt]
+  <test>: failed" + "step \"playwright-test\": failed" with the
+  inner test's name + message; shell and playwright stayed
+  silent (passed-step suppression). The reporter doesn't
+  special-case any kind — it's all the same StepResult flow
+  from phase 18.
+- **Sequential 3rd-step-failure does NOT skip earlier passes.**
+  Phase 18.2 noted "first failure skips the rest" for
+  sequential. Confirmed the symmetric: if the 3rd step is the
+  one that fails, the 1st and 2nd run to completion and report
+  passed; only steps *after* the failure get skipped. Obvious
+  in retrospect but worth pinning — the sequential mode's
+  fail-fast cuts the tail, not the head.
+- **playwright-test's auto-retry on locator assertions extends
+  failure duration.** Observed 6s+ wall time for the failing
+  case vs ~1s for the all-pass case. playwright-test default
+  expect-timeout is 5s and `toHaveText` auto-retries during
+  that window. pkt's `timeoutSec` on the Step is unchanged
+  (still 120s wide), so we're not clamping; the time is spent
+  inside playwright-test waiting for the assertion to
+  eventually become true. Authoring implication: a *failing*
+  playwright-test step is slow by default; either set
+  `expect.timeout` in `playwright.config.ts` to something lower
+  or accept the wall-clock cost on red runs.
+- **No code changes.** Same conclusion as phase 18.2: the kind
+  dispatch design carries new kinds without special-casing the
+  parallel scheduler. Validates the "two-hedge D" choice
+  again — `kind: String` discriminator + `validateStepKind`
+  rules + per-kind runner files = clean composition under
+  parallelSteps.
+- **What's NOT validated.** Heavy mixed fanout (10+ mixed
+  steps) — limited by chromium memory, untested. Mixed-kind
+  with `Step.eventually` polling — the polling wraps
+  runStepOnce so should work for any kind, but no smoke yet.
+  http kind in mixed parallel — would need a backgrounded
+  server in the fixture; left out for cost.
+
+---
+
 ## Phase 19 — `playwrightTest` kind: @playwright/test wrapper
 
 - **Why add a second playwright kind instead of extending the first.**
