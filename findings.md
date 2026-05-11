@@ -5,6 +5,86 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 20.2 — 4-way mixed parallel smoke (shell + http + playwright + playwright-test)
+
+- **Question.** Phase 19.1 covered shell + playwright + playwright-test
+  (3 kinds). The 4th built-in kind, http, was left out then because
+  a backgrounded server complicated the fixture. Filled the gap.
+- **Smoke shape.** `python3 -m http.server`-style minimal Python
+  responder backgrounded in pkt, then a single Test with a
+  4-element parallelSteps: shell (`echo shell done`), http (GET +
+  `expectBodyJsonPath`), playwright (page.goto the local server),
+  playwright-test (one spec hitting the local server).
+- **Result.** 1.294s wall time, all four passed. Same shape as
+  phase 19.1: playwright-test (~1s) dominates, the other three
+  hide behind it. No kind cross-talk, no dispatch ordering
+  surprises, no harness contention.
+- **The `background` infrastructure carried the http server.**
+  Phase 4-era `background { readyProbe = ... }` was the natural
+  fit — the server boots once per Test, gets a readiness probe
+  (`curl -fs http://...`), then the parallelSteps fan out
+  against it. Same `defer` cleanup kills the server when the
+  Test body finishes.
+- **No code changes.** Same conclusion as phase 19.1: the
+  "kind-uniform dispatch + per-kind runner" pattern composes
+  cleanly. Added 0 lines; closed the matrix gap.
+
+---
+
+## Phase 20.1 — Heavy fanout: how high can `parallelSteps` go?
+
+- **Question.** Phase 18.2 showed 3-way parallel playwright at
+  2.23x speedup. Where does the linear regime end? At what
+  fanout does pkt or chromium start losing? Mac, Apple Silicon,
+  9-core M-class CPU.
+- **Smoke shape.** `Test.parallelSteps` with N identical
+  playwright steps (each a 1-line setContent / no screenshot),
+  N ∈ {1, 3, 5, 10, 20, 30}. Each step's script is independent;
+  no shared state, no cross-step capture.
+
+  | N | wall time | scaling vs N=1 |
+  | --- | --- | --- |
+  | 1 | 436ms | 1.0× |
+  | 3 | 356ms | 3.7× faster than 3×serial |
+  | 5 | 472ms | 4.6× faster |
+  | 10 | 893ms | 4.9× faster |
+  | 20 | 1.944s | 4.5× faster |
+  | 30 | 2.88s | 4.5× faster |
+
+- **The knee is around N=10.** Below 10, near-linear speedup.
+  Above 10, total time grows ~linearly with N (CPU bound).
+  Apple Silicon M-class has ~10 high-performance cores
+  effectively available to user processes; the math lines up.
+  On a 4-core machine the knee would be earlier (~4-5).
+- **Memory: pkt's resident set stays small.** Maximum RSS:
+  ~175MB at N=20, ~177MB at N=30. The pkt process itself is
+  ~10MB; the additional ~165MB is the supervised browser
+  processes' shared text + accounting. chromium is its own
+  process tree, so its memory doesn't pile onto pkt's
+  page table. On a machine with limited RAM the actual cap
+  is "how many chromium can the OS keep resident,"
+  measured separately (Activity Monitor / ps).
+- **No crashes, no timeouts, no resource contention seen.**
+  30 concurrent chromium launches all completed successfully.
+  Each `Browser.close()` fires from the harness's `finally`
+  before the harness process exits, so file descriptors and
+  child-process accounting clean up promptly.
+- **Authoring recommendation.** parallelSteps with 5-10 mixed
+  steps is the sweet spot. Above 10 you pay CPU but still
+  get throughput; above 20 the marginal step is purely
+  serial-equivalent. CI runners with fewer cores should plan
+  the parallel width around their core count, not their
+  fixture count.
+- **What this does NOT test.** Same-time-step fixtures that
+  share filesystem state (e.g., 10 steps writing to the same
+  log file) — that's an authoring problem, not a pkt
+  problem; pkt's job is to dispatch the goroutines, the
+  steps handle their own state. Crash-mid-step cleanup
+  (`SIGKILL` on a running chromium) — left as an "open
+  question" from 18.2; not validated here either.
+
+---
+
 ## Phase 20 — `expectConsole`: console assertion for the playwright kind
 
 - **Closes the last open feature for the `playwright` kind.**
