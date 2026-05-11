@@ -5,6 +5,77 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 18.2 — Playwright runner parallel validation
+
+- **Question.** Phase 18.1 verified the runner against a single
+  playwright step. Does it survive `parallelSteps` with multiple
+  playwright steps fanned out concurrently — both correctness and
+  timing? Side-question: does the harness file management work
+  under concurrent writes (each step's CreateTemp + defer Remove)?
+- **Smoke shape.** Built a fixture with two Tests, one
+  `steps` (3 playwright steps sequential) and one `parallelSteps`
+  (same 3 scripts in parallel). Each step ran a different
+  `page$N.mjs` rendering distinct content and produced an
+  independent `<name>.png` snapshot. Real chromium launches —
+  no mocking.
+- **Timing: 2.23x speedup with 3 parallel steps.** Sequential
+  three-step run: 749ms. Parallel three-step run: 336ms. The
+  theoretical ceiling is 3x (perfect parallelism), but browser
+  launch isn't free of cross-process contention — sustaining
+  ~2.2x on a 3-way fan-out is the expected real-world number.
+  Useful data point for sizing: a 12-step browser suite goes
+  from ~3s sequential to ~1.4s parallel on this machine.
+- **State isolation: per-step browser context truly is per-step.**
+  Three different scripts rendered into three different PNGs:
+  shas `ddcbf...`, `a95ce...`, `730e5...` (no two match). The
+  same script run inside `steps` and inside `parallelSteps`
+  produced byte-identical PNGs (`par_p1 == seq_p1`), so neither
+  scheduling mode introduces non-determinism. State isolation
+  comes for free from `browser.newContext()` per spawn — we
+  didn't need to wire anything special.
+- **Partial failure is clean.** Mutated only `page2.mjs`, ran
+  `--only parallel`. Result: `parallel_three: failed (490ms)`
+  with one step's mismatch detail (`p2`) and the other two
+  silent. `par_p2.png.actual` written next to `par_p2.png`;
+  `par_p1` / `par_p3` produced no `.actual` files. The reporter
+  surfacing failed-only is the same `formatResult` from phase
+  13; the new playwright runner slots in without special-casing.
+- **Harness drops cleaned up.** Each playwright step writes
+  `<workdir>/.pkthunder/playwright-harness-XXXXXX.mjs`, defers
+  `os.Remove`. After all runs: zero `.mjs` files left in
+  `.pkthunder/`. The `CreateTemp` random-suffix means concurrent
+  writes don't collide even when three goroutines hit the same
+  `MkdirAll` + create within microseconds of each other.
+- **Sequential's "skip rest on first failure" surfaced here.**
+  Side observation: when the first sequential playwright step
+  fails (snapshot first-write), the remaining steps are
+  `skipped`. Authoring implication: a sequential run with 3
+  fresh `expectScreenshot` slots needs 3 separate `pkt exec`
+  invocations to commit them all (one per pass through the
+  pipeline). Parallel runs commit all snapshots in one shot
+  because each step runs regardless of siblings' results. Not
+  a bug, but worth knowing — a fixture migrating to lots of
+  screenshot snapshots benefits more from `parallelSteps` than
+  the timing alone implies.
+- **What this validates for the kind=playwright design.** The
+  Phase 18 "shell vs http vs playwright as flat slots" model
+  pays off here: parallel dispatch is a property of `Test.parallelSteps`,
+  not of the runner. Mixing playwright with shell or http steps
+  in the same `parallelSteps` would work the same way — each
+  goroutine takes the kind switch in `runStepOnce` and lands in
+  the right runner. No need to teach the parallel scheduler
+  about browsers.
+- **What we did NOT validate.** Heavy-fanout (10+ playwright
+  steps concurrent) — likely hits machine resource limits
+  (memory per chromium ~200MB+) before any pkthunder bug
+  surfaces. Mixed-kind parallel (shell + http + playwright in
+  one parallelSteps) — should work by construction but wasn't
+  smoked. Crashed browser cleanup — if a `node` subprocess
+  segfaults mid-run, does the deferred `browser.close()` still
+  fire? Open question.
+
+---
+
 ## Phase 18.1 — Playwright Node harness ships
 
 - **The stub became the implementation.** Phase 18 landed the Pkl
