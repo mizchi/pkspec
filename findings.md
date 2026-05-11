@@ -5,6 +5,82 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 19.3 — Pixel diff in the playwright harness
+
+- **Closes a TODO from phase 18.1.** `thresholdPct` was parsed
+  by the schema but ignored by the runner (compare was byte-
+  exact). 19.3 wires pixelmatch into the harness so the
+  threshold actually gates pass/fail.
+- **Where the diff is computed.** Node side, inside the harness.
+  Go reads the baseline PNG (when one exists and refresh is
+  not requested) and forwards it base64-encoded in the cfg
+  JSON; the harness tries to `import('pixelmatch')` and
+  `import('pngjs')`, and if both load, it decodes baseline +
+  actual, runs `pixelmatch(...)` with `threshold: 0.1`, and
+  returns `diffPct` + a base64 diff PNG. Go compares `diffPct`
+  against `thresholdPct`, writes `.actual` and `.diff` files
+  on mismatch.
+- **Why Node-side, not Go-side.** Go has pixel-diff libraries
+  (orisano/pixelmatch) but the harness already runs Node, and
+  pixelmatch is the npm-ecosystem canonical. Threading two
+  diff implementations (one in Go, one referenced from the
+  docs) is the kind of micro-fragmentation that ages badly.
+  Node-side keeps the playwright concerns in one process.
+- **pixelmatch is an *optional* dep.** The harness uses
+  `loadPixelmatch()` which catches the import failure and
+  returns null. Without pixelmatch, the runner falls back to
+  byte-exact compare — same behaviour as phase 18.1, with a
+  mismatch reason that names the install command. This means:
+  (a) existing users on byte-exact aren't broken; (b) anyone
+  who wants real pixel diff runs `pnpm add -D pixelmatch
+  pngjs` once. No flag to enable, no version coupling between
+  pkt and pixelmatch.
+- **Size mismatch is handled.** If baseline and actual
+  dimensions differ (someone changed the viewport, or the
+  page reflowed), `pixelmatch` would throw. The harness
+  catches that case explicitly and returns `diffPct = 100`
+  plus a `diffSizeMismatch` record. Go reports it as failed
+  with the diff% over threshold and the actual/diff files
+  written.
+- **Smoke: 5 scenarios, all green.**
+  (1) First run (no baseline) → write initial, Failed with
+  review-and-commit (unchanged from 18.1).
+  (2) Same content → diffPct = 0 → Passed.
+  (3) Mutated content + threshold 0% → diff 1.23% > 0% →
+  Failed with diff%, threshold, `.actual` + `.diff` paths.
+  (4) Same mutation + threshold 10% → 1.23% ≤ 10% → Passed.
+  (5) pixelmatch uninstalled + mutation → byte-exact fallback
+  Failed with install hint.
+- **The diff visualisation is a real artifact.** `<name>.png.diff`
+  is the pixelmatch red-marked diff image. Reviewers can open
+  it next to `<name>.png` and `<name>.png.actual` to see
+  exactly which pixels changed — much faster than re-running
+  with a debugger. This is essentially the same workflow
+  `@playwright/test` gives you in `test-results/`, but for
+  the lightweight `playwright` kind.
+- **Threshold semantics: percentage of pixels that differ.**
+  Not "% of color difference per pixel" — pixelmatch's
+  internal `threshold: 0.1` setting is what controls per-
+  pixel sensitivity (how much RGB delta counts as "different").
+  We hold that fixed and expose the *count* threshold
+  (`thresholdPct`) to the user. This is the right axis for
+  most use cases: "tolerate up to 0.5% pixel drift" is what
+  font anti-aliasing tolerance looks like.
+- **Refresh path bypass.** When `--refresh-snapshots` is set,
+  Go does NOT read or send the baseline — the baseline is
+  about to be overwritten anyway. This keeps refresh
+  semantically clean (the new PNG is the new truth, no
+  comparison happens) and avoids a wasted read.
+- **What the docs now say.** `docs/notes/playwright.md` got
+  the 5-row state table (missing/match-pixel/diff-pixel/
+  match-byte/diff-byte) and the pixelmatch install
+  instruction. `task-interface-future.md` had the "still NOT
+  implemented" entry for pixel diff struck through; only
+  `expectConsole` remains in the not-implemented list for
+  the `playwright` kind.
+
+---
+
 ## Phase 19.2 — `eventually` × playwright kind smoke
 
 - **Question.** `runStepEventually` polls `runStepOnce` until pass

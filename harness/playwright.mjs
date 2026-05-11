@@ -38,6 +38,18 @@ async function loadPlaywright() {
   }
 }
 
+async function loadPixelmatch() {
+  try {
+    const [pm, pngMod] = await Promise.all([
+      import('pixelmatch'),
+      import('pngjs'),
+    ]);
+    return { pixelmatch: pm.default ?? pm, PNG: pngMod.PNG ?? pngMod.default?.PNG };
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   const cfg = await readStdin();
   if (!cfg.scriptPath) throw new Error('config.scriptPath is required');
@@ -85,6 +97,44 @@ async function main() {
         shot = await page.screenshot({ fullPage: true });
       }
       output.screenshotBase64 = Buffer.from(shot).toString('base64');
+
+      // Optional pixel diff: if Go sent a baseline AND pixelmatch is
+      // available, compute the per-pixel diff% so Go can compare it
+      // against `thresholdPct`. Without pixelmatch installed, Go
+      // falls back to byte-exact (its existing behaviour).
+      if (cfg.expectScreenshotBaseline) {
+        const pm = await loadPixelmatch();
+        if (pm) {
+          try {
+            const baselineBuf = Buffer.from(cfg.expectScreenshotBaseline, 'base64');
+            const actualBuf = Buffer.from(shot);
+            const baselinePng = pm.PNG.sync.read(baselineBuf);
+            const actualPng = pm.PNG.sync.read(actualBuf);
+            if (baselinePng.width === actualPng.width && baselinePng.height === actualPng.height) {
+              const diffPng = new pm.PNG({ width: baselinePng.width, height: baselinePng.height });
+              const diffPixels = pm.pixelmatch(
+                baselinePng.data,
+                actualPng.data,
+                diffPng.data,
+                baselinePng.width,
+                baselinePng.height,
+                { threshold: 0.1 }
+              );
+              const total = baselinePng.width * baselinePng.height;
+              output.diffPct = total > 0 ? (diffPixels / total) * 100 : 0;
+              output.diffPng = pm.PNG.sync.write(diffPng).toString('base64');
+            } else {
+              output.diffPct = 100;
+              output.diffSizeMismatch = {
+                baseline: { w: baselinePng.width, h: baselinePng.height },
+                actual: { w: actualPng.width, h: actualPng.height },
+              };
+            }
+          } catch (e) {
+            output.diffError = (e.stack || e.message || String(e)).slice(0, 800);
+          }
+        }
+      }
     }
     if (result && typeof result.output === 'string') {
       output.text = result.output;

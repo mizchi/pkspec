@@ -79,12 +79,13 @@ These are the trade-offs we are knowingly carrying:
   third-party runner registry; an external author who wants `grpc`
   must fork.
 - ~~The `playwright` dispatch is a stub.~~ The Node harness
-  shipped in phase 18.1. Today: chromium/firefox/webkit launch,
-  script execution, byte-exact screenshot snapshot. Still NOT
-  implemented: pixel-level diff with `thresholdPct` (the field
-  is parsed but compare is byte-exact), and console capture /
-  `expectConsole` (schema slot is reserved). See
-  `docs/notes/playwright.md` for the current authoring contract.
+  shipped in phase 18.1; pixel diff via pixelmatch shipped in
+  phase 19.3. Today: chromium/firefox/webkit launch, script
+  execution, pixel-level screenshot diff with `thresholdPct`
+  (falls back to byte-exact when pixelmatch isn't installed).
+  Still NOT implemented: console capture / `expectConsole`
+  (schema slot is reserved). See `docs/notes/playwright.md`
+  for the current authoring contract.
 
 ## Adding a Playwright fixture today
 

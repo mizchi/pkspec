@@ -94,20 +94,32 @@ layout — avoid them.
 
 ## Screenshot snapshots
 
-Stored at `<workdir>/.pkthunder/screenshots/<name>.png`. The
-runner does byte-exact compare today; pixel-level diff with
-`thresholdPct` is on the roadmap but not implemented. The
-`thresholdPct` value is preserved in the schema and surfaces in
-the mismatch reason so authors see what was *intended* even
-though the current implementation acts on byte-exact.
+Stored at `<workdir>/.pkthunder/screenshots/<name>.png`.
 
-Three outcomes:
+Compare mode is decided at runtime by what's in the user's
+`node_modules`:
+
+- `pixelmatch` + `pngjs` installed → pixel-level diff%, compared
+  against `thresholdPct` from the schema. Mismatch writes both
+  `<name>.png.actual` and `<name>.png.diff` (red overlay PNG).
+- Either dependency missing → byte-exact fallback (the phase
+  18.1 behaviour). Mismatch reason includes the install hint.
+
+Install both with:
+
+```sh
+pnpm add -D pixelmatch pngjs
+```
+
+Five outcomes:
 
 | state | runner action | result |
 | --- | --- | --- |
 | snapshot file missing | write actual to `<name>.png` | Failed with "wrote initial — review and commit" |
-| byte-exact match | nothing | Passed |
-| byte mismatch | write actual to `<name>.png.actual` | Failed with mismatch reason |
+| pixelmatch, diff ≤ threshold | nothing | Passed |
+| pixelmatch, diff > threshold | write `<name>.png.actual` + `<name>.png.diff` | Failed with diff%, threshold, file paths |
+| byte-exact (no pixelmatch), match | nothing | Passed |
+| byte-exact (no pixelmatch), mismatch | write `<name>.png.actual` | Failed with install hint |
 
 `pkt exec --refresh-snapshots` reuses the same flag that drives
 `expectStdoutSnapshot` / `expectStderrSnapshot` refresh, and
@@ -172,8 +184,6 @@ identical on every attempt.
 
 ## What's NOT yet implemented
 
-- Pixel-level diff (`thresholdPct` is parsed but the compare is
-  byte-exact).
 - Console message capture / `expectConsole` (schema slot
   reserved; harness does not yet stream `page.on('console', ...)`
   back to Go).
