@@ -813,6 +813,18 @@ func (e *Executor) runParallel(ctx context.Context, res *Result, t *config.Test,
 }
 
 func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
+	// Kind-incompatible expectations are a configuration error, not a
+	// transient assertion. Catch them once at the runStep entry so
+	// `eventually` cannot retry the same authoring mistake — the
+	// error message is identical on every attempt, and waiting
+	// timeoutSec to surface it is purely waste.
+	if reason := validateStepKind(step); reason != "" {
+		return StepResult{
+			Name:    stepDisplayName(step),
+			Outcome: OutcomeErrored,
+			Reasons: []string{reason},
+		}
+	}
 	if step.Eventually == nil {
 		return e.runStepOnce(ctx, step, t, defaults, state)
 	}
@@ -829,13 +841,9 @@ func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Tes
 // validation rules become subclass-private; today they sit in one
 // switch and prevent authoring mistakes early.
 func (e *Executor) runStepOnce(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
-	if reason := validateStepKind(step); reason != "" {
-		return StepResult{
-			Name:    stepDisplayName(step),
-			Outcome: OutcomeErrored,
-			Reasons: []string{reason},
-		}
-	}
+	// Validation is performed once in runStep before dispatch / polling;
+	// runStepEventually's inner loop calls runStepOnce directly and
+	// relies on that earlier gate.
 	switch step.Kind {
 	case "http":
 		return e.runHttpStep(ctx, step, t, defaults, state)
