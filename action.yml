@@ -1,0 +1,170 @@
+name: Setup pkspec
+description: Install the pkspec test runner and the Pkl CLI on the runner.
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  version:
+    description: |
+      pkspec version to install. Accepts a release tag such as `v0.1.1`,
+      a bare semver `0.1.1`, the floating major `v0`, or `latest`.
+      When empty, the action reads its own ref (so pinning via
+      `mizchi/pkspec@v0.1.1` or `@v0` just works) and falls back to the
+      latest published release.
+    required: false
+    default: ""
+  pkl-version:
+    description: Pkl CLI version to install. Set to `none` to skip Pkl install.
+    required: false
+    default: "0.31.1"
+  setup-go:
+    description: Install the Go toolchain needed for `go install`.
+    required: false
+    default: "true"
+  install-dir:
+    description: Directory where binaries are placed. Added to GITHUB_PATH.
+    required: false
+    default: ${{ runner.temp }}/pkspec-bin
+  init-schema-dir:
+    description: Optional directory where `pkspec init --dir` writes Pkl schemas.
+    required: false
+    default: ""
+  init-force:
+    description: Pass `--force` when `init-schema-dir` is set.
+    required: false
+    default: "false"
+  cache-pkl:
+    description: |
+      When `true`, cache `~/.pkl/cache` between runs via
+      `actions/cache@v4`. Default `false` because local schemas avoid
+      most remote Pkl package fetches.
+    required: false
+    default: "false"
+  pkl-cache-key:
+    description: |
+      Override the cache key used when `cache-pkl: true`. Default is
+      `pkl-<hashFiles('**/PklProject.deps.json', '**/*.pkl')>`.
+    required: false
+    default: ""
+
+outputs:
+  version:
+    description: Resolved pkspec version installed by the action.
+    value: ${{ steps.resolve.outputs.version }}
+  install-dir:
+    description: Directory added to PATH.
+    value: ${{ inputs.install-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve version and platform
+      id: resolve
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        latest() {
+          curl -fsSL https://api.github.com/repos/mizchi/pkspec/releases/latest \
+            | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
+            | head -n1
+        }
+
+        latest_major() {
+          local major="$1"
+          curl -fsSL https://api.github.com/repos/mizchi/pkspec/releases \
+            | sed -n 's/.*"tag_name": *"\(v'"$major"'\.[^"]*\)".*/\1/p' \
+            | head -n1
+        }
+
+        normalize() {
+          local raw="$1"
+          case "$raw" in
+            "" | main | master) echo ""; return ;;
+            latest) latest; return ;;
+            v[0-9]*.[0-9]*.[0-9]*) echo "$raw"; return ;;
+            [0-9]*.[0-9]*.[0-9]*) echo "v$raw"; return ;;
+            v[0-9]*) latest_major "${raw#v}"; return ;;
+            *) echo "$raw"; return ;;
+          esac
+        }
+
+        version="$(normalize "${{ inputs.version }}")"
+        if [ -z "$version" ]; then
+          version="$(normalize "${{ github.action_ref }}")"
+        fi
+        if [ -z "$version" ]; then
+          version="$(latest)"
+        fi
+        if [ -z "$version" ]; then
+          echo "::error::could not resolve a pkspec version (input/ref/latest all came up empty)"
+          exit 1
+        fi
+
+        case "${RUNNER_OS}-${RUNNER_ARCH}" in
+          Linux-X64)   pkl_plat=linux-amd64 ;;
+          Linux-ARM64) pkl_plat=linux-aarch64 ;;
+          macOS-ARM64) pkl_plat=macos-aarch64 ;;
+          macOS-X64)   pkl_plat=macos-amd64 ;;
+          *)
+            echo "::error::unsupported runner ${RUNNER_OS}-${RUNNER_ARCH}"
+            exit 1
+            ;;
+        esac
+
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "pkl_plat=$pkl_plat" >> "$GITHUB_OUTPUT"
+        echo "::notice::installing pkspec $version"
+
+    - name: Setup Go
+      if: inputs.setup-go == 'true'
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache: false
+
+    - name: Install pkspec
+      shell: bash
+      run: |
+        set -euo pipefail
+        dir="${{ inputs.install-dir }}"
+        mkdir -p "$dir"
+        GOBIN="$dir" go install "github.com/mizchi/pkspec/cmd/pkspec@${{ steps.resolve.outputs.version }}"
+        echo "$dir" >> "$GITHUB_PATH"
+
+    - name: Install Pkl CLI
+      if: inputs.pkl-version != 'none'
+      shell: bash
+      run: |
+        set -euo pipefail
+        dir="${{ inputs.install-dir }}"
+        mkdir -p "$dir"
+        url="https://github.com/apple/pkl/releases/download/${{ inputs.pkl-version }}/pkl-${{ steps.resolve.outputs.pkl_plat }}"
+        curl -fsSL -o "$dir/pkl" "$url"
+        chmod +x "$dir/pkl"
+
+    - name: Smoke-test
+      shell: bash
+      run: |
+        set -euo pipefail
+        export PATH="${{ inputs.install-dir }}:$PATH"
+        pkspec version
+        if [ "${{ inputs.pkl-version }}" != "none" ]; then
+          pkl --version
+        fi
+        if [ -n "${{ inputs.init-schema-dir }}" ]; then
+          args=(init --dir "${{ inputs.init-schema-dir }}")
+          if [ "${{ inputs.init-force }}" = "true" ]; then
+            args+=(--force)
+          fi
+          pkspec "${args[@]}"
+        fi
+
+    - name: Cache ~/.pkl/cache
+      if: inputs.cache-pkl == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.pkl/cache
+        key: ${{ inputs.pkl-cache-key != '' && inputs.pkl-cache-key || format('pkl-{0}', hashFiles('**/PklProject.deps.json', '**/*.pkl')) }}
+        restore-keys: pkl-

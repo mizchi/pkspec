@@ -1,0 +1,61 @@
+name: Action
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "action.yml"
+      - "go.mod"
+      - "go.sum"
+      - "cmd/**"
+      - "harness/**"
+      - "internal/**"
+      - "pkl/**"
+      - "*.go"
+      - ".github/workflows/action.yml"
+  pull_request:
+    paths:
+      - "action.yml"
+      - "go.mod"
+      - "go.sum"
+      - "cmd/**"
+      - "harness/**"
+      - "internal/**"
+      - "pkl/**"
+      - "*.go"
+      - ".github/workflows/action.yml"
+  workflow_dispatch:
+
+jobs:
+  setup:
+    name: setup (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./
+        with:
+          version: latest
+          init-schema-dir: ${{ runner.temp }}/pkspec
+
+      - name: Write smoke test
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/Test.pkl" <<'EOF'
+          amends "./pkspec/Test.pkl"
+
+          tests {
+            new {
+              name = "action_smoke"
+              cmd = "printf 'hello from action\n'"
+              inlineStdout = "hello from action\n"
+            }
+          }
+          EOF
+
+      - name: Run pkspec
+        run: pkspec exec -f "$RUNNER_TEMP/Test.pkl"

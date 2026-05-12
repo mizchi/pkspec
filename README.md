@@ -2,6 +2,7 @@
 
 [![Nix CI](https://github.com/mizchi/pkspec/actions/workflows/nix.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/nix.yml)
 [![Go CI](https://github.com/mizchi/pkspec/actions/workflows/go.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/go.yml)
+[![Action CI](https://github.com/mizchi/pkspec/actions/workflows/action.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/action.yml)
 
 > **[experimental]** A language-agnostic test runner built on
 > [Pkl](https://pkl-lang.org/). Generalizes the retry / sharding /
@@ -241,9 +242,9 @@ Beyond the per-test plumbing:
 ### Nix (recommended)
 
 ```sh
-nix run github:mizchi/pkspec/v0.1.0 -- init --dir pkspec
-nix run github:mizchi/pkspec/v0.1.0 -- exec -f path/to/Test.pkl
-nix profile install github:mizchi/pkspec/v0.1.0
+nix run github:mizchi/pkspec/v0.1.1 -- init --dir pkspec
+nix run github:mizchi/pkspec/v0.1.1 -- exec -f path/to/Test.pkl
+nix profile install github:mizchi/pkspec/v0.1.1
 ```
 
 The flake builds the `pkspec` binary and wraps it so the bundled Pkl
@@ -256,7 +257,7 @@ In a home-manager flake:
 
 ```nix
 {
-  inputs.pkspec.url = "github:mizchi/pkspec/v0.1.0";
+  inputs.pkspec.url = "github:mizchi/pkspec/v0.1.1";
 
   outputs = { self, nixpkgs, home-manager, pkspec, ... }: {
     homeConfigurations.example = home-manager.lib.homeManagerConfiguration {
@@ -271,7 +272,7 @@ In a home-manager flake:
 ### Go
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/pkspec@v0.1.0
+go install github.com/mizchi/pkspec/cmd/pkspec@v0.1.1
 pkspec init --dir pkspec
 ```
 
@@ -291,6 +292,39 @@ tests {
   }
 }
 ```
+
+### GitHub Actions
+
+A setup-only composite action lives at the repo root:
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mizchi/pkspec@v0.1.1
+        with:
+          init-schema-dir: pkspec
+      - run: pkspec exec -f Test.pkl
+```
+
+The action installs `pkspec` and the Pkl CLI, then adds both to
+`PATH`. `init-schema-dir` is optional; set it when the workflow should
+materialize local `Test.pkl` / `Spec.pkl` / `QuickCheck.pkl` schemas.
+
+Inputs:
+
+| Input | Default | Notes |
+| --- | --- | --- |
+| `version` | the action ref, falling back to latest release | Accepts `v0.1.1`, `0.1.1`, `v0`, or `latest`. |
+| `pkl-version` | `0.31.1` | Set to `none` to skip Pkl install. |
+| `setup-go` | `true` | Uses this action's `go.mod` to install the Go toolchain needed for `go install`. |
+| `install-dir` | `${{ runner.temp }}/pkspec-bin` | Added to `PATH`. |
+| `init-schema-dir` | empty | Optional target for `pkspec init --dir`. |
+| `init-force` | `false` | Passes `--force` when initializing schemas. |
+| `cache-pkl` | `false` | Set to `true` to cache `~/.pkl/cache`. |
+| `pkl-cache-key` | `pkl-<hashFiles>` | Override the default Pkl cache key. |
 
 ## CLI
 
@@ -336,9 +370,9 @@ shard balancing (or vice-versa).
 
 ## Status
 
-Active development, frequent API churn. `v0.1.0` is the first
-dogfooding release for Nix flakes and `go install`; expect schema and
-CLI changes before a stability promise.
+Active development, frequent API churn. `v0.1.x` is the first
+dogfooding line for Nix flakes, GitHub Actions, and `go install`;
+expect schema and CLI changes before a stability promise.
 
 For decision history per phase, see [`findings.md`](./findings.md);
 the time-ordered raw log. For thematic deep dives, see
