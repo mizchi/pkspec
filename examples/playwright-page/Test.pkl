@@ -1,0 +1,20 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "render_label"
+    description = "lightweight playwright: setContent + return text"
+    tags { "unit" }
+    env { ["LABEL"] = "world" }
+    steps {
+      new {
+        name = "render"
+        playwright = new PlaywrightSpec {
+          script = "scripts/render.mjs"
+          browser = "chromium"
+        }
+        timeoutSec = 30
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "first_call_recorded"
+    description = "record/replay: the counter response is cached after the first run"
+    tags { "unit" }
+    background {
+      new {
+        name = "server"
+        cmd = "python3 server.py"
+        readyProbe = "curl -fs http://127.0.0.1:19011/ > /dev/null"
+      }
+    }
+    steps {
+      new {
+        name = "call"
+        http = new HttpRequest {
+          method = "GET"
+          url = "http://127.0.0.1:19011/counter"
+        }
+        cassette = "counter_first"
+        expectStatus = 200
+        expectBodyJsonPath {
+          ["call"] = 1
+        }
+      }
+    }
+  }
+}

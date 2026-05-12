@@ -1,0 +1,25 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "capture_and_chain"
+    description = "sequential shell steps with captureStdout + $VAR"
+    tags { "unit" }
+    steps {
+      new {
+        name = "generate_id"
+        // Deterministic seed so the captured value is stable across
+        // runs; in a real fixture this might be `date +%s` (then
+        // expectStdout / inlineStdout would need a regex-style
+        // assertion the runner doesn't yet offer).
+        cmd = "echo evt-abc123"
+        captureStdout = "EVENT_ID"
+      }
+      new {
+        name = "use_id"
+        cmd = "echo processed $EVENT_ID"
+        inlineStdout = ""
+      }
+    }
+  }
+}

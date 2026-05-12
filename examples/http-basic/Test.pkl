@@ -1,0 +1,33 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "list_items"
+    description = "GET a JSON endpoint and assert on status + body shape"
+    tags { "unit" }
+    background {
+      new {
+        name = "server"
+        cmd = "python3 server.py"
+        readyProbe = "curl -fs http://127.0.0.1:19010/ > /dev/null"
+        readyTimeoutSec = 5
+      }
+    }
+    steps {
+      new {
+        name = "fetch_items"
+        http = new HttpRequest {
+          method = "GET"
+          url = "http://127.0.0.1:19010/items"
+        }
+        expectStatus = 200
+        expectBodyJsonPath {
+          ["ok"] = true
+          ["items.0.name"] = "first"
+          ["items.1.id"] = 2
+          ["items.#"] = 2
+        }
+      }
+    }
+  }
+}

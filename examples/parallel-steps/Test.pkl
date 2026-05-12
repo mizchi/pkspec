@@ -1,0 +1,26 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  // Reference: 3 steps run sequentially (cumulative ~600ms).
+  new {
+    name = "sequential"
+    description = "3 sleep steps, one at a time"
+    tags { "unit" }
+    steps {
+      new { name = "s1"; cmd = "sleep 0.2" }
+      new { name = "s2"; cmd = "sleep 0.2" }
+      new { name = "s3"; cmd = "sleep 0.2" }
+    }
+  }
+  // Same 3 steps in parallel — should finish in ~200ms.
+  new {
+    name = "parallel"
+    description = "same 3 sleeps fanned out via parallelSteps"
+    tags { "unit" }
+    parallelSteps {
+      new { name = "p1"; cmd = "sleep 0.2" }
+      new { name = "p2"; cmd = "sleep 0.2" }
+      new { name = "p3"; cmd = "sleep 0.2" }
+    }
+  }
+}

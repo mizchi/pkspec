@@ -1,0 +1,67 @@
+amends "../../pkl/Spec.pkl"
+
+scenarios {
+  new {
+    name = "admin_dashboard_renders"
+    description = "an admin user sees the admin dashboard after login"
+    tags { "spec"; "regression" }
+
+    given {
+      new {
+        description = "users table exists"
+        impl = new Step {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query = "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, role TEXT)"
+          }
+        }
+      }
+      new {
+        description = "an admin user is seeded"
+        impl = new Step {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query = "INSERT INTO users (email, role) VALUES (?, ?)"
+            args { "admin@x.test"; "admin" }
+            expectRowCount = 1
+          }
+        }
+      }
+    }
+
+    `when` {
+      new {
+        description = "we render the dashboard via playwright"
+        impl = new Step {
+          env { ["LABEL"] = "Admin Dashboard" }
+          playwright = new PlaywrightSpec {
+            script = "scripts/render.mjs"
+            browser = "chromium"
+          }
+          timeoutSec = 30
+        }
+      }
+    }
+
+    then {
+      new {
+        description = "users table still has the admin row"
+        impl = new Step {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query = "SELECT email FROM users WHERE role = 'admin'"
+            expectRowCount = 1
+            expectRowsJsonPath { ["0.email"] = "admin@x.test" }
+          }
+        }
+      }
+    }
+
+    cleanup {
+      new {
+        description = "remove sqlite file"
+        impl = new Step { cmd = "rm -f work.db" }
+      }
+    }
+  }
+}

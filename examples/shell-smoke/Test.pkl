@@ -1,0 +1,11 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "echo_pong"
+    description = "one-line shell with inline-snapshot assertion"
+    tags { "unit" }
+    cmd = "echo pong"
+    inlineStdout = "pong\n"
+  }
+}

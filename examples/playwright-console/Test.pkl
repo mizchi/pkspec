@@ -1,0 +1,22 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "console_clean"
+    description = "page logs the init breadcrumb; no errors / pageerrors"
+    tags { "unit" }
+    steps {
+      new {
+        name = "load"
+        playwright = new PlaywrightSpec {
+          script = "scripts/clean.mjs"
+          expectConsole = new ConsoleAssertion {
+            containsAll { "init complete" }
+            containsNone { "[error]"; "[pageerror]"; "Uncaught" }
+          }
+        }
+        timeoutSec = 30
+      }
+    }
+  }
+}

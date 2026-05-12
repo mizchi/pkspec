@@ -1,0 +1,26 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "list_users"
+    description = "SELECT + expectRowCount + expectRowsJsonPath"
+    tags { "unit" }
+    // We use an in-memory DB and seed it in the same Test so the
+    // example is self-contained (no .db file shipped).
+    steps {
+      new {
+        name = "seed_and_select"
+        sql = new SqlSpec {
+          dsn = "sqlite::memory:"
+          query = "WITH seed(id, email) AS (VALUES (1, 'alice@x.test'), (2, 'bob@x.test')) SELECT * FROM seed ORDER BY id"
+          expectRowCount = 2
+          expectRowsJsonPath {
+            ["0.email"] = "alice@x.test"
+            ["1.id"] = 2
+          }
+        }
+        timeoutSec = 10
+      }
+    }
+  }
+}

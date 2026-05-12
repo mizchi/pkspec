@@ -1,0 +1,37 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  // Full suite: 2 active tests, 1 skipped. Aggregated outcome: passed.
+  new {
+    name = "auth_suite"
+    description = "delegate to @playwright/test; aggregate JUnit XML into one Step"
+    tags { "unit" }
+    steps {
+      new {
+        name = "run"
+        playwrightTest = new PlaywrightTestSpec {
+          specPath = "tests/auth.spec.ts"
+          configPath = "playwright.config.ts"
+        }
+        timeoutSec = 120
+      }
+    }
+  }
+  // Grep filter: only the login test runs.
+  new {
+    name = "auth_login_only"
+    description = "--grep filter forwarded to playwright-test"
+    tags { "unit" }
+    steps {
+      new {
+        name = "run"
+        playwrightTest = new PlaywrightTestSpec {
+          specPath = "tests/auth.spec.ts"
+          configPath = "playwright.config.ts"
+          grep = "login form"
+        }
+        timeoutSec = 120
+      }
+    }
+  }
+}

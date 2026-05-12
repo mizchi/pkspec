@@ -1,0 +1,33 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "background_lifecycle"
+    description = "demonstrate `background` block: spawn → readyProbe → body → grace-kill"
+    tags { "unit" }
+    background {
+      new {
+        name = "tiny_server"
+        cmd = "python3 server.py"
+        // readyProbe fires every 200ms; the runner waits up to
+        // readyTimeoutSec for it to exit 0.
+        readyProbe = "curl -fs http://127.0.0.1:19020/ > /dev/null"
+        readyTimeoutSec = 5
+        // SIGTERM first; if the process is still alive after this
+        // many seconds, SIGKILL.
+        graceTimeoutSec = 2
+      }
+    }
+    steps {
+      new {
+        name = "hit"
+        http = new HttpRequest {
+          method = "GET"
+          url = "http://127.0.0.1:19020/"
+        }
+        expectStatus = 200
+        expectBodyEquals = "OK"
+      }
+    }
+  }
+}
