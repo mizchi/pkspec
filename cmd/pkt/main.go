@@ -59,6 +59,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return cmdExec(args[1:], stdout, stderr)
 	case "spec":
 		return cmdSpec(args[1:], stdout, stderr)
+	case "timings":
+		return cmdTimings(args[1:], stdout, stderr)
 	case "--reader-helper":
 		// Hidden mode: pkthunder spawns itself as the external-reader
 		// helper that pkl talks to over msgpack. Users do not invoke
@@ -91,6 +93,9 @@ commands:
                               Test.pkl modules (filesystem-hierarchical;
                               groups by source directory; --output to
                               write to a file instead of stdout)
+  timings -f Test.pkl [opts]  inspect .pkthunder/timings.jsonl —
+                              per-test median / p90 / latest outcome.
+                              --env / --failing / --shard=K/N (preview)
   version                     print pkt version
   help                        show this message
 
@@ -185,6 +190,11 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	fs.Var(&only, "only", "only run tests whose name contains this substring (repeatable; case-sensitive)")
 	var tags multiString
 	fs.Var(&tags, "tag", "only run tests whose `tags` Listing contains this exact value (repeatable; AND with --only)")
+	noRecordTimings := fs.Bool("no-record-timings", false, "skip writing per-test wall-clock durations to .pkthunder/timings.jsonl")
+	timingsFile := fs.String("timings-file", "", "override the timings.jsonl path (default: <workdir>/.pkthunder/timings.jsonl)")
+	shardSpec := fs.String("shard", "", "run only the K-th shard of N (format: K/N, 1-indexed). Uses timings history to balance via LPT")
+	totalTimeout := fs.Duration("total-timeout", 0, "abort the run after this wall-clock and report remaining tests as skipped (e.g. 300s, 5m)")
+	rerunFailed := fs.Bool("rerun-failed", false, "only run tests whose most recent record in timings.jsonl is fail/error/skip")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -202,7 +212,52 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	exe := executor.New(executor.Options{
+	if *totalTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *totalTimeout)
+		defer cancel()
+	}
+
+	timingsPath := *timingsFile
+	if timingsPath == "" {
+		timingsPath = defaultTimingsPath(abs)
+	}
+
+	// --rerun-failed and --shard are applied in cmdExec (not the
+	// executor) because they need access to timings history. When
+	// either is set, we pre-filter the plan and clear executor's
+	// own Only/Tags to avoid double-filtering. Order: only/tag → rerun
+	// → shard.
+	preFiltered := *rerunFailed || *shardSpec != ""
+	shardSkipped := 0
+	shardK, shardN := 0, 0
+	if preFiltered {
+		candidates := collectNames(plan, []string(only), []string(tags))
+		if *rerunFailed {
+			candidates = pickRerunFailed(candidates, timingsPath, envTag())
+			if len(candidates) == 0 {
+				fmt.Fprintln(stderr, "pkt: --rerun-failed: no failed tests in history (matching --only/--tag and env)")
+				return nil
+			}
+		}
+		if *shardSpec != "" {
+			var perr error
+			shardK, shardN, perr = parseShardSpec(*shardSpec)
+			if perr != nil {
+				return perr
+			}
+			before := len(candidates)
+			candidates = applyShard(candidates, timingsPath, shardK, shardN)
+			shardSkipped = before - len(candidates)
+		}
+		if len(candidates) == 0 {
+			fmt.Fprintln(stderr, "pkt: filter combination matched no tests")
+			return nil
+		}
+		plan = filterPlan(plan, candidates)
+	}
+
+	opts := executor.Options{
 		Workdir:               filepath.Dir(abs),
 		Stderr:                stderr,
 		RefreshSnapshots:      *refresh,
@@ -210,12 +265,38 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 		RefreshHttp:           *refreshHttp,
 		HttpReplayOnly:        *replayOnly,
 		UpdateInlineSnapshots: *updateInline,
-		Only:                  []string(only),
-		Tags:                  []string(tags),
-	})
+	}
+	if !preFiltered {
+		opts.Only = []string(only)
+		opts.Tags = []string(tags)
+	}
+
+	// Pre-run banner: announce shard / rerun scope BEFORE the test loop
+	// so the operator sees "what is about to run" instead of having to
+	// wait for the summary.
+	if *shardSpec != "" {
+		fmt.Fprintf(stderr, "pkt: shard %d/%d: running %d of %d tests\n",
+			shardK, shardN, len(plan.Tests), len(plan.Tests)+shardSkipped)
+	}
+	if *rerunFailed {
+		fmt.Fprintf(stderr, "pkt: --rerun-failed: %d tests selected from history\n",
+			len(plan.Tests))
+	}
+
+	exe := executor.New(opts)
 	results, tally, err := exe.Run(ctx, plan)
 	if err != nil {
 		return err
+	}
+
+	if !*noRecordTimings {
+		path := *timingsFile
+		if path == "" {
+			path = defaultTimingsPath(abs)
+		}
+		if werr := recordTimings(path, plan, results); werr != nil {
+			fmt.Fprintf(stderr, "pkt: warning: record timings: %v\n", werr)
+		}
 	}
 
 	if *junitDir != "" {
@@ -227,11 +308,15 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	}
 
 	fmt.Fprintf(stderr,
-		"pkt: %d passed, %d flaky, %d pending, %d failed, %d errored (of %d)\n",
-		tally.Passed, tally.Flaky, tally.Pending, tally.Failed, tally.Errored, tally.Total())
+		"pkt: %d passed, %d flaky, %d pending, %d failed, %d errored, %d skipped (of %d)\n",
+		tally.Passed, tally.Flaky, tally.Pending, tally.Failed, tally.Errored, tally.Skipped, tally.Total())
+	if tally.Skipped > 0 {
+		fmt.Fprintf(stderr, "pkt: [timeout] %d tests not executed\n", tally.Skipped)
+	}
 
 	if !tally.IsGreen() {
-		return fmt.Errorf("%d test(s) failed, %d errored", tally.Failed, tally.Errored)
+		return fmt.Errorf("%d test(s) failed, %d errored, %d skipped",
+			tally.Failed, tally.Errored, tally.Skipped)
 	}
 	return nil
 }

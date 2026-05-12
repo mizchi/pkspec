@@ -300,14 +300,25 @@ type Tally struct {
 	Failed  int
 	Errored int
 	Pending int
+	// Skipped counts tests the run was unable to reach — currently only
+	// total-timeout / ctx-cancel populates it. It is distinct from
+	// Pending (which is intentional "not implemented yet"): a Skipped
+	// test still has work to do but the run ran out of time.
+	Skipped int
 }
 
 // Total returns the total number of tests reported.
-func (t Tally) Total() int { return t.Passed + t.Flaky + t.Failed + t.Errored + t.Pending }
+func (t Tally) Total() int {
+	return t.Passed + t.Flaky + t.Failed + t.Errored + t.Pending + t.Skipped
+}
 
 // IsGreen reports whether this tally should let CI pass — flaky and
-// pending are surfaced but do not turn the run red.
-func (t Tally) IsGreen() bool { return t.Failed == 0 && t.Errored == 0 }
+// pending are surfaced but do not turn the run red. Skipped is
+// treated as red: a run that hit --total-timeout has not actually
+// verified the skipped tests, so it cannot ship.
+func (t Tally) IsGreen() bool {
+	return t.Failed == 0 && t.Errored == 0 && t.Skipped == 0
+}
 
 // Run executes every test in `plan` in alphabetical order. Returns the
 // per-test results plus a Tally for the caller to format / use for
@@ -365,7 +376,26 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 	tally := Tally{}
 	anyTestFailed := false
 
-	for _, name := range names {
+	for i, name := range names {
+		// Total-timeout / explicit cancel: mark this test and every
+		// test after it as Skipped and bail out of the per-test loop.
+		// after-hooks still run with `suiteFailed=true`, which is
+		// correct — a half-finished run is not a green run.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			for _, remaining := range names[i:] {
+				res := Result{
+					Name:    remaining,
+					Outcome: OutcomeSkipped,
+					Reasons: []string{fmt.Sprintf("not executed: %v", ctxErr)},
+				}
+				results = append(results, res)
+				tally.Skipped++
+				anyTestFailed = true
+				formatResult(e.opts.Stderr, res)
+			}
+			break
+		}
+
 		if beforeAllErr != nil {
 			res := Result{
 				Name:    name,
@@ -423,6 +453,14 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 			res = e.runOne(ctx, name, plan.Tests[name], plan.Defaults, testState)
 		}
 
+		// If the run-level ctx fired mid-test, the per-test timeout
+		// path reports its own wording ("timed out after Ns") but the
+		// real cause is the outer --total-timeout. Override the reason
+		// so operators can tell the two apart.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) && res.Outcome == OutcomeErrored {
+			res.Reasons = []string{"aborted by total-timeout"}
+		}
+
 		// afterEach in LIFO order. Skip when body failed unless alwaysRun.
 		bodyFailed := res.Outcome == OutcomeFailed || res.Outcome == OutcomeErrored
 		afterEachNames := sortedScopedHookNames(plan.After, "each")
@@ -444,6 +482,9 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 			tally.Pending++
 		case OutcomeErrored:
 			tally.Errored++
+			anyTestFailed = true
+		case OutcomeSkipped:
+			tally.Skipped++
 			anyTestFailed = true
 		default:
 			tally.Failed++

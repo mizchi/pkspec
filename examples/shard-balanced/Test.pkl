@@ -1,0 +1,16 @@
+amends "../../pkl/Test.pkl"
+
+// Mixed-duration fixture for shard balancing demo / dogfood.
+// 10 tests with intentionally uneven durations so LPT has to work.
+tests {
+  new { name = "fast_a"; cmd = "sleep 0.05" }
+  new { name = "fast_b"; cmd = "sleep 0.05" }
+  new { name = "fast_c"; cmd = "sleep 0.05" }
+  new { name = "fast_d"; cmd = "sleep 0.05" }
+  new { name = "mid_a";  cmd = "sleep 0.15" }
+  new { name = "mid_b";  cmd = "sleep 0.15" }
+  new { name = "mid_c";  cmd = "sleep 0.15" }
+  new { name = "slow_a"; cmd = "sleep 0.4" }
+  new { name = "slow_b"; cmd = "sleep 0.4" }
+  new { name = "slow_c"; cmd = "sleep 0.4" }
+}

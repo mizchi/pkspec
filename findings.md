@@ -5,6 +5,204 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 30.2 — `pkt timings` inspection subcommand
+
+Phase 30.1 dogfooding kept reaching for the same three `jq` queries
+over `.pkthunder/timings.jsonl`: "show me per-test stats", "show me
+what failed last run", and "show me which tests would land in shard
+K/N if I ran it now." Promoted them to a first-class subcommand.
+
+### Surface
+
+```
+pkt timings -f Test.pkl                  per-test runs / median / p90 / latest / kind
+pkt timings -f Test.pkl --failing        only tests whose latest record is non-pass
+pkt timings -f Test.pkl --shard=2/4      preview the K/N assignment without running
+pkt timings -f Test.pkl --env ci-linux   different env bucket
+```
+
+### Why the shard preview matters
+
+LPT tie-breaking (duration desc → name asc → lowest-bin-index) is
+deterministic, so `pkt timings --shard=K/N` produces byte-identical
+output to what `pkt exec --shard=K/N` will pick. Verified by running
+both on the same history — same 2 tests, same durations. This makes
+CI matrix sizing concrete: you can see "shard 2 of 4 has 18 tests
+totaling 12.3s, 24% of the suite" before committing the YAML.
+
+### Implementation
+
+- `cmd/pkt/timings_cmd.go` (~140 LOC) — flags + table formatter +
+  shard preview using the same `applyShard` helper as `pkt exec`.
+- `cmd/pkt/main.go` — one case in the dispatch + 3-line usage entry.
+
+No new packages, no new tests (the underlying primitives —
+`timing.LoadRecent`, `timing.Median`, `shard.Pick` — already have
+unit coverage). The cmd is a thin formatter on top.
+
+### What was tempting but skipped
+
+- A `pkt timings --rotate=N` flag to truncate the jsonl to the most
+  recent N lines. Still no evidence the unbounded growth is hurting
+  anyone; defer.
+- An `--ascii-bar` mode to visualise duration distribution.
+  Pre-mature: a `jq` + `gnuplot` one-liner is fine for the rare
+  case anyone needs it.
+- Per-step timings (currently records are test-level only). Useful
+  for "which step inside this slow test is the slow one", but the
+  executor doesn't surface step durations through `Result.Steps`
+  in a shape the recorder can read trivially. Defer.
+
+---
+
+## Phase 30.1 — Dogfooding Phase 30
+
+Built a 10-test mixed-duration fixture (`examples/shard-balanced/`)
+with 4 fast (50ms), 3 mid (150ms), 3 slow (400ms) tests. Ran it
+5 times to populate `.pkthunder/timings.jsonl`, then exercised every
+new flag.
+
+### What worked
+
+- **LPT balance is real.** Across `--shard=1/4` to `--shard=4/4` the
+  test-time loads were 470/530/470/480 ms — max-min spread under
+  12% on a 10-test suite. Tie-breaking (name asc, lowest-bin-index)
+  produced identical assignments across re-invocations.
+- **rerun-failed round trip**: induced 1 errored + 5 skipped via
+  `--total-timeout=300ms`, then `--rerun-failed` picked exactly
+  those 6, all passed, second `--rerun-failed` returned the
+  expected "no failed tests in history".
+- **env-strict matching**: `PKT_TIMING_ENV=ci` with no ci-tagged
+  history degraded cleanly to round-robin at 1000ms — every shard
+  got 2-3 tests, no crash.
+
+### What surfaced
+
+1. **In-flight test reason was misleading.** A test that got cut off
+   mid-execution by `--total-timeout` reported `errored — timed out
+   after 60s` (60s = its own per-test timeoutSec default), even though
+   the real cancel was the 300ms outer ctx. Fixed: after each
+   `runOne`, if `errors.Is(ctx.Err(), context.DeadlineExceeded)` and
+   the result is errored, override the reason to "aborted by
+   total-timeout". Operators now see the correct cause.
+
+2. **Shard scope was announced AFTER the run.** The line
+   `pkt: shard 2/4: 8 tests assigned to other shards` printed in the
+   summary, but during the run the operator had no idea which subset
+   they were watching. Fixed: pre-run banner
+   `pkt: shard 2/4: running 3 of 10 tests` prints BEFORE the test
+   loop; the post-run line is removed (was redundant).
+
+3. **Missing GitHub Actions recipe.** The shard feature is most
+   valuable in CI matrix runs, but the canonical pattern (download
+   prior timings artifact → run shard → upload merged timings) was
+   nowhere in the docs. Wrote it into
+   `docs/notes/timing-shard.md`. Two non-obvious points captured:
+   always pull artifacts from `branch: main` regardless of the
+   triggering branch, and `PKT_TIMING_ENV` must be set so dev
+   machines don't inject 10x-faster local records into the CI
+   bucket.
+
+### What's still open (deliberately)
+
+- **Pkl evaluation has ~1.1s of fixed startup cost.** On the 10-test
+  / 1.9s-sequential fixture, one shard's wall-clock floor is
+  ~1.5s, so 4-way parallelism caps at roughly 30% wall-clock
+  reduction. This is a pkl-go cost, not a shard-feature cost; large
+  suites (10s of sequential time) reclaim most of the win. Not a
+  Phase 30 problem to solve.
+- **No GC/rotation for `timings.jsonl`.** A long-running repo will
+  grow it without bound; `LoadRecent` walks the whole file. Still
+  fast at 1000-line counts; defer GC until it bites.
+- **First CI run with no env-matching history.** Round-robin
+  fallback works but the first ever shard run is poorly balanced.
+  Documented as "throw away the first run's wall-clock and trust
+  the second" — author hints (e.g. `Test.estimatedDurationMs`)
+  would over-engineer this.
+
+### Implementation footprint of the dogfood fixes
+
+- `internal/executor/executor.go`: 6 LOC for the ctx-aware reason
+  override in the per-test loop.
+- `cmd/pkt/main.go`: 7 LOC for the pre-run banners + drop the
+  redundant post-run shard line.
+- `docs/notes/timing-shard.md`: ~50 lines of GitHub Actions recipe.
+- `examples/shard-balanced/Test.pkl`: 13-line fixture committed as a
+  reference for "what shard does on a realistic mix."
+
+---
+
+## Phase 30 — timing history + shard + total-timeout + rerun-failed
+
+One artifact, four features. `.pkthunder/timings.jsonl` per-suite
+records every test's wall-clock duration with env tag and outcome.
+Built on top of it:
+
+- **`--shard=K/N`** — Longest-Processing-Time bin-packing using the
+  median of the most recent 5 records. Deterministic tie-breaking
+  (duration desc, then name asc, then lowest bin index) so shard 2/4
+  on machine A matches shard 2/4 on machine B given identical history.
+  Tests with no history fall back to the global median; first ever
+  run with empty history degrades to round-robin at 1000ms each.
+- **`--total-timeout=DUR`** — `context.WithTimeout` wraps the run.
+  In-flight test errors out (existing per-test cancel path), every
+  subsequent test reports `outcome=skipped`, run is not green. New
+  `Tally.Skipped` field added; `IsGreen()` returns false when it's
+  non-zero.
+- **`--rerun-failed`** — load latest record per test, filter to
+  fail/error/timeout/skip. Composes with `--shard` (rerun narrows the
+  set, shard splits it) and with `--only`/`--tag`.
+
+### Design notes
+
+- **Env-strict matching.** Records carry `env` (default "local", set
+  via `PKT_TIMING_ENV`); shard/rerun only consider records with
+  matching env. CI durations and local durations diverge enough that
+  cross-env fallback would hurt more than it helps.
+- **Skipped/pending records ignored for medians.** A skipped test
+  has `duration_ms=0`; including it would pull the median toward
+  zero and unbalance the shard.
+- **gitignore `.pkthunder/timings.jsonl` only, not `.pkthunder/`.**
+  Snapshots under `.pkthunder/snapshots/` are committed test oracles.
+- **Filtering pushed up to cmdExec when shard/rerun is involved.**
+  Executor's existing `Only`/`Tags` still drive the simple case; when
+  shard or rerun fires, cmdExec builds the final test set itself and
+  passes a filtered Plan to executor with empty `Only`/`Tags` to
+  avoid double-filtering. Order: `--only`/`--tag` → `--rerun-failed`
+  → `--shard`.
+
+### What broke during build-out
+
+- LPT smoke: 6 tests evenly weighted produced perfectly balanced
+  shards (`t1+t5`, `t2+t6`, `t3+t4` — loads 6/5/6).
+- Total-timeout smoke: 6 × `sleep 0.2` with `--total-timeout=500ms`
+  → 2 passed, 1 errored mid-flight, 3 skipped. The mid-flight test
+  reports its per-test timeout's wording ("timed out after 60s")
+  rather than acknowledging the ctx cancel — cosmetic, noted in
+  `docs/notes/timing-shard.md`.
+- Rerun-failed smoke: after the timeout run, `--rerun-failed` picked
+  exactly the errored + skipped tests; all 4 passed; a second
+  `--rerun-failed` correctly returned "no failed tests in history".
+
+### Implementation footprint
+
+- `internal/timing/timing.go` (~115 LOC) — Record, jsonl Append,
+  LoadRecent with env filter + per-test cap, Median (int trunc for
+  even).
+- `internal/shard/shard.go` (~75 LOC) — Item, LPT bin-pack, Pick.
+- `cmd/pkt/timings.go` (~80 LOC) — recordTimings, mapOutcome, testKind.
+- `cmd/pkt/shard.go` (~125 LOC) — parseShardSpec, collectNames,
+  filterPlan, shardDurationFn, applyShard.
+- `cmd/pkt/rerun.go` (~30 LOC) — pickRerunFailed, isFailedOutcome.
+- `cmd/pkt/main.go` — flag wiring + summary line.
+- `internal/executor/executor.go` — Tally.Skipped, IsGreen change,
+  ctx.Err() check at top of per-test loop with "skip the rest" path.
+- Tests: `internal/timing/timing_test.go`, `internal/shard/shard_test.go`.
+
+Total ~430 LOC + tests + docs.
+
+---
+
 ## Phase 29 — Remaining dogfooding friction (#3, #4, #6, #7, #8)
 
 All 5 remaining phase-27 friction points addressed in one
