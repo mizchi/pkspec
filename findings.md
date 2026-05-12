@@ -5,6 +5,96 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 23 — Property-based testing (QuickCheck promotion + iteration primitive)
+
+- **Two surfaces, one seed stream.** Property-based testing in
+  pkthunder lives on two layers: (a) Pkl-internal property check
+  via `pkl/QuickCheck.pkl` (promoted from `experiments/12-quickcheck/`),
+  (b) subprocess iteration via `Test.iterations` + `Test.iterationSeed`
+  in the executor. Both use xorshift32 with the same algorithm,
+  so a seed reported by the executor can be re-investigated
+  inside `pkl test`, and vice versa.
+- **(a) `pkl/QuickCheck.pkl` promotion.** Copied the
+  experiments-grade module to `pkl/`, added the dual-mode usage
+  doc, kept the API identical (`seedAt`, `intCases`, `checkAll`,
+  Case/Failure/Result classes). The xorshift32 step is byte-for-
+  byte the same as the experiments PoC; a Pkl test fact in the
+  PoC already pins `seedAt(12345, 0..2) == [12345, 3336926330,
+  1697253807]`.
+- **(b) `Test.iterations` + `Test.iterationSeed`.** Schema
+  additions: `iterations: Int(this > 0) = 1` (default 1 means
+  current behaviour, no change), `iterationSeed: Int = 1`. When
+  `iterations > 1` the executor's `runOne` routes to a separate
+  `runIterated` path that:
+  - Initializes seed = `iterationSeed`.
+  - Loops `iterations` times.
+  - Each iteration injects `PKT_SEED` (current seed) + `PKT_ITERATION`
+    (0-based index) into extraEnv.
+  - Calls `runAttempt` (the same shape as the retry path).
+  - On first non-Passed result: prepends
+    `"property failed at iteration K/N (seed=S); pin
+    iterationSeed = S to reproduce"` to the reasons, returns
+    immediately.
+  - Advances seed via `xorshift32Step` between iterations.
+- **`retries` and `flakyAcceptable` are intentionally ignored
+  in property mode.** A property check treats the first failure
+  as the bug, not as flake. The doc and the schema docstring
+  spell this out.
+- **The Go xorshift32 must match the Pkl one bit-for-bit.**
+  Added `internal/executor/xorshift_test.go` with the three
+  seed values from the experiments-PoC Pkl fact. If anyone
+  changes the algorithm in either Go or Pkl, the test or the
+  Pkl fact will reject the divergence.
+- **`PKT_SEED` / `PKT_ITERATION` env injection works for every
+  kind.** The body sees them via the standard env-merging chain
+  (defaults + Test.env + Step.env + state + iteration extras),
+  so `cmd = "echo $PKT_SEED"`, `script = "tests/foo.mjs"`
+  reading `ctx.env.PKT_SEED`, SQL `args { "$PKT_SEED" }`, http
+  `bodyJson { ["seed"] = "$PKT_SEED" }` all just work — no
+  per-kind plumbing.
+- **Hooks fire once per Test, not per iteration.** Deliberate:
+  `before` / `after` (both scopes) are state setup for the
+  Test as a whole; the property-based loop is internal to the
+  Test body. Per-iteration setup belongs in the body using
+  `$PKT_SEED`. Documented in `quickcheck.md`.
+- **Smoke: 50-iteration associativity check, deterministic.**
+  Wrote `examples/quickcheck-subprocess/` with two Tests:
+  (1) `addition_is_associative` — derives 3 numbers from
+  `$PKT_SEED`, asserts `(a+b)+c == a+(b+c)`. 50 iterations
+  in 106ms, all pass.
+  (2) `property_that_does_not_hold` — deliberately fails on
+  the first odd seed. With pending = false, it surfaced
+  `iteration 3/50 (seed=3901813017)` in 8ms, with the explicit
+  `pin iterationSeed = 3901813017` reproduction hint.
+- **Pkl-side smoke: 400 random ints sorted, sort-idempotent.**
+  Wrote `examples/quickcheck-pkl/SortProperty.test.pkl` with
+  `QC.intCases(20260512, 50, 0, 1000000)` generating 50 cases,
+  each used as a sub-seed for an 8-element list, asserting
+  `sort(sort(xs)) == sort(xs)`. 2 facts pass under `pkt run`.
+- **Pkl gotcha: function calls are positional only.** Initial
+  Pkl example used `QC.intCases(seed = 20260512, count = 50, ...)`
+  syntax — rejected with "Expected `,` or `)`." Switched to
+  positional `QC.intCases(20260512, 50, 0, 1000000)`. Worth
+  remembering: Pkl `function` (lowercase, not `class`) calls
+  don't take named args.
+- **Shrinking deferred.** The reported seed IS the smallest
+  information unit today. Adding bisect-based shrink
+  ("rerun with halved range until it stops failing") would be
+  a separate phase — the executor already has all the
+  primitives (seed-driven iteration, deterministic env), but
+  the search strategy is non-trivial and ergonomically depends
+  on what input the body actually derived.
+- **What this proves about the kind-uniform design.** Property-
+  based testing landed without per-kind plumbing. Every kind
+  (shell, http, playwright, playwright-test, sql) inherits
+  iteration support through the executor's `runAttempt`
+  pathway. The env injection (`PKT_SEED` / `PKT_ITERATION`)
+  hooks into the existing merge chain. No `if kind == "shell" {
+  ... } else if kind == "http" { ... }` branching — same as
+  phase 18's promise.
+
+---
+
 ## Phase 22.4 — Spec.pkl tagStep updated for all kinds
 
 - **Drift caught at the BDD layer.** `pkl/Spec.pkl` predates the

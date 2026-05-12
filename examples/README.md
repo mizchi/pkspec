@@ -70,6 +70,14 @@ pkt exec -f examples/<name>/Test.pkl
 - [`bdd-scenario`](bdd-scenario/) — `Spec.pkl` given / when /
   then mixing sql + playwright kinds
 
+### Property-based testing
+
+- [`quickcheck-pkl`](quickcheck-pkl/) — `QuickCheck.intCases` +
+  `checkAll` on a Pkl function (`pkt run` path)
+- [`quickcheck-subprocess`](quickcheck-subprocess/) —
+  `Test.iterations` against a shell body; failure reports the
+  seed for reproduction
+
 ## What every example tries to do
 
 - **Minimum surface.** One concept per example. The user reads

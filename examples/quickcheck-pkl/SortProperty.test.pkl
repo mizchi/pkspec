@@ -1,0 +1,38 @@
+/// Property check inside `pkl test`: the property "a sorted list
+/// stays sorted under reverse-then-sort" holds for any input. We
+/// generate 50 integer cases via QuickCheck and assert on the
+/// composed predicate.
+amends "pkl:test"
+
+import "../../pkl/QuickCheck.pkl" as QC
+
+local function sorted(xs: List<Int>): Boolean =
+  xs.toList().zip(xs.toList().drop(1)).every((p) -> p.first <= p.second)
+
+local function generateList(seed: Int, n: Int): List<Int> =
+  new Listing<Int> {
+    for (i in IntSeq(0, n - 1)) { QC.seedAt(seed, i) % 1000 }
+  }.toList()
+
+facts {
+  // 50 cases × per-case list of 8 integers — 400 ints under test.
+  ["sort is idempotent"] {
+    let (cases = QC.intCases(20260512, 50, 0, 1000000))
+    let (r = QC.checkAll(
+      "sort_idempotent",
+      cases,
+      (c) ->
+        let (xs = generateList(c.seed, 8))
+        let (s1 = xs.toList().sortBy((x) -> x))
+        let (s2 = s1.sortBy((x) -> x))
+          s1 == s2
+    ))
+      r.passed
+  }
+
+  ["sorted predicate detects unsorted"] {
+    sorted(List(3, 1, 2)) == false
+    sorted(List(1, 2, 3)) == true
+    sorted(List()) == true
+  }
+}

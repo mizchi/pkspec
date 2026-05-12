@@ -490,6 +490,26 @@ class Test {
   /// they are a written record of known gaps, not failures.
   pending: Boolean = false
 
+  /// Property-based: run the body `iterations` times. Each iteration
+  /// gets a fresh seed (xorshift32 stepped from `iterationSeed`)
+  /// injected as `$PKT_SEED`, plus `$PKT_ITERATION` (0-based). The
+  /// subprocess derives its own input from these values. Every
+  /// iteration must pass; the first failing iteration's seed is
+  /// surfaced in the result so the operator can pin
+  /// `iterationSeed = <bad seed>` for a deterministic reproduction.
+  ///
+  /// `retries` and `flakyAcceptable` are ignored when `iterations > 1`
+  /// — property checks treat the first failure as the bug, not as
+  /// flake.
+  iterations: Int(this > 0) = 1
+
+  /// Seed for the iteration sequence. The seed at iteration index
+  /// `i` is `QuickCheck.seedAt(iterationSeed, i)`; the Go executor
+  /// reproduces the exact xorshift32 stream that
+  /// `pkl/QuickCheck.pkl` generates, so a failure reported by pkt
+  /// can be re-investigated inside `pkl test` with the same seed.
+  iterationSeed: Int = 1
+
   // ── Body: pick exactly one ─────────────────────────────────────
   cmd: (String(length > 0))? = null
   stdin: String? = null
@@ -684,6 +704,8 @@ class RenderedTest {
   retries: Int
   flakyAcceptable: Boolean
   pending: Boolean
+  iterations: Int
+  iterationSeed: Int
 
   cmd: String?
   stdin: String?
@@ -845,6 +867,8 @@ local function renderTest(t: Test): RenderedTest = new {
   retries = t.retries
   flakyAcceptable = t.flakyAcceptable
   pending = t.pending
+  iterations = t.iterations
+  iterationSeed = t.iterationSeed
   cmd = t.cmd
   stdin = t.stdin
   expectExitCode = t.expectExitCode

@@ -1,0 +1,45 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  // PASSING property: bash's `expr` is associative for addition.
+  // We derive 3 numbers from the seed and check (a+b)+c == a+(b+c).
+  new {
+    name = "addition_is_associative"
+    description = "property: integer addition is associative for any 3 seed-derived integers"
+    tags { "unit" }
+    iterations = 50
+    iterationSeed = 20260512
+    cmd = """
+      set -e
+      # Derive three values from the seed; modulo keeps numbers small.
+      a=$(( PKT_SEED % 1000 ))
+      b=$(( (PKT_SEED / 1000) % 1000 ))
+      c=$(( (PKT_SEED / 1000000) % 1000 ))
+      lhs=$(( (a + b) + c ))
+      rhs=$(( a + (b + c) ))
+      if [ "$lhs" != "$rhs" ]; then
+        echo "iter=$PKT_ITERATION seed=$PKT_SEED a=$a b=$b c=$c lhs=$lhs rhs=$rhs"
+        exit 1
+      fi
+    """
+  }
+
+  // FAILING property (deliberate): "this number is even" is false
+  // ~half the time. With 50 iterations the first odd seed-derived
+  // value lands quickly and the test reports `seed=...` for
+  // reproduction.
+  new {
+    name = "property_that_does_not_hold"
+    description = "deliberate failure: seed%2 == 0 is not a property of xorshift32"
+    tags { "spec" }
+    pending = true   // disabled by default; flip to false to see the report
+    iterations = 50
+    iterationSeed = 20260512
+    cmd = """
+      if [ $(( PKT_SEED % 2 )) -ne 0 ]; then
+        echo "iter=$PKT_ITERATION seed=$PKT_SEED is odd"
+        exit 1
+      fi
+    """
+  }
+}

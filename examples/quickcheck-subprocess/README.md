@@ -1,0 +1,67 @@
+# quickcheck-subprocess
+
+Property-based testing against a subprocess. `iterations = N` runs
+the body N times; each iteration sees a fresh `$PKT_SEED` derived
+from `iterationSeed` via xorshift32 (the same algorithm
+`pkl/QuickCheck.pkl` uses). The subprocess derives its own input
+from the seed.
+
+```sh
+pkt exec -f examples/quickcheck-subprocess/Test.pkl
+```
+
+Expected: 1 passed (`addition_is_associative` runs 50 iterations,
+all pass), 1 pending (`property_that_does_not_hold` is gated by
+`pending = true`).
+
+## How a failing property looks
+
+Flip `pending = false` on the second test and re-run:
+
+```sh
+pkt exec -f examples/quickcheck-subprocess/Test.pkl
+```
+
+You'll see:
+
+```
+[pkt] property_that_does_not_hold: failed (5ms)
+      step ...: errored
+        property failed at iteration 1/50 (seed=3336926330); pin `iterationSeed = 3336926330` to reproduce
+        ...the script's own error output...
+```
+
+The reported `seed` is the **xorshift32-stepped value at the
+failing iteration**, NOT `iterationSeed` itself. To reproduce
+the same failure deterministically, change
+`iterationSeed = <reported seed>` and re-run; the iteration
+loop now starts from the bug.
+
+## When to use `iterations` vs `retries`
+
+- **`iterations > 1`**: property-based. Every iteration must
+  pass. The first failure is the bug; pin the seed and fix.
+- **`retries > 0`**: assert tolerance to non-determinism (a
+  flaky subprocess). The body runs up to N times; one pass is
+  enough. `flakyAcceptable = true` even reports flakes as
+  green.
+
+The two are mutually exclusive in spirit; pkt's implementation
+ignores `retries` when `iterations > 1`.
+
+## When NOT to use this
+
+- The system under test is **already deterministic**. Iterating
+  50 times over the same input is pure waste — write the
+  assertion once.
+- The body is **expensive** (browser launch, large DB seed).
+  50 chromium launches at ~250ms each is 12.5s; consider
+  `iterations = 5` and accept the smaller coverage.
+- You need **input shrinking** (smaller failing input → easier
+  debug). Not implemented today; the reported seed is the
+  smallest information unit. For now, narrow by hand.
+
+See `docs/notes/quickcheck.md` for the full design, the Pkl-
+internal alternative (`pkl/QuickCheck.pkl` + `pkl test`), and
+the seed-stream contract that lets pkt's reported seed be
+re-investigated inside `pkl test`.

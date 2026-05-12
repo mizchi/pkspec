@@ -160,6 +160,8 @@ type Test struct {
 	Retries         int               `pkl:"retries"`
 	FlakyAcceptable bool              `pkl:"flakyAcceptable"`
 	Pending         bool              `pkl:"pending"`
+	Iterations      int               `pkl:"iterations"`
+	IterationSeed   int               `pkl:"iterationSeed"`
 
 	Cmd                  *string            `pkl:"cmd"`
 	Stdin                *string            `pkl:"stdin"`

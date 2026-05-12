@@ -1,0 +1,102 @@
+/// pkthunder property-based testing helpers.
+///
+/// Pkl is side-effect-free, so "random" inputs come from a seeded
+/// PRNG (xorshift32) implemented in the language itself. Every run
+/// is deterministic — the seed is the bug ID.
+///
+/// Two usage modes:
+///
+/// 1. **Pkl-internal property check** (this module standalone).
+///    Use `intCases` + `checkAll` against a Pkl predicate inside
+///    `pkl test` facts. Good for "this Pkl function is correct
+///    for every input in a range." Run via `pkt run`.
+///
+/// 2. **Subprocess iteration** (paired with `Test.iterations` and
+///    `Test.iterationSeed` in `Test.pkl`). The seed stream is the
+///    same; pkt runs the Test body N times and exposes the
+///    current seed via `$PKT_SEED` so the subprocess can derive
+///    its own input.
+///
+/// The xorshift32 algorithm is identical on both sides (Pkl and
+/// the Go executor), so `seedAt(seed, i)` in Pkl matches the seed
+/// the executor injects on iteration `i`.
+@ModuleInfo { minPklVersion = "0.31.0" }
+module pkthunder.QuickCheck
+
+class Case {
+  /// 0-based iteration index in the case stream.
+  index: Int
+
+  /// xorshift32 seed at this index. Use this as the "bug ID" when
+  /// a failure surfaces — pinning `Test.iterationSeed = <bad seed>`
+  /// reproduces the failing input.
+  seed: Int
+
+  /// Convenience field: a generator function may stuff its derived
+  /// value here. `intCases` populates it with the integer drawn
+  /// from the seed; custom generators can ignore it.
+  value: Int
+}
+
+class Failure {
+  index: Int
+  seed: Int
+  value: Int
+}
+
+class Result {
+  passed: Boolean
+  cases: Int
+  failure: Failure?
+  summary: String
+}
+
+local mask32: Int = 0xffffffff
+
+/// xorshift32 step. Pkl has `ushr` (unsigned shift right) but no
+/// shift-left method, so the left shifts use `* 2^n` + 32-bit
+/// mask. The Go executor reproduces this exact bit pattern.
+local function step(s: Int): Int =
+  let (s0 = s.and(mask32))
+  let (s1 = s0.xor((s0 * 8192).and(mask32)))    // << 13
+  let (s2 = s1.xor(s1.ushr(17)))
+    s2.xor((s2 * 32).and(mask32)).and(mask32)   // << 5
+
+/// `seedAt(seed, 0) == seed`. Each subsequent index advances the
+/// xorshift32 stream by one step. Used both by Pkl-internal
+/// `checkAll` and (in spirit) by the executor's iteration loop.
+function seedAt(seed: Int, index: Int): Int =
+  if (index <= 0) seed
+  else seedAt(step(seed), index - 1)
+
+/// Generate `count` integer cases with `value` ∈ [lo, hi] (inclusive).
+/// The cases are ordered by index 0..count-1.
+function intCases(seed: Int, count: Int, lo: Int, hi: Int): Listing<Case> =
+  let (range = hi - lo + 1)
+    new {
+      for (i in IntSeq(0, count - 1)) {
+        let (s = seedAt(seed, i))
+          new Case {
+            index = i
+            seed = s
+            value = lo + (s % range)
+          }
+      }
+    }
+
+/// Runs `pred` against every case. Returns a Result with the first
+/// counterexample (if any) and a one-line summary suitable for a
+/// fact's power-assertion output.
+function checkAll(name: String, cases: Listing<Case>, pred: (Case) -> Boolean): Result =
+  let (failed = cases.toList().filter((c) -> !pred.apply(c)))
+    let (first = if (failed.isEmpty) null else failed.first)
+      new Result {
+        passed = failed.isEmpty
+        cases = cases.length
+        failure =
+          if (first == null) null
+          else new Failure { index = first.index; seed = first.seed; value = first.value }
+        summary =
+          if (first == null) "PASS \(name) cases=\(cases.length)"
+          else "FAIL \(name) seed=\(first.seed) index=\(first.index) value=\(first.value)"
+      }

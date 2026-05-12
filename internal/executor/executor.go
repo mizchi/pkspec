@@ -607,6 +607,15 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 		}
 	}
 
+	// Property-based mode: iterations > 1 → run the body N times with
+	// a fresh xorshift32 seed per iteration. retries / flakyAcceptable
+	// are ignored — a property check treats the first failure as the
+	// bug, not as flake. The failing seed is surfaced for
+	// deterministic reproduction.
+	if t.Iterations > 1 {
+		return e.runIterated(ctx, name, mode, t, defaults, extraEnv, start)
+	}
+
 	maxAttempts := 1 + t.Retries
 	var last Result
 	attempts := 0
@@ -625,6 +634,60 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 	last.Outcome = classify(last.Outcome, attempts, passed, t.FlakyAcceptable)
 	last.Duration = time.Since(start)
 	return last
+}
+
+// runIterated executes the body Test.Iterations times, advancing a
+// xorshift32 seed each iteration. PKT_SEED and PKT_ITERATION are
+// injected into the extraEnv so the subprocess can derive its own
+// input. The first failing iteration is reported with its seed in
+// the Reasons; passing iterations are silent. Retries are
+// intentionally disabled in this mode.
+func (e *Executor) runIterated(ctx context.Context, name string, mode config.Mode, t *config.Test, defaults *config.Defaults, extraEnv map[string]string, start time.Time) Result {
+	seed := uint32(t.IterationSeed)
+	var last Result
+	passed := 0
+
+	for i := 0; i < t.Iterations; i++ {
+		iterEnv := make(map[string]string, len(extraEnv)+2)
+		for k, v := range extraEnv {
+			iterEnv[k] = v
+		}
+		iterEnv["PKT_ITERATION"] = strconv.Itoa(i)
+		iterEnv["PKT_SEED"] = strconv.FormatUint(uint64(seed), 10)
+
+		last = e.runAttempt(ctx, name, mode, t, defaults, iterEnv)
+		if last.Outcome != OutcomePassed {
+			last.Reasons = append(
+				[]string{fmt.Sprintf(
+					"property failed at iteration %d/%d (seed=%d); pin `iterationSeed = %d` to reproduce",
+					i, t.Iterations, seed, seed,
+				)},
+				last.Reasons...,
+			)
+			last.Attempts = i + 1
+			last.PassedAttempts = passed
+			last.Duration = time.Since(start)
+			return last
+		}
+		passed++
+		seed = xorshift32Step(seed)
+	}
+
+	last.Attempts = t.Iterations
+	last.PassedAttempts = passed
+	last.Outcome = OutcomePassed
+	last.Duration = time.Since(start)
+	return last
+}
+
+// xorshift32Step matches pkl/QuickCheck.pkl#step exactly so a seed
+// reported by the executor can be re-investigated inside `pkl
+// test` with the same Pkl helpers.
+func xorshift32Step(s uint32) uint32 {
+	s ^= s << 13
+	s ^= s >> 17
+	s ^= s << 5
+	return s
 }
 
 // classify folds the loop's bookkeeping into the user-visible outcome.
