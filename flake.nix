@@ -10,16 +10,21 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
+        version = "0.1.0";
         pkspec = pkgs.buildGoModule {
           pname = "pkspec";
-          version = "0.0.0";
+          inherit version;
           src = ./.;
 
           vendorHash = "sha256-XE5jU3X1tDVPiPbq6/yHjDzlxKpi+U9LKEil7kk238I=";
 
           subPackages = [ "cmd/pkspec" ];
 
-          ldflags = [ "-s" "-w" ];
+          ldflags = [
+            "-s"
+            "-w"
+            "-X main.version=${version}"
+          ];
 
           # `pkspec` shells out to `pkl` (via pkl-go) for evaluation, and
           # `pkspec run --reader-helper` re-invokes itself, so PATH needs both.
@@ -45,9 +50,10 @@
           pkspec = pkspec;
         };
 
-        apps.default = flake-utils.lib.mkApp {
-          drv = pkspec;
-          name = "pkspec";
+        apps.default = {
+          type = "app";
+          program = "${pkspec}/bin/pkspec";
+          meta = pkspec.meta;
         };
 
         # `nix develop` for working on pkspec itself.

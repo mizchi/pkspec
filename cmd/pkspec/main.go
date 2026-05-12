@@ -30,8 +30,6 @@ import (
 	"github.com/mizchi/pkspec/internal/spec"
 )
 
-const version = "0.0.0"
-
 func main() {
 	restore := installPklStderrFilter()
 	defer restore()
@@ -49,11 +47,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	switch args[0] {
 	case "version", "--version", "-v":
-		fmt.Fprintln(stdout, version)
+		fmt.Fprintln(stdout, displayVersion())
 		return nil
 	case "help", "--help", "-h":
 		usage(stdout)
 		return nil
+	case "init":
+		return cmdInit(args[1:], stdout, stderr)
 	case "run":
 		return cmdRun(args[1:], stdout, stderr)
 	case "exec":
@@ -80,6 +80,11 @@ usage:
   pkspec <command> [args]
 
 commands:
+  init [--dir pkspec] [--force]
+                              write the embedded Pkl authoring schemas
+                              (Test.pkl, Spec.pkl, QuickCheck.pkl) into
+                              a project so Go/Nix-installed binaries can
+                              be used without a source checkout.
   run [--allow-cmd] [pkl-test args...]
                               wrap `+"`pkl test`"+` and force a non-zero exit on
                               any assertion failure (closes pkl test's
@@ -633,9 +638,9 @@ func cmdReaderHelper(_ []string) error {
 // the call site (which is exactly what `module.catch` traps).
 type cmdResourceReader struct{}
 
-func (r *cmdResourceReader) Scheme() string             { return "cmd" }
-func (r *cmdResourceReader) IsGlobbable() bool          { return false }
-func (r *cmdResourceReader) HasHierarchicalUris() bool  { return false }
+func (r *cmdResourceReader) Scheme() string            { return "cmd" }
+func (r *cmdResourceReader) IsGlobbable() bool         { return false }
+func (r *cmdResourceReader) HasHierarchicalUris() bool { return false }
 func (r *cmdResourceReader) ListElements(u url.URL) ([]pkl.PathElement, error) {
 	return nil, nil
 }

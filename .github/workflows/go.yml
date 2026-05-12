@@ -1,0 +1,50 @@
+name: Go
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "cmd/**"
+      - "harness/**"
+      - "internal/**"
+      - "pkl/**"
+      - "*.go"
+      - ".github/workflows/go.yml"
+  pull_request:
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "cmd/**"
+      - "harness/**"
+      - "internal/**"
+      - "pkl/**"
+      - "*.go"
+      - ".github/workflows/go.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go test
+        run: go test ./...
+
+      - name: go install smoke
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install ./cmd/pkspec
+          "$RUNNER_TEMP/bin/pkspec" version
+          "$RUNNER_TEMP/bin/pkspec" init --dir "$RUNNER_TEMP/schema"

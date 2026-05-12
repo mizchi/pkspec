@@ -1,6 +1,7 @@
 # pkspec
 
 [![Nix CI](https://github.com/mizchi/pkspec/actions/workflows/nix.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/nix.yml)
+[![Go CI](https://github.com/mizchi/pkspec/actions/workflows/go.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/go.yml)
 
 > **[experimental]** A language-agnostic test runner built on
 > [Pkl](https://pkl-lang.org/). Generalizes the retry / sharding /
@@ -11,7 +12,7 @@
 > and differential testing across language implementations.
 
 ```pkl
-amends "package://.../pkspec@0.0.x#/Test.pkl"
+amends "./pkspec/Test.pkl"
 
 tests {
   new {
@@ -240,20 +241,22 @@ Beyond the per-test plumbing:
 ### Nix (recommended)
 
 ```sh
-nix run github:mizchi/pkspec -- exec -f path/to/Test.pkl
-nix profile install github:mizchi/pkspec
+nix run github:mizchi/pkspec/v0.1.0 -- init --dir pkspec
+nix run github:mizchi/pkspec/v0.1.0 -- exec -f path/to/Test.pkl
+nix profile install github:mizchi/pkspec/v0.1.0
 ```
 
 The flake builds the `pkspec` binary and wraps it so the bundled Pkl
 CLI is on `PATH` automatically. The Nix workflow on every push to
 `main` and every PR builds the flake on `aarch64-darwin` and
-`x86_64-linux`; the badge above tracks its status.
+`x86_64-linux`; the badge above tracks its status. The Go workflow
+also runs `go test ./...` and a `go install` smoke on both platforms.
 
 In a home-manager flake:
 
 ```nix
 {
-  inputs.pkspec.url = "github:mizchi/pkspec";
+  inputs.pkspec.url = "github:mizchi/pkspec/v0.1.0";
 
   outputs = { self, nixpkgs, home-manager, pkspec, ... }: {
     homeConfigurations.example = home-manager.lib.homeManagerConfiguration {
@@ -268,15 +271,32 @@ In a home-manager flake:
 ### Go
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/pkspec@latest
+go install github.com/mizchi/pkspec/cmd/pkspec@v0.1.0
+pkspec init --dir pkspec
 ```
 
 You also need the [Pkl CLI](https://pkl-lang.org/main/current/pkl-cli/)
 on `PATH` — that's exactly the friction Nix removes.
 
+After `pkspec init`, author test modules against the generated local
+schemas:
+
+```pkl
+amends "./pkspec/Test.pkl"
+
+tests {
+  new {
+    name = "smoke"
+    cmd = "true"
+  }
+}
+```
+
 ## CLI
 
 ```
+pkspec init --dir pkspec                  write Test.pkl / Spec.pkl / QuickCheck.pkl schemas
+
 pkspec exec -f Test.pkl                    run all tests in a module
 pkspec exec -f Test.pkl --tag spec         filter by Test.tags (repeatable, OR)
 pkspec exec -f Test.pkl --only login       filter by name substring (repeatable, OR)
@@ -316,9 +336,9 @@ shard balancing (or vice-versa).
 
 ## Status
 
-Active development, frequent API churn — there is no release, no
-binary distribution, no stability promise. The public repo is for
-reading along.
+Active development, frequent API churn. `v0.1.0` is the first
+dogfooding release for Nix flakes and `go install`; expect schema and
+CLI changes before a stability promise.
 
 For decision history per phase, see [`findings.md`](./findings.md);
 the time-ordered raw log. For thematic deep dives, see
