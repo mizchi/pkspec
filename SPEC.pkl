@@ -507,6 +507,18 @@ scenarios {
     implementedAt = "internal/executor/executor.go:runHttpStep"
   }
   new {
+    id = "diff.inline-jsonpath"
+    name = "inline_snapshot_per_jsonpath_subtree"
+    description = "`Step.inlineJsonPath` is a `Mapping<String, String>` from JSONPath expression to the JSON-encoded captured subtree (gjson `.Raw` form). Each authored entry is compared against the live lookup; mismatch fails unless `--update-inline-snapshots` is set, in which case `inline.ReplaceMappingEntryValue` rewrites only the value of that entry. Authoring contract is opt-in per path: only keys the user has listed (with any placeholder value) are checked or updated, so a single `--update` run does not balloon every step's mapping."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "diff.inline-snapshot" }
+    contributes { "goal.differential"; "goal.lang-independent" }
+    implementedBy = "code"
+    implementedAt = "internal/inline/rewriter.go:ReplaceMappingEntryValue"
+  }
+  new {
     id = "diff.inline-multiline"
     name = "inline_snapshot_uses_triple_quoted_for_multiline"
     description = "When the captured value would need ≥ 2 embedded newlines (and is ≥ 80 chars), or has ≥ 4 newlines, or a single line ≥ 120 chars, the rewriter emits a Pkl triple-quoted (`\"\"\"...\"\"\"`) literal instead of a single-line `\\n`-escaped one. Diff-readable; round-trips byte-for-byte."

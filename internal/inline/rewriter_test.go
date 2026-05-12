@@ -69,6 +69,85 @@ func TestReplaceField_NameMissing(t *testing.T) {
 	}
 }
 
+const mappingSample = `amends "Test.pkl"
+
+local probe = new Step {
+  name = "probe"
+  http {
+    method = "GET"
+    url = "https://example.test/api"
+  }
+  inlineJsonPath {
+    ["$.user.name"] = "<placeholder>"
+    ["$.user.id"] = "old-id"
+  }
+}
+
+local other = new Step {
+  name = "other"
+  inlineJsonPath {
+    ["$.tag"] = "leave-me"
+  }
+}
+
+tests { probe; other }
+`
+
+func TestReplaceMappingEntryValue_ExistingKey(t *testing.T) {
+	out, err := ReplaceMappingEntryValue([]byte(mappingSample), "probe", "inlineJsonPath", "$.user.name", `"alice"`)
+	if err != nil {
+		t.Fatalf("ReplaceMappingEntryValue: %v", err)
+	}
+	if !strings.Contains(string(out), `["$.user.name"] = "\"alice\""`) {
+		t.Fatalf("expected updated entry, got:\n%s", out)
+	}
+	// sibling entry untouched
+	if !strings.Contains(string(out), `["$.user.id"] = "old-id"`) {
+		t.Fatal("sibling entry was rewritten")
+	}
+	// other step untouched
+	if !strings.Contains(string(out), `["$.tag"] = "leave-me"`) {
+		t.Fatal("other step's mapping was rewritten")
+	}
+}
+
+func TestReplaceMappingEntryValue_MultiLineValue(t *testing.T) {
+	body := "line1\nline2\nline3\nline4\nline5\n"
+	out, err := ReplaceMappingEntryValue([]byte(mappingSample), "probe", "inlineJsonPath", "$.user.name", body)
+	if err != nil {
+		t.Fatalf("ReplaceMappingEntryValue: %v", err)
+	}
+	// triple-quoted form
+	if !strings.Contains(string(out), `["$.user.name"] = """`) {
+		t.Fatalf("expected triple-quoted form for multiline value, got:\n%s", out)
+	}
+	// continuation indent matches the entry's own indent
+	if !strings.Contains(string(out), "    line1\n    line2") {
+		t.Fatalf("multiline indent wrong, got:\n%s", out)
+	}
+}
+
+func TestReplaceMappingEntryValue_KeyMissing(t *testing.T) {
+	_, err := ReplaceMappingEntryValue([]byte(mappingSample), "probe", "inlineJsonPath", "$.does-not-exist", "x")
+	if err == nil {
+		t.Fatal("expected error when key is absent from the mapping")
+	}
+}
+
+func TestReplaceMappingEntryValue_FieldMissing(t *testing.T) {
+	_, err := ReplaceMappingEntryValue([]byte(mappingSample), "probe", "inlineHeaders", "X-Foo", "bar")
+	if err == nil {
+		t.Fatal("expected error when mapping field is absent")
+	}
+}
+
+func TestReplaceMappingEntryValue_NameMissing(t *testing.T) {
+	_, err := ReplaceMappingEntryValue([]byte(mappingSample), "nope", "inlineJsonPath", "$.x", "y")
+	if err == nil {
+		t.Fatal("expected error when step name is absent")
+	}
+}
+
 func TestEncodeString(t *testing.T) {
 	cases := []struct {
 		in, out string

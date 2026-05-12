@@ -123,6 +123,17 @@ class Step {
   /// triple-quoted (`"""..."""`) literals when long.
   inlineHttpBody: String? = null
 
+  /// Per-jsonpath inline snapshot. The key is a JSONPath
+  /// expression (same syntax as `expectBodyJsonPath`), the
+  /// value is the captured JSON-encoded subtree. On mismatch
+  /// the step fails unless `--update-inline-snapshots` is set,
+  /// in which case each authored entry's value is rewritten to
+  /// the live capture. Only entries the user has authored are
+  /// updated — `--update-inline-snapshots` does not add new
+  /// keys, the user opts in by listing the path with any
+  /// placeholder value (commonly `""`). Requires `step.name`.
+  inlineJsonPath: Mapping<String, String> = new {}
+
   // ── HTTP expectations ──────────────────────────────────────────
   expectStatus: Int? = null
 
@@ -834,6 +845,7 @@ class RenderedStep {
   expectStderr: String?
   inlineStdout: String?
   inlineHttpBody: String?
+  inlineJsonPath: Mapping<String, String>
   expectStatus: Int?
   expectStatusBetween: Listing<Int>
   expectBodyEquals: String?
@@ -1076,6 +1088,7 @@ local function renderStep(s: Step): RenderedStep = new {
   expectStderr = s.expectStderr
   inlineStdout = s.inlineStdout
   inlineHttpBody = s.inlineHttpBody
+  inlineJsonPath = s.inlineJsonPath
   expectStatus = s.expectStatus
   expectStatusBetween = s.expectStatusBetween
   expectBodyEquals = s.expectBodyEquals

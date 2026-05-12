@@ -1198,6 +1198,7 @@ func hasHttpFields(step *config.Step) bool {
 		len(step.ExpectHeaderEquals) > 0 ||
 		len(step.ExpectBodyJsonPath) > 0 ||
 		step.InlineHttpBody != nil ||
+		len(step.InlineJsonPath) > 0 ||
 		step.CaptureBody != nil ||
 		step.CaptureStatus != nil ||
 		len(step.CaptureBodyJsonPath) > 0 ||
@@ -1473,6 +1474,23 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 			sr.Reasons = append(sr.Reasons,
 				"inlineHttpBody requires step.name to be set so the rewriter can locate the source line")
 		} else if reason := e.checkInline(*step.Name, "inlineHttpBody", step.InlineHttpBody, string(respBody)); reason != "" {
+			sr.Reasons = append(sr.Reasons, reason)
+		}
+	}
+
+	for path, expected := range step.InlineJsonPath {
+		if step.Name == nil || *step.Name == "" {
+			sr.Reasons = append(sr.Reasons,
+				fmt.Sprintf("inlineJsonPath[%q] requires step.name to be set so the rewriter can locate the source line", path))
+			continue
+		}
+		result := jsonPathLookup(respBody, path)
+		if !result.Exists() {
+			sr.Reasons = append(sr.Reasons,
+				fmt.Sprintf("inlineJsonPath %q: not found in response body", path))
+			continue
+		}
+		if reason := e.checkInlineMappingEntry(*step.Name, "inlineJsonPath", path, expected, result.Raw); reason != "" {
 			sr.Reasons = append(sr.Reasons, reason)
 		}
 	}
@@ -2107,6 +2125,49 @@ func (e *Executor) rewriteInline(blockName, fieldName, value string) error {
 	return inline.WriteAtomic(e.sourcePath, rewritten)
 }
 
+// checkInlineMappingEntry is the per-entry counterpart of
+// checkInline for Mapping-valued inline fields (`inlineJsonPath`,
+// future inlineHeaders / inlineSqlRows / inlineConsoleLog). The
+// user opts in per-key by listing it in the mapping with any
+// placeholder value; on mismatch the step fails, unless
+// `--update-inline-snapshots` is set in which case the entry's
+// value is rewritten in source.
+func (e *Executor) checkInlineMappingEntry(blockName, fieldName, key, expected, actual string) string {
+	if expected == actual {
+		return ""
+	}
+	if e.opts.UpdateInlineSnapshots {
+		if err := e.rewriteInlineMappingEntry(blockName, fieldName, key, actual); err != nil {
+			return fmt.Sprintf("%s[%q] update failed: %v", fieldName, key, err)
+		}
+		fmt.Fprintf(e.opts.Stderr, "[pkspec] %s[%q] for %q updated (%d bytes)\n",
+			fieldName, key, blockName, len(actual))
+		return ""
+	}
+	return fmt.Sprintf("%s[%q] mismatch:\n%s", fieldName, key, diff(expected, actual))
+}
+
+// rewriteInlineMappingEntry runs ReplaceMappingEntryValue under
+// the same source-file mutex as rewriteInline, so concurrent
+// parallel-step entry rewrites against the same Test.pkl
+// serialise instead of interleaving.
+func (e *Executor) rewriteInlineMappingEntry(blockName, fieldName, key, value string) error {
+	if e.sourcePath == "" {
+		return errors.New("no source path available")
+	}
+	e.sourceMu.Lock()
+	defer e.sourceMu.Unlock()
+	src, err := os.ReadFile(e.sourcePath)
+	if err != nil {
+		return err
+	}
+	rewritten, err := inline.ReplaceMappingEntryValue(src, blockName, fieldName, key, value)
+	if err != nil {
+		return err
+	}
+	return inline.WriteAtomic(e.sourcePath, rewritten)
+}
+
 // aiSnapshot is the on-disk shape of a cached AI verdict.
 type aiSnapshot struct {
 	// Hash is sha256(prompt + "\n" + body). Cache hit on exact match.
@@ -2169,6 +2230,9 @@ func stepHasDeterministicAssertion(s *config.Step) bool {
 		return true
 	}
 	if len(s.ExpectBodyJsonPath) > 0 || len(s.ExpectHeaderEquals) > 0 {
+		return true
+	}
+	if len(s.InlineJsonPath) > 0 {
 		return true
 	}
 	return false

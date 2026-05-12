@@ -49,7 +49,7 @@ func ReplaceField(source []byte, testName, fieldName, value string) ([]byte, err
 	}
 
 	// Locate `<fieldName> = ...` line inside [openIdx+1, closeIdx).
-	fieldRe := regexp.MustCompile(fmt.Sprintf(`(?m)^(\s*)%s\s*=[^\n]*$`, regexp.QuoteMeta(fieldName)))
+	fieldRe := regexp.MustCompile(fmt.Sprintf(`(?m)^([ \t]*)%s\s*=[^\n]*$`, regexp.QuoteMeta(fieldName)))
 	rel := fieldRe.FindSubmatchIndex(source[openIdx+1 : closeIdx])
 	if rel == nil {
 		return nil, fmt.Errorf("inline: field %q not found inside test %q", fieldName, testName)
@@ -64,6 +64,148 @@ func ReplaceField(source []byte, testName, fieldName, value string) ([]byte, err
 	out = append(out, replacement...)
 	out = append(out, source[endAbs:]...)
 	return out, nil
+}
+
+// ReplaceMappingEntryValue rewrites a single `[<key>] = <value>`
+// entry inside a `Mapping<...>` field. The mapping field must
+// already exist on the named block, and the entry must already
+// be authored — this routine only updates the value of an
+// existing key, it does not add new keys. The placeholder
+// authoring contract is the same as `expectBodyJsonPath`: the
+// user lists the keys they want snapshots for, leaves a
+// placeholder value, and `--update-inline-snapshots` fills in
+// the live capture.
+//
+// Limitations for MVP: keys must be authored as simple
+// double-quoted strings without embedded quotes or backslashes
+// (jsonpath / header-name / column-name shapes all fit). The
+// mapping field's opening brace must be on the same line as the
+// field name (`inlineJsonPath {` — not split across lines).
+func ReplaceMappingEntryValue(source []byte, blockName, fieldName, key, value string) ([]byte, error) {
+	masked := maskStringsAndComments(source)
+
+	nameRe := regexp.MustCompile(fmt.Sprintf(`(?m)^(\s*)name\s*=\s*"%s"\s*$`, regexp.QuoteMeta(blockName)))
+	nameLoc := nameRe.FindIndex(source)
+	if nameLoc == nil {
+		return nil, fmt.Errorf("inline: could not find name=%q in source", blockName)
+	}
+	blockOpen, err := findEnclosingOpenBrace(masked, nameLoc[0])
+	if err != nil {
+		return nil, err
+	}
+	blockClose, err := findMatchingCloseBrace(masked, blockOpen)
+	if err != nil {
+		return nil, err
+	}
+
+	fieldRe := regexp.MustCompile(fmt.Sprintf(`(?m)^(\s*)%s\s*\{`, regexp.QuoteMeta(fieldName)))
+	fieldLoc := fieldRe.FindIndex(source[blockOpen+1 : blockClose])
+	if fieldLoc == nil {
+		return nil, fmt.Errorf("inline: mapping field %q not found inside block %q (mapping fields must use the `<field> {` form on a single line)", fieldName, blockName)
+	}
+	fieldOpenAbs := blockOpen + 1 + fieldLoc[1] - 1
+	fieldCloseAbs, err := findMatchingCloseBrace(masked, fieldOpenAbs)
+	if err != nil {
+		return nil, err
+	}
+
+	entryRe := regexp.MustCompile(fmt.Sprintf(`(?m)^([ \t]*)\[\s*"%s"\s*\]\s*=[ \t]*`, regexp.QuoteMeta(key)))
+	entryLoc := entryRe.FindSubmatchIndex(source[fieldOpenAbs+1 : fieldCloseAbs])
+	if entryLoc == nil {
+		return nil, fmt.Errorf("inline: key %q not found in mapping %q on block %q — author the key with a placeholder value first", key, fieldName, blockName)
+	}
+	entryStartAbs := fieldOpenAbs + 1 + entryLoc[0]
+	valueStartAbs := fieldOpenAbs + 1 + entryLoc[1]
+	indent := string(source[fieldOpenAbs+1+entryLoc[2] : fieldOpenAbs+1+entryLoc[3]])
+
+	valueEndAbs := findPklValueEnd(source, valueStartAbs)
+
+	encoded := EncodeStringWithIndent(value, indent)
+	replacement := fmt.Sprintf(`%s["%s"] = %s`, indent, key, encoded)
+
+	out := make([]byte, 0, len(source)+len(replacement))
+	out = append(out, source[:entryStartAbs]...)
+	out = append(out, replacement...)
+	out = append(out, source[valueEndAbs:]...)
+	return out, nil
+}
+
+// findPklValueEnd returns the byte offset just past the end of
+// the Pkl value starting at `start`. Handles single- and
+// triple-quoted strings (recognising the closing delimiter is
+// the first unescaped occurrence) and nested `{ }` blocks. The
+// value ends at the first newline encountered at brace depth 0
+// outside any string, OR at a `}` at brace depth -1 (i.e. the
+// closer of the enclosing mapping — the value had no terminator
+// of its own and ran into the parent's close).
+func findPklValueEnd(source []byte, start int) int {
+	i := start
+	const (
+		stateNormal       = 0
+		stateSingleString = 1
+		stateTripleString = 2
+	)
+	state := stateNormal
+	depth := 0
+	for i < len(source) {
+		c := source[i]
+		switch state {
+		case stateNormal:
+			if c == '"' && i+2 < len(source) && source[i+1] == '"' && source[i+2] == '"' {
+				state = stateTripleString
+				i += 3
+				continue
+			}
+			if c == '"' {
+				state = stateSingleString
+				i++
+				continue
+			}
+			if c == '{' {
+				depth++
+				i++
+				continue
+			}
+			if c == '}' {
+				if depth == 0 {
+					return i
+				}
+				depth--
+				i++
+				continue
+			}
+			if c == '\n' && depth == 0 {
+				return i
+			}
+			i++
+		case stateSingleString:
+			if c == '\\' && i+1 < len(source) {
+				i += 2
+				continue
+			}
+			if c == '"' {
+				state = stateNormal
+				i++
+				continue
+			}
+			if c == '\n' {
+				return i
+			}
+			i++
+		case stateTripleString:
+			if c == '"' && i+2 < len(source) && source[i+1] == '"' && source[i+2] == '"' {
+				state = stateNormal
+				i += 3
+				continue
+			}
+			if c == '\\' && i+1 < len(source) {
+				i += 2
+				continue
+			}
+			i++
+		}
+	}
+	return i
 }
 
 // maskStringsAndComments returns a copy of `source` with the

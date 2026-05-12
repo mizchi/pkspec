@@ -5,6 +5,101 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 41 — Mapping rewriter + `Step.inlineJsonPath`
+
+mizchi: "A" (drain Phase 38's deferred list, starting with the
+Mapping rewriter primitive)
+
+Phase 38 shipped inline snapshots for `inlineStdout` / `inlineStderr`
+/ `inlineHttpBody` — all single-string fields. The deferred items
+(`inlineJsonPath`, `inlineHeaders`, `inlineSqlRows`,
+`inlineConsoleLog`) need a different rewriter primitive: instead
+of replacing a whole field, replace one entry of a `Mapping<K, V>`
+field.
+
+### The rewriter primitive
+
+`inline.ReplaceMappingEntryValue(source, blockName, fieldName, key, value)`:
+
+- Find the named block (reuses Phase 38's name= regex + brace
+  helpers).
+- Find `<fieldName> {` inside the block (single-line opening
+  brace required for MVP).
+- Inside the mapping, find `["<key>"] = ...` line.
+- Use a Pkl-aware value-end scanner that understands single-
+  and triple-quoted strings + nested `{ }` blocks so the
+  replacement boundary is correct even when the previous value
+  was multi-line.
+- Encode the new value with the same `EncodeStringWithIndent`
+  used by `ReplaceField`, so multi-line captures get
+  triple-quoted form automatically.
+
+### The bug that bit on the first run
+
+`(?m)^(\s*)\[\s*"<key>"\s*\]` captured a leading `\n` in
+group 1, because `\s` matches `\n` and the substring passed
+into `FindSubmatchIndex` started with the newline that ended
+the field's opening line. Group 1 then was `"\n    "`
+(newline + 4 spaces) — encoded into every continuation line
+of the triple-quoted body, producing `\n\n      lineN` doubled
+newlines.
+
+Fix: indent captures use `[ \t]*` not `\s*`. Same shape applied
+preventively to `ReplaceField`'s field regex — Phase 38's tests
+only used short values that fell into `encodeDoubleQuoted`,
+masking the same latent bug there.
+
+### Schema additions
+
+- `Step.inlineJsonPath: Mapping<String, String> = new {}` in
+  `pkl/Test.pkl` (author-side + RenderedStep + renderStep
+  passthrough).
+- `Step.InlineJsonPath map[string]string` in
+  `internal/config/config.go`.
+- Executor wiring in `runHttpStep`: for each authored entry,
+  `jsonPathLookup` → compare against expected; on mismatch
+  with `--update-inline-snapshots`, call
+  `e.rewriteInlineMappingEntry` which serialises through the
+  same `sourceMu` as `rewriteInline`.
+- `hasHttpFields` includes `InlineJsonPath`.
+- `stepHasDeterministicAssertion` includes `InlineJsonPath` so
+  AI assertions auto-skip when an inline jsonpath check exists.
+
+### Authoring contract
+
+Per-key opt-in. The user lists `["$.user.name"] = ""` (or any
+placeholder) for each path they want snapshotted. `--update-
+inline-snapshots` rewrites only the value of authored keys —
+it does NOT add new keys, so a single update run doesn't dump
+every response body's jsonpath into every step.
+
+Value semantics: `result.Raw` from gjson — JSON-encoded form.
+Strings stay quoted (`"alice"`), numbers/bools/null bare (`42`,
+`true`), objects/arrays as JSON literals (`{"x":1}`). Awkward
+for hand-authored placeholders, but predictable + type-stable.
+
+### Skipped / out of scope (still)
+
+- `Step.inlineHeaders` / `inlineSqlRows` / `inlineConsoleLog`
+  — same Mapping primitive applies but each needs schema +
+  executor wiring. Cheap to add once the contract above stabilises.
+- Block comment `/* */` masking in the rewriter — Pkl convention
+  doesn't use block comments in test modules.
+- Adding entries to mappings via `--update`. By design.
+
+### Verified
+
+- 5 new unit tests in `rewriter_test.go` — replace existing value,
+  multi-line value (triple-quoted), missing key, missing field,
+  missing block name.
+- `go build ./...` clean, `go test ./...` all 6 packages green.
+- `pkspec spec --check` against SPEC.pkl finds the new
+  `diff.inline-jsonpath` scenario; it's marked
+  `implementedBy = "code"` pointing at
+  `internal/inline/rewriter.go:ReplaceMappingEntryValue`.
+
+---
+
 ## Phase 40 — Binary rename: pkt → pkspec
 
 mizchi: "プロジェクトをrenameしたコマンド名を pkspec にする"
