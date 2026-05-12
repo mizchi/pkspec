@@ -510,6 +510,27 @@ class Test {
   /// can be re-investigated inside `pkl test` with the same seed.
   iterationSeed: Int = 1
 
+  /// Enable seed-space shrinking after a property failure. When
+  /// `iterations > 1` and the body fails at some seed S, the
+  /// runner re-runs with progressively smaller seeds (S/2, S/4,
+  /// ... bounded by `shrinkAttempts`) and reports the smallest
+  /// seed that still fails.
+  ///
+  /// **This is not true input shrinking.** pkt does not know how
+  /// the body derives input from `$PKT_SEED`; it can only try
+  /// numerically smaller seeds. The shrink is useful when the
+  /// derivation is monotonic-ish (`PKT_SEED % N`, integer
+  /// division) and worthless when the derivation hashes the seed
+  /// or maps it non-monotonically. Treat the shrunk seed as a
+  /// hint, not a proof of minimality.
+  shrink: Boolean = false
+
+  /// Maximum number of shrink probes after the initial property
+  /// failure. Each probe is one body execution against a smaller
+  /// candidate seed. 32 probes covers seeds up to ~4 billion via
+  /// repeated halving.
+  shrinkAttempts: Int(this >= 0) = 32
+
   // ── Body: pick exactly one ─────────────────────────────────────
   cmd: (String(length > 0))? = null
   stdin: String? = null
@@ -706,6 +727,8 @@ class RenderedTest {
   pending: Boolean
   iterations: Int
   iterationSeed: Int
+  shrink: Boolean
+  shrinkAttempts: Int
 
   cmd: String?
   stdin: String?
@@ -869,6 +892,8 @@ local function renderTest(t: Test): RenderedTest = new {
   pending = t.pending
   iterations = t.iterations
   iterationSeed = t.iterationSeed
+  shrink = t.shrink
+  shrinkAttempts = t.shrinkAttempts
   cmd = t.cmd
   stdin = t.stdin
   expectExitCode = t.expectExitCode

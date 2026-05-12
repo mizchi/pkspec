@@ -90,12 +90,90 @@ iterationSeed = 3901813017
 iterations = 1   // optional — only one iteration is needed to repro
 ```
 
-## What's NOT in scope today
+## Seed-space shrinking (opt-in)
 
-- **Shrinking**: pkt does not narrow the failing input. The
-  reported seed is the smallest information you get.
-  Workaround: bisect the body's input derivation by hand —
-  smaller `PKT_SEED % N` modulus, narrower derived ranges.
+`Test.shrink = true` enables a post-failure shrink loop. When a
+property fails at seed S, the runner re-runs with candidate
+seeds (`S/2`, `S/4`, `S-1`, then halving from any candidate that
+also fails, etc.) up to `shrinkAttempts` body executions. The
+smallest seed that still fails is reported in the
+`pin iterationSeed = X` hint instead of the original.
+
+```pkl
+new Test {
+  name = "shrinkable_property"
+  iterations = 20
+  iterationSeed = 999999
+  shrink = true
+  shrinkAttempts = 32
+  cmd = """
+    val=$(( PKT_SEED % 100 ))
+    [ $val -lt 50 ]
+  """
+}
+```
+
+Output on failure includes the shrink trace:
+
+```
+property failed at iteration 0/20 (seed=999999); pin `iterationSeed = 62490` to reproduce
+shrink: 999999 → 62490 (13 candidates tried)
+shrink: seed 499999 also fails
+shrink: seed 249999 also fails
+shrink: seed 124999 also fails
+shrink: seed 62499 also fails
+shrink: seed 62498 also fails
+...
+shrink: seed 62490 also fails
+```
+
+### Why "seed-space," not "input-space"
+
+pkt has no view of how the body derives input from `$PKT_SEED`,
+so it can only try numerically smaller seeds and check whether
+the body still fails. This works well when the derivation is
+roughly monotonic in the seed (`PKT_SEED % N`, integer division,
+`PKT_SEED / K`), and worthlessly when the derivation hashes the
+seed first (`sha256(PKT_SEED)` → smaller seed produces an
+entirely different hash, no correlation with failure).
+
+The reported "shrunk seed" is therefore a **hint, not a proof of
+minimality**:
+
+- Within `shrinkAttempts` body executions, no smaller seed was
+  found to also reproduce the failure.
+- But: a seed even smaller might also fail; the budget cut the
+  search.
+- And: when the input derivation is non-monotonic, shrinking
+  may stop at a seed that's smaller than the original but not
+  meaningfully simpler in terms of input.
+
+In short: useful when the body's input derivation is simple;
+ignore the shrink output when it isn't.
+
+### When to enable
+
+- **Yes**: integer / numeric property checks (`PKT_SEED % N`,
+  range bounds, modulo arithmetic).
+- **Maybe**: list-length / size-of properties (the seed
+  controls the size, derivation is monotonic in some axis).
+- **No**: anything that hashes the seed before deriving input.
+
+### `shrinkAttempts` budget
+
+Each attempt is one body execution at a candidate seed. 32
+attempts cover seeds up to ~4 billion via halving, with room
+for the linear "seed - 1" probes that tighten the bound.
+Increase if the body is fast (`cmd` is microseconds) and you
+want a tighter shrink; decrease if the body is slow (browser
+launch, etc.) and 32 × per-iteration cost exceeds your
+patience budget.
+
+## What's still NOT in scope today
+
+- **Input-space shrinking** (the proper QuickCheck flavour).
+  Would require pkt to know the input type and generator. See
+  the "Why seed-space" note above.
 - **Custom generators**: only `intCases` is provided. For
   strings / structs / lists, derive in the subprocess from
   `$PKT_SEED` directly. Adding generator helpers in Pkl is

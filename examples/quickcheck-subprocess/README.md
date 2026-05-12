@@ -49,6 +49,24 @@ loop now starts from the bug.
 The two are mutually exclusive in spirit; pkt's implementation
 ignores `retries` when `iterations > 1`.
 
+## Shrink (opt-in)
+
+The third Test (`shrinkable_modulo_property`, `pending = true` by
+default) demonstrates `shrink = true`. Flip pending off and run:
+
+```sh
+pkt exec -f examples/quickcheck-subprocess/Test.pkl --only shrinkable
+```
+
+You'll see the seed narrow from 999,999 down to ~62,490 (the
+boundary where `seed % 100 < 50` flips) over ~13 probes. The
+final hint is `pin iterationSeed = 62490 to reproduce` — a much
+smaller seed for debugging.
+
+Shrink is seed-space only, not input-space — see
+`docs/notes/quickcheck.md` for when it helps and when it
+doesn't (hashed-seed derivations get no benefit).
+
 ## When NOT to use this
 
 - The system under test is **already deterministic**. Iterating

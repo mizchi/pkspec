@@ -42,4 +42,24 @@ tests {
       fi
     """
   }
+
+  // SHRINK demo: large seed → "fail when val ≥ 50". Shrinking
+  // narrows the failing seed via halving + linear probes.
+  new {
+    name = "shrinkable_modulo_property"
+    description = "PKT_SEED % 100 < 50 — fails for large seeds; shrink narrows"
+    tags { "spec" }
+    pending = true   // enable to see shrink in action
+    iterations = 5
+    iterationSeed = 999999
+    shrink = true
+    shrinkAttempts = 32
+    cmd = """
+      val=$(( PKT_SEED % 100 ))
+      if [ $val -ge 50 ]; then
+        echo "PKT_SEED=$PKT_SEED → val=$val (>= 50)"
+        exit 1
+      fi
+    """
+  }
 }

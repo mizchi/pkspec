@@ -162,6 +162,8 @@ type Test struct {
 	Pending         bool              `pkl:"pending"`
 	Iterations      int               `pkl:"iterations"`
 	IterationSeed   int               `pkl:"iterationSeed"`
+	Shrink          bool              `pkl:"shrink"`
+	ShrinkAttempts  int               `pkl:"shrinkAttempts"`
 
 	Cmd                  *string            `pkl:"cmd"`
 	Stdin                *string            `pkl:"stdin"`

@@ -657,13 +657,19 @@ func (e *Executor) runIterated(ctx context.Context, name string, mode config.Mod
 
 		last = e.runAttempt(ctx, name, mode, t, defaults, iterEnv)
 		if last.Outcome != OutcomePassed {
-			last.Reasons = append(
-				[]string{fmt.Sprintf(
-					"property failed at iteration %d/%d (seed=%d); pin `iterationSeed = %d` to reproduce",
-					i, t.Iterations, seed, seed,
-				)},
-				last.Reasons...,
+			minSeed := seed
+			shrinkTrace := ""
+			if t.Shrink && t.ShrinkAttempts > 0 {
+				minSeed, shrinkTrace = e.shrinkSeed(ctx, name, mode, t, defaults, extraEnv, seed, t.ShrinkAttempts)
+			}
+			header := fmt.Sprintf(
+				"property failed at iteration %d/%d (seed=%d); pin `iterationSeed = %d` to reproduce",
+				i, t.Iterations, seed, minSeed,
 			)
+			if shrinkTrace != "" {
+				header += "\n" + shrinkTrace
+			}
+			last.Reasons = append([]string{header}, last.Reasons...)
 			last.Attempts = i + 1
 			last.PassedAttempts = passed
 			last.Duration = time.Since(start)
@@ -688,6 +694,81 @@ func xorshift32Step(s uint32) uint32 {
 	s ^= s >> 17
 	s ^= s << 5
 	return s
+}
+
+// shrinkSeed searches for a smaller seed that still reproduces the
+// failure. Strategy: try `seed/2`, then `seed/4`, then `seed * 3/4`,
+// etc. — each probe is one body execution. When a smaller seed
+// still fails, accept it as the new working seed and recurse;
+// when no candidate from the probe set fails, stop and return
+// the smallest seed observed.
+//
+// This is seed-space shrinking, not input-space shrinking. pkt
+// has no view of how the body derives its input from `$PKT_SEED`,
+// so "smaller seed" only loosely correlates with "smaller input".
+// Works well for `PKT_SEED % N` style derivations; fails to
+// shrink anything when the body hashes the seed first.
+func (e *Executor) shrinkSeed(ctx context.Context, name string, mode config.Mode, t *config.Test, defaults *config.Defaults, extraEnv map[string]string, failSeed uint32, budget int) (uint32, string) {
+	var trace []string
+	current := failSeed
+
+	probes := func(s uint32) []uint32 {
+		out := []uint32{}
+		if s > 1 {
+			out = append(out, s/2)
+		}
+		if s > 3 {
+			out = append(out, s/4)
+		}
+		if s > 0 {
+			out = append(out, s-1)
+		}
+		return out
+	}
+
+	for budget > 0 {
+		found := false
+		for _, candidate := range probes(current) {
+			if budget <= 0 {
+				break
+			}
+			budget--
+			env := make(map[string]string, len(extraEnv)+2)
+			for k, v := range extraEnv {
+				env[k] = v
+			}
+			env["PKT_ITERATION"] = "-1"
+			env["PKT_SEED"] = strconv.FormatUint(uint64(candidate), 10)
+
+			res := e.runAttempt(ctx, name, mode, t, defaults, env)
+			if res.Outcome != OutcomePassed {
+				trace = append(trace, fmt.Sprintf("shrink: seed %d also fails", candidate))
+				current = candidate
+				found = true
+				break
+			}
+		}
+		if !found {
+			break
+		}
+	}
+
+	if current == failSeed {
+		return current, "shrink: no smaller seed reproduced the failure"
+	}
+	return current, fmt.Sprintf(
+		"shrink: %d → %d (%d candidate%s tried)\n%s",
+		failSeed, current,
+		len(trace), pluralS(len(trace)),
+		strings.Join(trace, "\n"),
+	)
+}
+
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // classify folds the loop's bookkeeping into the user-visible outcome.

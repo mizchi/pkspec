@@ -5,6 +5,85 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 23.1 — Seed-space shrinking
+
+- **Scope: seed-space, not input-space.** Honest framing
+  upfront: pkt has no view of how the body derives input from
+  `$PKT_SEED`, so a true QuickCheck-style input shrinker is
+  out of scope. What pkt CAN do is try numerically smaller
+  seeds and check whether the body still fails. Works well
+  for monotonic-ish derivations (`PKT_SEED % N`, integer
+  division), useless for hash-based derivations
+  (`sha256(PKT_SEED)`). Documented as "hint, not proof of
+  minimality."
+- **Schema: 2 new fields.** `shrink: Boolean = false` (opt-in)
+  and `shrinkAttempts: Int = 32` (budget). Default off so
+  existing fixtures don't pay the cost.
+- **Algorithm: greedy halving + linear probe.** For each
+  candidate seed S, try `{S/2, S/4, S-1}` in order; if any
+  still fails, adopt it as the new working seed and recurse.
+  Stop when no probe in the set fails, or when the budget
+  runs out. The mix of halving (large jumps) and `S-1`
+  (boundary refinement) lets the shrinker both escape big
+  fail regions and close in on the boundary.
+- **Implementation: ~70 lines.** `shrinkSeed` in
+  `internal/executor/executor.go`, called from `runIterated`'s
+  failure path before the result is returned. Each shrink
+  probe is one `runAttempt` (same code path as the property
+  iteration loop itself), so the body runs with the same env
+  composition, same hooks (which don't fire), same timeout
+  budget.
+- **Output: failure header + shrink trace.** Original:
+  `property failed at iteration 0/20 (seed=999999); pin
+  iterationSeed = 999999 to reproduce`. With shrink:
+  `pin iterationSeed = 62490 to reproduce` + a "shrink:
+  999999 → 62490 (13 candidates tried)" line + per-seed
+  trace of the fails that drove the adoption. Reads as a
+  bug-narrowing log.
+- **Smoke: 16x shrink in 13 probes.** `PKT_SEED % 100 < 50`
+  property, `iterationSeed = 999999`. Initial failing seed
+  = 999,999 (val = 99). After shrink: 62,490 (val = 90 →
+  still ≥ 50). Path: 999,999 → 499,999 → 249,999 → 124,999
+  → 62,499 (halving stops here because 31,249 % 100 = 49
+  passes), then linear `seed - 1` walks 62,499 → 62,490.
+  13 fail-trace entries; ~30 total body executions
+  (passing probes are silent).
+- **The "not really minimal" issue.** 62,490 was reported
+  but the true minimum failing seed in `[0, 999999]` might
+  be lower (e.g., any seed where `seed % 100 == 50`
+  satisfies the failing condition; 50 itself fails). The
+  greedy probe doesn't find non-local minima. Documented:
+  the shrink output is a debugging hint, not an existence
+  proof.
+- **Passing probes are not traced.** The shrink output lists
+  only fails — pass results are not visible in the user-
+  facing trace. This keeps the output readable; the budget
+  consumed by passing probes is implicit in "X candidates
+  tried" vs. the actual number of body executions. Could
+  add `--verbose-shrink` if the visibility is wanted later.
+- **PKT_ITERATION = -1 during shrink.** The body sees
+  `PKT_ITERATION = -1` for any shrink-probe invocation, so
+  authors can distinguish "main iteration loop" from
+  "shrink probe" if their body cares. Documented in
+  `quickcheck.md`.
+- **What this validates about D-design.** Property-based
+  testing + shrinking landed without per-kind plumbing.
+  Every kind (5 kinds) inherits both via the shared
+  `runAttempt` path; the env injection
+  (`PKT_SEED` / `PKT_ITERATION`) is reused for shrink with
+  the new sentinel. Same "kind-uniform dispatch" story as
+  before — no per-kind branching needed.
+- **What remains open.** True input-space shrinking would
+  require pkt to know the input type and have type-specific
+  shrink strategies (integers halve, lists drop elements,
+  strings drop characters). That's a substantially bigger
+  feature — needs a generator API in Pkl, an input
+  declaration on Test, and per-type shrink strategies.
+  Documented as the obvious next step if seed-space shrink
+  proves insufficient in practice.
+
+---
+
 ## Phase 23 — Property-based testing (QuickCheck promotion + iteration primitive)
 
 - **Two surfaces, one seed stream.** Property-based testing in
