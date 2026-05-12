@@ -114,6 +114,15 @@ class Step {
   /// `expectBodyEquals` / `expectBodyJsonPath` instead.
   inlineStdout: String? = null
 
+  /// Inline snapshot of HTTP response body (http kind only). Same
+  /// semantics as `inlineStdout`: opt in by setting to any string,
+  /// mismatch fails the step unless `--update-inline-snapshots` is
+  /// set, in which case the captured body is written back into
+  /// this Pkl field. Requires `step.name` so the rewriter can
+  /// locate the source line. Multi-line bodies are emitted as Pkl
+  /// triple-quoted (`"""..."""`) literals when long.
+  inlineHttpBody: String? = null
+
   // ── HTTP expectations ──────────────────────────────────────────
   expectStatus: Int? = null
 
@@ -824,6 +833,7 @@ class RenderedStep {
   expectStdout: String?
   expectStderr: String?
   inlineStdout: String?
+  inlineHttpBody: String?
   expectStatus: Int?
   expectStatusBetween: Listing<Int>
   expectBodyEquals: String?
@@ -1065,6 +1075,7 @@ local function renderStep(s: Step): RenderedStep = new {
   expectStdout = s.expectStdout
   expectStderr = s.expectStderr
   inlineStdout = s.inlineStdout
+  inlineHttpBody = s.inlineHttpBody
   expectStatus = s.expectStatus
   expectStatusBetween = s.expectStatusBetween
   expectBodyEquals = s.expectBodyEquals

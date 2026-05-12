@@ -483,13 +483,49 @@ scenarios {
   new {
     id = "diff.inline-snapshot"
     name = "inline_snapshot_rewrite"
-    description = "inlineStdout / inlineStderr fields in the Pkl source are populated by `--update-inline-snapshots`. The schema file itself is the snapshot."
+    description = "inlineStdout / inlineStderr (Test + Step) and inlineHttpBody (Step on http kind) carry an in-source snapshot value. Mismatch on a regular run fails the step; `--update-inline-snapshots` rewrites the field in place with the captured value. The schema file itself is the snapshot artefact."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.differential" }
     implementedBy = "code"
-    implementedAt = "internal/inline"
+    implementedAt = "internal/inline/rewriter.go:ReplaceField"
+  }
+  new {
+    id = "diff.inline-http-body"
+    name = "inline_snapshot_of_http_response_body"
+    description = "`Step.inlineHttpBody` is the http-kind sibling of `inlineStdout`. The captured response body is compared against the inline string; mismatch fails unless `--update-inline-snapshots` is set, in which case the field is rewritten in the Pkl source."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "diff.inline-snapshot" }
+    contributes { "goal.differential"; "goal.lang-independent" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/executor.go:runHttpStep"
+  }
+  new {
+    id = "diff.inline-multiline"
+    name = "inline_snapshot_uses_triple_quoted_for_multiline"
+    description = "When the captured value would need ≥ 2 embedded newlines (and is ≥ 80 chars), or has ≥ 4 newlines, or a single line ≥ 120 chars, the rewriter emits a Pkl triple-quoted (`\"\"\"...\"\"\"`) literal instead of a single-line `\\n`-escaped one. Diff-readable; round-trips byte-for-byte."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "diff.inline-snapshot" }
+    contributes { "goal.differential" }
+    implementedBy = "code"
+    implementedAt = "internal/inline/rewriter.go:shouldUseTripleQuoted"
+  }
+  new {
+    id = "diff.inline-concurrent-safety"
+    name = "inline_rewriter_safe_under_concurrent_processes"
+    description = "`inline.RewriteUnderLock` acquires a POSIX flock on `<module>.pkthunder-lock` for the read-mutate-write triple, so two `pkt exec --update-inline-snapshots` processes against the same module serialise instead of clobbering each other. The brace counter masks string interiors and `//` comments before scanning, so a literal `}` inside a Pkl string doesn't escape the enclosing object."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "diff.inline-snapshot" }
+    contributes { "goal.differential" }
+    implementedBy = "code"
+    implementedAt = "internal/inline/rewriter.go:RewriteUnderLock"
   }
   new {
     id = "diff.cross-language"

@@ -1197,6 +1197,7 @@ func hasHttpFields(step *config.Step) bool {
 		step.ExpectBodyContains != nil ||
 		len(step.ExpectHeaderEquals) > 0 ||
 		len(step.ExpectBodyJsonPath) > 0 ||
+		step.InlineHttpBody != nil ||
 		step.CaptureBody != nil ||
 		step.CaptureStatus != nil ||
 		len(step.CaptureBodyJsonPath) > 0 ||
@@ -1464,6 +1465,15 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 		if !jsonValuesEqual(result, expectedExpanded) {
 			sr.Reasons = append(sr.Reasons,
 				fmt.Sprintf("jsonpath %q expected %v, got %s", path, expectedExpanded, result.Raw))
+		}
+	}
+
+	if step.InlineHttpBody != nil {
+		if step.Name == nil || *step.Name == "" {
+			sr.Reasons = append(sr.Reasons,
+				"inlineHttpBody requires step.name to be set so the rewriter can locate the source line")
+		} else if reason := e.checkInline(*step.Name, "inlineHttpBody", step.InlineHttpBody, string(respBody)); reason != "" {
+			sr.Reasons = append(sr.Reasons, reason)
 		}
 	}
 
