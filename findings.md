@@ -102,6 +102,50 @@ jsonpath loop in `runHttpStep`.
 New SPEC.pkl scenario `diff.inline-headers` depends-on
 `diff.inline-jsonpath`.
 
+### Phase 41.2 — Drain the rest: inlineSqlRows + inlineConsoleLog
+
+mizchi: "残件"
+
+Two more consumers of the existing primitives. Both put the
+field on `Step` directly (not on `SqlSpec` / `PlaywrightSpec`)
+to reuse the single-level rewriter — same precedent as
+`inlineHttpBody` which is also Step-level despite being
+http-only. Trade-off: a misplaced field on the wrong kind is
+silently ignored rather than flagged by `validateStepKind`.
+Acceptable for MVP; extending the validator would need
+`hasSqlInlineFields` / `hasPlaywrightInlineFields` helpers
+threaded through every kind case, and the runtime cost of a
+silent skip is low for a deliberately-authored field name.
+
+**inlineSqlRows** (`Mapping<String, String>`):
+- Same Mapping primitive as inlineJsonPath; JSONPath against
+  `rowJSON` (the row-array JSON produced by `runSqlStep`).
+- Wiring lives next to `sp.ExpectRowsJsonPath` loop in
+  `internal/executor/sql.go`.
+
+**inlineConsoleLog** (`String?`):
+- Same single-string primitive as inlineStdout / inlineHttpBody;
+  captured value is `strings.Join(resp.Output.Console, "\n")`.
+- Wiring lives after `checkConsole` in
+  `internal/executor/playwright.go`. Reuses `e.checkInline`
+  unchanged (no new rewriter needed — `inline.ReplaceField` from
+  phase 38 handles a single string field anywhere in the module).
+
+Two new SPEC.pkl scenarios `diff.inline-sql-rows` and
+`diff.inline-console-log`. `stepHasDeterministicAssertion` now
+includes both — AI assertions auto-skip when either is the
+deterministic guard.
+
+### Phase 38's deferred list — fully drained
+
+  * inlineJsonPath          phase 41
+  * inlineHeaders           phase 41.1
+  * inlineSqlRows           phase 41.2
+  * inlineConsoleLog        phase 41.2
+
+Build + tests green; `pkspec spec --check` cross-references
+all four scenarios.
+
 ### Verified
 
 - 5 new unit tests in `rewriter_test.go` — replace existing value,

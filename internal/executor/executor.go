@@ -2248,6 +2248,9 @@ func stepHasDeterministicAssertion(s *config.Step) bool {
 	if len(s.InlineJsonPath) > 0 || len(s.InlineHeaders) > 0 {
 		return true
 	}
+	if len(s.InlineSqlRows) > 0 || s.InlineConsoleLog != nil {
+		return true
+	}
 	return false
 }
 

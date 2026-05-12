@@ -531,6 +531,30 @@ scenarios {
     implementedAt = "internal/executor/executor.go:runHttpStep"
   }
   new {
+    id = "diff.inline-sql-rows"
+    name = "inline_snapshot_per_jsonpath_against_sql_rows"
+    description = "`Step.inlineSqlRows` is the sql-kind counterpart of `inlineJsonPath`. JSONPath is evaluated against the row-array JSON produced by a SQL kind step. Same per-key opt-in contract. Lives at Step level (not on SqlSpec) to reuse the existing single-level Mapping rewriter — consistent with `inlineHttpBody` which is also Step-level despite being http-only."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "diff.inline-jsonpath" }
+    contributes { "goal.differential"; "goal.lang-independent" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/sql.go:runSqlStep"
+  }
+  new {
+    id = "diff.inline-console-log"
+    name = "inline_snapshot_of_playwright_console_stream"
+    description = "`Step.inlineConsoleLog: String?` captures the playwright page's full console output as a newline-joined string. Same single-string contract as `inlineStdout` and `inlineHttpBody`: opt in by setting any string, mismatch fails, `--update-inline-snapshots` rewrites. Multi-line bodies are emitted as Pkl triple-quoted literals when long. Only takes effect for kind = \"playwright\"; ignored on other kinds."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "diff.inline-snapshot" }
+    contributes { "goal.differential" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/playwright.go:runPlaywrightStep"
+  }
+  new {
     id = "diff.inline-multiline"
     name = "inline_snapshot_uses_triple_quoted_for_multiline"
     description = "When the captured value would need ≥ 2 embedded newlines (and is ≥ 80 chars), or has ≥ 4 newlines, or a single line ≥ 120 chars, the rewriter emits a Pkl triple-quoted (`\"\"\"...\"\"\"`) literal instead of a single-line `\\n`-escaped one. Diff-readable; round-trips byte-for-byte."

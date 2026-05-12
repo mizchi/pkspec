@@ -211,6 +211,21 @@ func (e *Executor) runPlaywrightStep(ctx context.Context, step *config.Step, t *
 		}
 	}
 
+	if step.InlineConsoleLog != nil {
+		if step.Name == nil || *step.Name == "" {
+			sr.Outcome = OutcomeFailed
+			sr.Reasons = append(sr.Reasons,
+				"inlineConsoleLog requires step.name to be set so the rewriter can locate the source line")
+			return sr
+		}
+		actual := strings.Join(resp.Output.Console, "\n")
+		if reason := e.checkInline(*step.Name, "inlineConsoleLog", step.InlineConsoleLog, actual); reason != "" {
+			sr.Outcome = OutcomeFailed
+			sr.Reasons = append(sr.Reasons, reason)
+			return sr
+		}
+	}
+
 	sr.Outcome = OutcomePassed
 	return sr
 }

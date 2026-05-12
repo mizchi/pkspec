@@ -136,6 +136,27 @@ func (e *Executor) runSqlStep(ctx context.Context, step *config.Step, t *config.
 		}
 	}
 
+	for path, expected := range step.InlineSqlRows {
+		if step.Name == nil || *step.Name == "" {
+			sr.Outcome = OutcomeFailed
+			sr.Reasons = append(sr.Reasons, fmt.Sprintf(
+				"inlineSqlRows[%q] requires step.name to be set so the rewriter can locate the source line", path))
+			return sr
+		}
+		result := jsonPathLookup(rowJSON, path)
+		if !result.Exists() {
+			sr.Outcome = OutcomeFailed
+			sr.Reasons = append(sr.Reasons, fmt.Sprintf(
+				"inlineSqlRows %q: not found in row output", path))
+			return sr
+		}
+		if reason := e.checkInlineMappingEntry(*step.Name, "inlineSqlRows", path, expected, result.Raw); reason != "" {
+			sr.Outcome = OutcomeFailed
+			sr.Reasons = append(sr.Reasons, reason)
+			return sr
+		}
+	}
+
 	sr.Outcome = OutcomePassed
 	return sr
 }

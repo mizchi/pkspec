@@ -134,10 +134,12 @@ type Step struct {
 	ExpectExitCode int     `pkl:"expectExitCode"`
 	ExpectStdout   *string `pkl:"expectStdout"`
 	ExpectStderr   *string `pkl:"expectStderr"`
-	InlineStdout   *string           `pkl:"inlineStdout"`
-	InlineHttpBody *string           `pkl:"inlineHttpBody"`
-	InlineJsonPath map[string]string `pkl:"inlineJsonPath"`
-	InlineHeaders  map[string]string `pkl:"inlineHeaders"`
+	InlineStdout     *string           `pkl:"inlineStdout"`
+	InlineHttpBody   *string           `pkl:"inlineHttpBody"`
+	InlineJsonPath   map[string]string `pkl:"inlineJsonPath"`
+	InlineHeaders    map[string]string `pkl:"inlineHeaders"`
+	InlineSqlRows    map[string]string `pkl:"inlineSqlRows"`
+	InlineConsoleLog *string           `pkl:"inlineConsoleLog"`
 
 	ExpectStatus        *int              `pkl:"expectStatus"`
 	ExpectStatusBetween []int             `pkl:"expectStatusBetween"`

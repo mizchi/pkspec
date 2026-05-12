@@ -141,6 +141,21 @@ class Step {
   /// are case-insensitive on lookup (Go's http.Header.Get).
   inlineHeaders: Mapping<String, String> = new {}
 
+  /// Per-jsonpath inline snapshot against SQL row output.
+  /// Same shape as `inlineJsonPath` but the path is evaluated
+  /// against the row-array JSON produced by a `sql` kind step
+  /// (`sql.expectRowsJsonPath`'s jsonpath syntax). Only takes
+  /// effect when `kind == "sql"`; ignored on other kinds.
+  inlineSqlRows: Mapping<String, String> = new {}
+
+  /// Inline snapshot of the playwright console stream as a
+  /// single newline-joined string. Same opt-in semantics as
+  /// `inlineStdout`: set to any string to opt in, the captured
+  /// console entries are written here on `--update-inline-
+  /// snapshots`. Only takes effect when `kind == "playwright"`;
+  /// ignored on other kinds.
+  inlineConsoleLog: String? = null
+
   // ── HTTP expectations ──────────────────────────────────────────
   expectStatus: Int? = null
 
@@ -854,6 +869,8 @@ class RenderedStep {
   inlineHttpBody: String?
   inlineJsonPath: Mapping<String, String>
   inlineHeaders: Mapping<String, String>
+  inlineSqlRows: Mapping<String, String>
+  inlineConsoleLog: String?
   expectStatus: Int?
   expectStatusBetween: Listing<Int>
   expectBodyEquals: String?
@@ -1098,6 +1115,8 @@ local function renderStep(s: Step): RenderedStep = new {
   inlineHttpBody = s.inlineHttpBody
   inlineJsonPath = s.inlineJsonPath
   inlineHeaders = s.inlineHeaders
+  inlineSqlRows = s.inlineSqlRows
+  inlineConsoleLog = s.inlineConsoleLog
   expectStatus = s.expectStatus
   expectStatusBetween = s.expectStatusBetween
   expectBodyEquals = s.expectBodyEquals
