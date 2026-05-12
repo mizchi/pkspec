@@ -5,6 +5,107 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 27 — Dogfooding: mini counter API E2E across all kinds
+
+- **Goal.** Use pkthunder as a real user would, on a small but
+  realistic target, exercising every kind in one fixture.
+  Surface ergonomic friction that doesn't appear in synthetic
+  smoke tests.
+- **Target.** Python http.server + SQLite counter API.
+  POST /count → +1, GET /count → current, /health for
+  readyProbe. ~30 LOC.
+- **Fixture: 5 Tests in one Test.pkl, all kinds + property.**
+  - `python_available`: shell smoke
+  - `fresh_count_is_zero`: background + http GET
+  - `post_increments`: background + http POST × 2
+  - `sql_persistence`: background + shell loop + sql verify
+  - `post_count_property`: background + 10-iteration property
+    over `IntInput { lo = 1; hi = 5 }`, with shrink
+- **Result: all 5 pass in ~7s wall clock**, including 10
+  property iterations. shrink demo (deliberately bad property)
+  reduced N=3 → N=1 in one probe.
+
+### Friction observed (priority order)
+
+| # | Issue | severity | preferred fix |
+| --- | --- | --- | --- |
+| 1 | `Test.name` regex `^[a-zA-Z]` rejects digit-leading names like `01_python_available`. Hook keys (Phase 14) recommend `01_init` for ordering — inconsistent with Test naming rule. | high | widen regex to `^[a-zA-Z0-9_]` (5 minutes, no example breaks) |
+| 2 | property + cleanup don't compose: `Test.cmd` mode in property test cannot append `always = true` step. `prop.db` leftover on every property run. | high | allow `Test.iterations` with `Test.steps` mode, not just `cmd` |
+| 3 | port collisions are user responsibility (`19101/2/3/4/5` manually allocated per-Test). | medium | per-Test ephemeral port allocation primitive |
+| 4 | DB files require manual `rm -f` in `always = true` cleanup step; failure leaves residue. | medium | optional `Test.workdir = "tmp"` for auto-ephemeral working dir |
+| 5 | per-iteration setup ("reset DB at each property iteration") is hand-rolled in the body — `sqlite3 prop.db "UPDATE ..."` at the top of the cmd. Phase 23 explicitly chose "no per-iteration hooks" but the workaround is awkward enough to want documenting prominently. | medium | document the body-side reset pattern; or add `Test.iterationBefore: String?` (cheap, scoped) |
+| 6 | "POST N times" cannot be expressed in Pkl declaratively; user falls back to `for i in $(seq 1 $N)` bash loops inside `cmd`. The http kind is 1-step-1-request by design. | low-medium | `Step.repeat: Int = 1` or `Test.repeatStep` mechanism (future) |
+| 7 | test execution order is alphabetical (Phase 13). Authors numbering tests `01_xxx` for ordering get blocked by friction #1; even if regex widens, ordering is still by name not declaration. | low | docs note: "use `steps` for sequence, `tests` for independent units" |
+| 8 | Pkl `unhandled Platform key FamilyDisplayName` warning floods stderr (Phase 26 already noted). | low | upstream Pkl issue, not pkthunder |
+
+### What worked unexpectedly well
+
+- **kind-uniform dispatch lets property × http × sql compose
+  without per-kind plumbing.** The property body is a `cmd`
+  that contains `curl` + `sqlite3` + `python3 -c`; the
+  property loop, env injection, and shrinking apply to it
+  the same way they apply to a pure shell body.
+- **`background { readyProbe }` + per-Test independence**.
+  Each Test gets a fresh server, the readyProbe makes
+  startup sync deterministic, and the runner kills the
+  process on Test exit. Writing this as 5 Tests in one
+  Test.pkl Just Worked.
+- **shrink trace was genuinely informative.** When N=3
+  failed, the runner immediately reported "{N=3} → {N=1}
+  still fails" — actionable, no further investigation
+  needed for the offending value.
+- **5-kind E2E in 7 seconds is acceptable wall time.** Each
+  background + http test is ~225-250ms (dominated by server
+  startup + readyProbe wait); the property test with 10
+  iterations is ~750ms. The pkl evaluate cold-start (~550ms)
+  amortises across the 5 Tests because they share one pkl
+  invocation.
+
+### Sharp edges to fix first (preferred order)
+
+1. **Friction #1 (regex)** — 5 minutes, zero example breaks,
+   removes a confusing inconsistency. Safest first move.
+2. **Friction #2 (property + steps composition)** — schema
+   change with real demand from dogfooding. The current
+   "property body is one cmd" constraint forced the
+   counter property to be ~10 lines of bash; with `steps`
+   support, it could be reset-step + assert-step + cleanup-
+   step, each ~2 lines.
+3. **Friction #5 (per-iteration setup pattern)** — at
+   minimum, the workaround (DB-reset at top of body) needs
+   to be documented prominently. If `Test.iterationBefore`
+   gets added, it's ~5 LOC; otherwise the body-side reset
+   is the answer and should appear in docs/notes/quickcheck.md.
+
+### What this dogfooding does NOT validate
+
+- 100+ Tests in one fixture (didn't try at this scale).
+- Multi-fixture coordination via shared state files.
+- Long-running properties (>1 minute / hundreds of
+  iterations).
+- Mixed playwright + sql + http in property mode.
+- Failure recovery when readyProbe hangs / background
+  crashes after readyProbe passes.
+
+These were intentionally out of scope for a 30-minute
+dogfooding session. Phase 26 (Pkl speed) suggests scale
+won't be the issue; phase 18.2 / 20.x suggests parallelism
+works.
+
+### Methodology note
+
+Doing this exercise *after* shipping the framework is
+different from doing it during design. Phase 14 hooks were
+authored top-down; phase 27 dogfooding surfaced friction
+that the top-down design left implicit. The pattern is:
+ship MVP → use it for a real (small) thing → write down
+what was surprising. The friction list above is what that
+surfaces; without it, the same issues would land 6 months
+later from external users as bug reports instead of
+self-discovery.
+
+---
+
 ## Phase 26 — Pkl execution speed: not the bottleneck
 
 - **Question.** pkthunder uses Pkl as the test-definition layer.
