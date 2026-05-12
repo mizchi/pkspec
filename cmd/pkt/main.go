@@ -348,6 +348,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	severityFilter := fs.String("severity", "", "limit every mode to this severity (critical/major/minor)")
 	discover := fs.Bool("discover", false, "auto-discover Spec.pkl / Test.pkl / *.test.pkl files under the current directory (in addition to any positional args)")
 	lint := fs.Bool("lint", false, "instead of rendering, run convention lint over every Scenario / Goal / Decision — broken refs, missing descriptions, etc.")
+	lintDisable := fs.String("lint-disable", "", "comma-separated lint rule ids to suppress (e.g. \"lint.missing-description,lint.deprecated-without-replacedBy\")")
 	template := fs.String("template", "", "instead of rendering, print a Pkl skeleton for one of: scenario, goal, module")
 	var tags multiString
 	fs.Var(&tags, "tag", "only include tests whose `tags` Listing contains this exact value (repeatable; OR)")
@@ -414,6 +415,23 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 
 	if *lint {
 		issues := spec.Lint(plans)
+		if *lintDisable != "" {
+			disabled := map[string]struct{}{}
+			for _, r := range strings.Split(*lintDisable, ",") {
+				r = strings.TrimSpace(r)
+				if r != "" {
+					disabled[r] = struct{}{}
+				}
+			}
+			kept := issues[:0]
+			for _, iss := range issues {
+				if _, off := disabled[iss.Rule]; off {
+					continue
+				}
+				kept = append(kept, iss)
+			}
+			issues = kept
+		}
 		_, err := io.WriteString(stdout, spec.FormatLint(issues))
 		if err != nil {
 			return err

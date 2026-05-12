@@ -26,9 +26,10 @@ type Eventually struct {
 // verdict by sha256(prompt + body) so the cmd only re-runs when the
 // inputs actually change.
 type AiAssertion struct {
-	Prompt       string `pkl:"prompt"`
-	Cmd          string `pkl:"cmd"`
-	SnapshotName string `pkl:"snapshotName"`
+	Prompt              string `pkl:"prompt"`
+	Cmd                 string `pkl:"cmd"`
+	SnapshotName        string `pkl:"snapshotName"`
+	PreferDeterministic bool   `pkl:"preferDeterministic"`
 }
 
 // HttpRequest mirrors `pkthunder.Test#RenderedHttpRequest`.

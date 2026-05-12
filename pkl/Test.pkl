@@ -227,6 +227,21 @@ class AiAssertion {
   /// verdict is stored. Restricted to safe characters so the path
   /// can never escape the snapshots dir.
   snapshotName: String(matches(Regex(#"^[a-zA-Z0-9_\-]+$"#)))
+
+  /// When true (the default), the AI judge is skipped if the step
+  /// also carries at least one deterministic expectation
+  /// (`expectStatus`, `expectBodyEquals`, `expectBodyContains`,
+  /// `expectBodyJsonPath`, `expectHeaderEquals`, `expectStatusBetween`,
+  /// `inlineStdout`). Reaching the AI phase implies those checks
+  /// have already passed, so the verdict is mechanically determined
+  /// and there is no reason to spend an LLM call to confirm it.
+  ///
+  /// The mental model: expectAi is a scaffold — write it while the
+  /// spec is fuzzy, leave it in the source as living documentation,
+  /// and let deterministic expectations take over once the contract
+  /// is concrete. Setting this to false restores the legacy phase-33
+  /// behaviour (judge always runs alongside deterministic checks).
+  preferDeterministic: Boolean = true
 }
 
 /// Polling configuration for a flaky step. The runner re-runs the
@@ -745,6 +760,7 @@ class RenderedAiAssertion {
   prompt: String
   cmd: String
   snapshotName: String
+  preferDeterministic: Boolean
 }
 
 class RenderedPlaywrightSpec {
@@ -1068,6 +1084,7 @@ local function renderStep(s: Step): RenderedStep = new {
     prompt = s.expectAi.prompt
     cmd = s.expectAi.cmd
     snapshotName = s.expectAi.snapshotName
+    preferDeterministic = s.expectAi.preferDeterministic
   }
   cassette = s.cassette
   always = s.always

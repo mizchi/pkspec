@@ -517,22 +517,20 @@ scenarios {
   new {
     id = "ai.prefer-deterministic"
     name = "prefer_deterministic_over_ai"
-    description = "When a step has both deterministic assertions and expectAi, the AI judge is skipped if the deterministic checks pass — \"AI as scaffold, not destination.\" Implementation pending."
+    description = "When a step has both deterministic assertions (expectStatus / expectBodyEquals / expectBodyContains / expectBodyJsonPath / expectHeaderEquals / expectStatusBetween / inlineStdout / expectStdout / expectStderr) and expectAi, the AI judge is skipped — the deterministic checks have already passed by the time the AI phase would run. Set `expectAi.preferDeterministic = false` to restore the legacy behaviour where the judge always runs alongside deterministic checks."
     tags { "spec" }
     severity = "minor"
-    reviewStatus = "review"
+    reviewStatus = "approved"
     dependsOn { "ai.expect-ai" }
     contributes { "goal.ai-assertions" }
-    openQuestions {
-      "should the skip be opt-in (preferDeterministic = true) or default?"
-      "what counts as 'deterministic assertions present' — any non-AI expect or only ones that actually fired?"
-    }
+    implementedBy = "code"
+    implementedAt = "internal/executor/executor.go:stepHasDeterministicAssertion"
     decisions {
       new Decision {
         date = "2026-05-12"
         author = "mizchi"
-        summary = "queue this for the next iteration"
-        rationale = "User flow is: write expectAi as placeholder while design is fuzzy → graduate to deterministic asserts when impl is concrete. The runner should make that graduation automatic, not require deleting the AI line."
+        summary = "default to skipping the judge when deterministic asserts cover the case"
+        rationale = "expectAi is a scaffold — write it while the spec is fuzzy, leave it in the source as living documentation, let deterministic expectations take over once the contract is concrete. The runner should make that graduation automatic, not require deleting the AI line."
       }
     }
   }

@@ -128,6 +128,42 @@ failure signal — but it surfaces the case where someone swapped
 judges without intentionally accepting that the existing snapshots
 are still authoritative.
 
+## `preferDeterministic` — AI as scaffold, not destination
+
+```pkl
+expectAi = new AiAssertion {
+  prompt = "the response acknowledges the user in English"
+  cmd = "claude --no-stream"
+  snapshotName = "greeting-acknowledges-user"
+  preferDeterministic = true        // default
+}
+```
+
+When `preferDeterministic` is true (default) and the step also
+carries at least one deterministic expectation —
+`expectStatus`, `expectBodyEquals`, `expectBodyContains`,
+`expectBodyJsonPath`, `expectHeaderEquals`,
+`expectStatusBetween`, `expectStdout`, `expectStderr`, or
+`inlineStdout` — the AI judge is **skipped entirely**. By the
+time the AI phase would run, those checks have already passed;
+spending an LLM call to re-confirm them buys nothing.
+
+Mental model: `expectAi` is a scaffold. Write it while the spec
+is fuzzy, leave it in the source as living documentation of the
+intent, and let deterministic expectations take over once the
+contract is concrete. The graduation is automatic — no need to
+delete the AI line.
+
+Set `preferDeterministic = false` to restore the legacy
+behaviour (judge runs alongside deterministic checks regardless).
+Useful when the AI claim is genuinely orthogonal to the
+deterministic ones ("status was 200, AND the body is in English"
+— both are independently testable).
+
+A step with **only** expectAi (no deterministic expectations) is
+unaffected — the judge always runs, since there is nothing else
+to make a verdict from.
+
 ## Concurrency
 
 The read-judge-write sequence is wrapped in a per-snapshot

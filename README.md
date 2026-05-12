@@ -298,6 +298,7 @@ pkt spec --goals Spec.pkl Test.pkl      user-facing Goals + their contributing-s
 pkt spec --next Spec.pkl Test.pkl       unimplemented specs ranked by Goal priority + severity
 pkt spec --orphans Test.pkl...          active tests with no specRef (spec-link backlog)
 pkt spec --lint Spec.pkl...             convention checks: broken refs, missing descriptions, ...
+pkt spec --lint --lint-disable lint.X   suppress one or more rule ids (comma-separated)
 pkt spec --template scenario|goal|module  print a Pkl skeleton (no input files needed)
 pkt spec --discover                     auto-walk for Spec.pkl / Test.pkl / specs/*.pkl
 pkt spec --check --strict               verify implementedAt paths exist on disk

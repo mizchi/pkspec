@@ -182,6 +182,16 @@ func Lint(plans []*config.Plan) []LintIssue {
 				})
 			}
 
+			if (sc.ImplementedBy == "code" || sc.ImplementedBy == "doc") &&
+				(sc.ImplementedAt == nil || *sc.ImplementedAt == "") {
+				out = append(out, LintIssue{
+					Rule: "lint.code-doc-without-implementedAt", Level: LintError,
+					Subject: subject,
+					Message: fmt.Sprintf("implementedBy=%q but implementedAt is unset — there is no pointer for --check / --strict to verify", sc.ImplementedBy),
+					Fix:     "set implementedAt = \"path:Symbol\" or change implementedBy back to \"test\"",
+				})
+			}
+
 			for _, d := range sc.Decisions {
 				if d == nil {
 					continue

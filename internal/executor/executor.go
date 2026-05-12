@@ -1007,20 +1007,32 @@ func (e *Executor) runSteps(ctx context.Context, res *Result, t *config.Test, de
 			// inside runStepOnce) means an `eventually` step polls
 			// without re-invoking the judge, and a failed step never
 			// pollutes the AI snapshot cache.
+			//
+			// preferDeterministic = true (default) skips the judge
+			// entirely when the step also carries deterministic
+			// expectations — those have already passed by the time we
+			// reach this branch, so the AI verdict is mechanically
+			// determined. expectAi remains in the source as a
+			// graduation-ready scaffold; once the deterministic checks
+			// cover the case, no LLM call is spent reconfirming them.
 			if step.ExpectAi != nil {
-				pass, explanation, fromCache, aiErr := e.evaluateAi(ctx, step.ExpectAi, []byte(sr.Stdout))
-				switch {
-				case aiErr != nil:
-					sr.Outcome = OutcomeErrored
-					sr.Reasons = append(sr.Reasons, fmt.Sprintf("ai assertion: %v", aiErr))
-				case !pass:
-					sr.Outcome = OutcomeFailed
-					prefix := "ai"
-					if fromCache {
-						prefix = "ai (cached)"
+				if step.ExpectAi.PreferDeterministic && stepHasDeterministicAssertion(step) {
+					// Skip — deterministic asserts already covered it.
+				} else {
+					pass, explanation, fromCache, aiErr := e.evaluateAi(ctx, step.ExpectAi, []byte(sr.Stdout))
+					switch {
+					case aiErr != nil:
+						sr.Outcome = OutcomeErrored
+						sr.Reasons = append(sr.Reasons, fmt.Sprintf("ai assertion: %v", aiErr))
+					case !pass:
+						sr.Outcome = OutcomeFailed
+						prefix := "ai"
+						if fromCache {
+							prefix = "ai (cached)"
+						}
+						sr.Reasons = append(sr.Reasons,
+							fmt.Sprintf("%s: %s", prefix, strings.TrimSpace(explanation)))
 					}
-					sr.Reasons = append(sr.Reasons,
-						fmt.Sprintf("%s: %s", prefix, strings.TrimSpace(explanation)))
 				}
 			}
 		}
@@ -2127,6 +2139,31 @@ func (e *Executor) aiSnapshotPath(name string) string {
 // will hit the cache. err is reserved for unrecoverable conditions
 // (judge fails to start, snapshot dir un-writable); a "judge ran and
 // said fail" outcome surfaces as pass=false with no err.
+// stepHasDeterministicAssertion reports whether the step carries
+// at least one expectation other than expectAi. Used by
+// `preferDeterministic` to decide whether to skip the LLM judge.
+// `ExpectExitCode` is *not* counted — the default 0 is set even when
+// the author didn't write anything, so its presence is not a
+// reliable signal of intent.
+func stepHasDeterministicAssertion(s *config.Step) bool {
+	if s.ExpectStdout != nil || s.ExpectStderr != nil {
+		return true
+	}
+	if s.InlineStdout != nil {
+		return true
+	}
+	if s.ExpectStatus != nil || len(s.ExpectStatusBetween) == 2 {
+		return true
+	}
+	if s.ExpectBodyEquals != nil || s.ExpectBodyContains != nil {
+		return true
+	}
+	if len(s.ExpectBodyJsonPath) > 0 || len(s.ExpectHeaderEquals) > 0 {
+		return true
+	}
+	return false
+}
+
 func (e *Executor) evaluateAi(ctx context.Context, a *config.AiAssertion, body []byte) (pass bool, explanation string, fromCache bool, err error) {
 	digest := aiDigest(a.Prompt, body)
 	path := e.aiSnapshotPath(a.SnapshotName)

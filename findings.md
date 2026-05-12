@@ -5,6 +5,154 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 37 — Drain the deferred list
+
+mizchi: "残りも実装して。"
+
+Three items from phase 36's "Deferred (still)" section, plus the
+phase 35 promise (`ai.prefer-deterministic`). All four landed.
+
+### `lint.code-doc-without-implementedAt` (the symmetric rule)
+
+Phase 36 added `lint.implementedAt-without-code-doc` (info: you
+set the pointer but the runner ignores it). The symmetric case —
+`implementedBy = "code"` / `"doc"` with no pointer — was an
+obvious gap I called out while writing the phase 36 commit but
+didn't fix. Now an error-level rule:
+
+```
+[error] lint.code-doc-without-implementedAt — spec.foo:
+        implementedBy="code" but implementedAt is unset
+        fix: set implementedAt = "path:Symbol" or change implementedBy back to "test"
+```
+
+`--check --strict` would otherwise silently pass these — the
+strict pass only iterates over Scenarios whose `implementedAt`
+is non-null, so a missing pointer was invisible. Closing the
+loop.
+
+### `--lint-disable lint.X,lint.Y`
+
+Comma-separated suppression list. Filters the issue set
+post-collection so the exit code still reflects the post-disable
+view (an error rule that's disabled doesn't fail the run). Usage:
+
+```sh
+pkt spec --lint --discover \
+  --lint-disable lint.deprecated-without-replacedBy,lint.missing-description
+```
+
+The disable applies across error / warn / info equally — the
+rule id is the only address.
+
+### `ai.prefer-deterministic` (the scaffold-not-destination story)
+
+Phase 32 promised it, phase 35 deferred it with
+`reviewStatus = "review"`. Implemented now.
+
+Schema:
+
+```pkl
+class AiAssertion {
+  prompt: String(length > 0)
+  cmd: String(length > 0)
+  snapshotName: String(...)
+  preferDeterministic: Boolean = true       // new — default on
+}
+```
+
+Executor: at the AI-evaluation site, before calling
+`evaluateAi`, the runner now consults
+`stepHasDeterministicAssertion(step)`. If `preferDeterministic`
+is true AND the step carries any of:
+
+- `expectStdout` / `expectStderr` / `inlineStdout`
+- `expectStatus` / `expectStatusBetween`
+- `expectBodyEquals` / `expectBodyContains`
+- `expectBodyJsonPath` / `expectHeaderEquals`
+
+then the LLM judge is skipped entirely. By the time the AI phase
+would run, the deterministic checks have already passed; the
+verdict is mechanically determined.
+
+`ExpectExitCode` is *not* counted toward "has deterministic
+assertion" — its default value (0) is set on every step
+regardless of authorial intent, so its presence is not a reliable
+signal.
+
+A step with only `expectAi` (no deterministic assertions) is
+unaffected — the judge always runs, since there's nothing else
+to make a verdict from. Set `preferDeterministic = false` to
+restore the legacy "always run alongside" behaviour when the AI
+claim is genuinely orthogonal to the deterministic ones.
+
+The dogfood scenario `ai.prefer-deterministic` flipped from
+`reviewStatus = "review"` (unimplemented) to
+`reviewStatus = "approved"` + `implementedBy = "code"` +
+`implementedAt = "internal/executor/executor.go:stepHasDeterministicAssertion"`.
+
+### Coverage after the cycle
+
+```
+Coverage: 42 / 47 specs implemented (89%)
+
+By severity:
+  critical: 7 / 9 (78%)
+  major:    24 / 26 (92%)
+  minor:    11 / 12 (92%)
+
+By review status:
+  approved: 42 / 45 (93%)
+  review:   0 / 1 (0%)
+  draft:    0 / 1 (0%)
+```
+
+The 5 remaining unimplementeds are all local fixtures in
+`examples/spec-graph/` and `examples/spec-id/` (intentional —
+those modules demonstrate the spec language, not pkthunder's
+project specs). `specs/pkthunder.pkl` itself is now **100%
+implemented across approved entries**.
+
+### Lint catches discovered while writing this commit
+
+- `lint.code-doc-without-implementedAt` triggered against an
+  earlier draft of `ai.prefer-deterministic` where I'd set
+  `implementedBy = "code"` but hadn't filled in `implementedAt`
+  yet. Caught it before commit.
+
+### Implementation footprint
+
+- `pkl/Test.pkl`           AiAssertion.preferDeterministic +
+                           RenderedAiAssertion passthrough +
+                           renderStep passthrough
+- `internal/config/config.go`  AiAssertion.PreferDeterministic
+- `internal/executor/executor.go`  stepHasDeterministicAssertion +
+                                   ExpectAi branch skip logic
+- `internal/spec/lint.go`  lint.code-doc-without-implementedAt rule
+- `cmd/pkt/main.go`        --lint-disable flag + filter logic
+- `specs/pkthunder.pkl`    ai.prefer-deterministic flipped to
+                           approved+code+implementedAt
+- `docs/notes/ai-assertion.md`  preferDeterministic section
+- `README.md`              --lint-disable in CLI block
+- `findings.md`            this entry
+
+Total ~80 LOC implementation + 40 lines of docs.
+
+### What I'm still not implementing (deliberately)
+
+- **Symbol-level verification** (`:FunctionName` actually exists
+  in the file). Language-specific parsers; cost-benefit doesn't
+  warrant.
+- **`--template` for Decision / Test.specRef.** Niche; scenario
+  / goal / module templates cover the bulk.
+- **Subagent re-evaluation every phase.** Schedule it once per
+  major iteration instead.
+- **`Scenario` field-count fatigue split.** 16+ fields is on the
+  edge of readable but no concrete refactor proposal has earned
+  it. Defer until the schema itself complains.
+
+---
+
 ## Phase 36 — Authoring guide, lint, and templates
 
 mizchi: "使い方のガイドや lint の機構を作りたい。"
