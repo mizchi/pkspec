@@ -5,6 +5,141 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 22 — 5th kind (`sql`) shipped under D; subagent prediction partially wrong
+
+- **Test of the phase 21 verdict.** Phase 21's subagent review
+  recommended A migration before adding the 5th kind. The
+  prediction was concrete: D would cost ~150 LOC + edits to all
+  4 existing `validateStepKind` cases to slot in sql. The user
+  decided to ship the 5th kind under D anyway and measure.
+- **Actual measurement.**
+  - ~225 LOC total (193 in the new `internal/executor/sql.go`)
+  - **Zero edits to existing `validateStepKind` cases**
+  - +1 Step field (`Sql *SqlSpec` body slot)
+  - +1 line in `Step.kind` computed expression
+  - +1 dispatch arm in `runStepOnce`
+  - +14 lines for the new sql case in `validateStepKind`
+  - +8 lines for `stepDisplayName` sql branch
+- **Where the prediction went wrong.** The subagent assumed sql
+  would follow the shell/http pattern: expectations directly on
+  Step (`expectStdout`, `expectStatus`, etc.). That's the naive
+  D shape and would have triggered the cross-case edits. But
+  phase 18 established a different discipline for new kinds:
+  **kind-private fields live on the Spec, not Step**. We followed
+  that discipline for sql — `expectRowCount` and
+  `expectRowsJsonPath` are inside `SqlSpec` — and the existing
+  cases stayed untouched.
+- **Where the prediction was right.** The new sql case in
+  `validateStepKind` and the existing playwright case are
+  near-identical copy-paste: 10 lines each enumerating "the
+  other kinds' Step-level fields are forbidden here." The
+  duplication is real; a `forbidShellFields()` / `forbidHttpFields()`
+  helper would collapse the pattern. Logged as cleanup, not
+  blocking. Also still real: cross-kind features (`eventually`,
+  capture* family) live on Step and were threaded once per
+  kind during their respective phases — that pattern doesn't
+  improve with each new kind.
+- **Decision: stay on D for now.** The phase 18 verdict
+  ("D with A-compatible scaffolding") held up. The 5th kind cost
+  was lower than predicted because the discipline pre-empted
+  the schema bloat. The exit criterion is restated in
+  `task-interface-future.md`: re-evaluate again when (a) a 6th
+  kind is added and the validateStepKind copy-paste fires
+  again, (b) an external author requests a runner without
+  forking, or (c) a cross-kind feature needs hand-threading
+  through 5+ runner files.
+- **`sql` implementation choices.**
+  - **modernc.org/sqlite**: pure-Go, no cgo. Trade-off: slower
+    than mattn/go-sqlite3 for heavy workloads, but pkthunder's
+    use case is "did the row land?" assertions over small
+    result sets — speed-of-light isn't relevant. Pure-Go
+    means cross-compilation works without C toolchains.
+  - **DSN-scheme dispatch**: `parseSqlDSN` switches on the
+    `sqlite:` prefix; future schemes (`postgres://`, `mysql://`)
+    add cases. The user-facing schema is driver-agnostic — the
+    same `SqlSpec` shape covers every driver, only the DSN
+    string changes.
+  - **`expectRowsJsonPath` reuses gjson + `jsonValuesEqual`
+    from the http step.** Rows are serialised as a JSON array
+    of objects, then asserted on by path. Same `$VAR`
+    substitution semantics. No new pathlang to teach.
+  - **No parameterised queries today.** `$VAR` is string
+    substitution. Fine for test fixtures (the values are
+    user-controlled IDs from captures), risky for untrusted
+    input — documented in sql.md.
+- **4-scenario smoke green.**
+  - SELECT 3 rows + expectRowCount=3 → passed (1ms)
+  - jsonpath on missing column → failed with the actual nil vs.
+    expected value
+  - `sqlite::memory:` + `SELECT 42` + jsonpath → passed
+  - sql Step with `inlineStdout = "x"` → instantly errored
+    via the phase 19.4 short-circuit (validateStepKind catches
+    before dispatch)
+- **What this proves about D.** The "kind-private to Spec"
+  discipline is the structural property that keeps D usable.
+  Without it, the 5th kind would have looked like the subagent
+  predicted. With it, D is a small cost per new kind. The
+  question becomes: does the team enforce the discipline on
+  every new kind? Documented in task-interface-future.md so
+  future contributors don't accidentally slip Step-level
+  expectations into a new kind and trigger the predicted bloat.
+- **Lesson on subagent reviews.** The phase 21 review was
+  technically thorough (correct line counts, correct matrix
+  growth projection) but missed the phase 18 discipline as a
+  structural mitigation. A subagent can audit "the schema as
+  written" but can't observe "the discipline the team applies
+  to writing the schema." This is a useful boundary for
+  future bias-free reviews: ask the reviewer what assumptions
+  they're making about authoring practice.
+
+---
+
+## Phase 21 — Re-evaluation of D vs. A/C at the 5th-kind trigger
+
+- **Trigger #1 fired.** `task-interface-future.md` listed three
+  exit criteria for re-opening the D-vs-A/C question. Trigger 1
+  ("a 5th built-in kind is being added") fired when sql kind
+  authoring began. Dispatched a subagent for a bias-free
+  re-evaluation before writing any code.
+- **Methodology.** Same shape as phase 18: send the subagent
+  the four proposals (`docs/proposals/task-interface/`), the
+  current Pkl/Go state, and ask for a verdict + concrete cost
+  estimate for the 5th kind under each option.
+- **Subagent verdict: switch to A.** Cited:
+  - `Step` carries 30 fields, 16 (53%) kind-private
+  - `validateStepKind` 51 lines, projected to grow to ~84
+    lines at 6 kinds (N(N-1)/2 matrix)
+  - Cross-kind features (eventually + captures) already
+    hand-threaded — exit criterion 3 had already fired
+    silently
+  - Third-party extension not requested → dismiss C
+  - Migration scaffolding from phase 18 (kind discriminator,
+    per-kind runner files) reduces the A-migration cost
+    significantly
+- **What the subagent missed.** It assumed the 5th kind would
+  add expectations directly to Step (the naive D shape).
+  Phase 18 established a discipline ("kind-private fields live
+  on the Spec") that wasn't visible from reading the schema
+  alone. Result: the subagent over-estimated D's cost for the
+  5th kind by ~50% (predicted ~150 LOC + cross-case edits;
+  actual ~225 LOC, zero cross-case edits — most of the LOC
+  being new-runner-file rather than schema bloat).
+- **User decision: stay on D, validate empirically.** Rather
+  than migrate based on the prediction, ship sql under D and
+  measure. Phase 22 records the result: D held up, with the
+  discipline. The verdict's "exit criterion still applies for
+  kind 6" framing was accepted as the new state.
+- **Insight on bias-free reviews.** A subagent audits the
+  artifact (the schema, the code) but can't observe authoring
+  conventions that aren't expressed in the artifact. When the
+  question is "will a new kind bloat the schema?", the answer
+  depends on practice as much as on shape. Future reviews
+  should be explicit about whether they're auditing shape or
+  practice — and prefer empirical measurement when the gap
+  matters.
+
+---
+
 ## Phase 20.2 — 4-way mixed parallel smoke (shell + http + playwright + playwright-test)
 
 - **Question.** Phase 19.1 covered shell + playwright + playwright-test

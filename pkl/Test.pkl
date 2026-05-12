@@ -61,14 +61,25 @@ class Step {
   playwright: PlaywrightSpec? = null
 
   /// @playwright/test invocation — pick exactly one of `cmd` /
-  /// `http` / `playwright` / `playwrightTest`. The runner shells out
-  /// to `npx playwright test`, forces `--reporter=junit`, parses the
-  /// XML, and aggregates the inner test results into this Step's
-  /// outcome (all-pass → Passed, any-fail → Failed, only-skip →
-  /// Pending). Use this for visual-regression suites, retry / trace
-  /// / video flows, and anything that wants the @playwright/test
-  /// feature set rather than a one-shot browser driver.
+  /// `http` / `playwright` / `playwrightTest` / `sql`. The runner
+  /// shells out to `npx playwright test`, forces `--reporter=junit`,
+  /// parses the XML, and aggregates the inner test results into
+  /// this Step's outcome (all-pass → Passed, any-fail → Failed,
+  /// only-skip → Pending). Use this for visual-regression suites,
+  /// retry / trace / video flows, and anything that wants the
+  /// @playwright/test feature set rather than a one-shot browser
+  /// driver.
   playwrightTest: PlaywrightTestSpec? = null
+
+  /// SQL query — pick exactly one of `cmd` / `http` / `playwright` /
+  /// `playwrightTest` / `sql`. The runner opens a database
+  /// connection (SQLite today; the DSN scheme `sqlite:` is the
+  /// only supported one for the initial ship), runs the query, and
+  /// applies the spec's assertions (`expectRowCount`,
+  /// `expectRowsJsonPath`). Use this for "did the row land?" /
+  /// "is the migration shape correct?" / "did the trigger fire?"
+  /// assertions in end-to-end DB tests.
+  sql: SqlSpec? = null
 
   /// Computed discriminator. Set by the schema based on which body
   /// slot is non-null. The runner reads it for dispatch and
@@ -83,6 +94,7 @@ class Step {
     else if (http != null) "http"
     else if (playwright != null) "playwright"
     else if (playwrightTest != null) "playwright-test"
+    else if (sql != null) "sql"
     else "invalid"
 
   env: Mapping<String, String> = new {}
@@ -317,6 +329,44 @@ class PlaywrightTestSpec {
   shard: String? = null
 }
 
+/// SQL query spec. The runner opens a database connection by DSN,
+/// executes the query, and serialises rows as JSON for downstream
+/// assertions.
+///
+/// DSN scheme today: `sqlite:./path/to.db` (relative to the Step
+/// workdir) or `sqlite::memory:` for an ephemeral in-process DB.
+/// Postgres / MySQL DSNs will be added as drivers are linked into
+/// the pkt binary; for now SQLite is enough for the canonical
+/// "did the row land?" assertion.
+///
+/// All Step-level expectations (rowcount, jsonpath against the
+/// serialised row array) live ON THIS SPEC, not on Step. This
+/// keeps the flat-Step schema honest — sql doesn't borrow http's
+/// `expectBodyJsonPath` or shell's `expectStdout`; the assertion
+/// surface is sql-private.
+class SqlSpec {
+  /// Connection string. Today: `sqlite:./test.db` or
+  /// `sqlite::memory:`. Future schemes: `postgres://...`,
+  /// `mysql://...`. The scheme prefix picks the driver.
+  dsn: String(length > 0)
+
+  /// SQL to execute. Both SELECT (the rows are read out + asserted
+  /// on) and DDL/DML (the rows-affected count is reported as the
+  /// "row count") are accepted; the runner detects which by
+  /// looking at whether `Query` returns columns.
+  query: String(length > 0)
+
+  /// Assert on the number of rows returned (SELECT) or affected
+  /// (INSERT / UPDATE / DELETE). Null = no rowcount assertion.
+  expectRowCount: Int? = null
+
+  /// Map of gjson path → expected value, evaluated against the
+  /// JSON array of row objects. Same path syntax as `Step.http`'s
+  /// `expectBodyJsonPath`. Example: `["0.name"] = "alice"` for
+  /// "the first row's name column is alice".
+  expectRowsJsonPath: Mapping<String, Any> = new {}
+}
+
 /// Screenshot snapshot reference. Stored at
 /// `<workdir>/.pkthunder/screenshots/<name>.png`. The `thresholdPct`
 /// is the percentage of pixels that may differ before the assertion
@@ -543,6 +593,13 @@ class RenderedPlaywrightTestSpec {
   shard: String?
 }
 
+class RenderedSqlSpec {
+  dsn: String
+  query: String
+  expectRowCount: Int?
+  expectRowsJsonPath: Mapping<String, Any>
+}
+
 class RenderedScreenshotSnapshot {
   name: String
   thresholdPct: Float
@@ -557,6 +614,7 @@ class RenderedStep {
   http: RenderedHttpRequest?
   playwright: RenderedPlaywrightSpec?
   playwrightTest: RenderedPlaywrightTestSpec?
+  sql: RenderedSqlSpec?
   env: Mapping<String, String>
   workdir: String?
   timeoutSec: Int
@@ -694,6 +752,13 @@ local function renderPlaywrightTest(p: PlaywrightTestSpec): RenderedPlaywrightTe
   shard = p.shard
 }
 
+local function renderSql(s: SqlSpec): RenderedSqlSpec = new {
+  dsn = s.dsn
+  query = s.query
+  expectRowCount = s.expectRowCount
+  expectRowsJsonPath = s.expectRowsJsonPath
+}
+
 local function renderStep(s: Step): RenderedStep = new {
   name = s.name
   kind = s.kind
@@ -703,6 +768,7 @@ local function renderStep(s: Step): RenderedStep = new {
   http = if (s.http == null) null else renderHttp(s.http)
   playwright = if (s.playwright == null) null else renderPlaywright(s.playwright)
   playwrightTest = if (s.playwrightTest == null) null else renderPlaywrightTest(s.playwrightTest)
+  sql = if (s.sql == null) null else renderSql(s.sql)
   env = s.env
   workdir = s.workdir
   timeoutSec = s.timeoutSec

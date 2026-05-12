@@ -76,6 +76,16 @@ type PlaywrightTestSpec struct {
 	Shard      *string  `pkl:"shard"`
 }
 
+// SqlSpec mirrors `pkthunder.Test#RenderedSqlSpec`. All assertions
+// live on the spec, not on Step — sql doesn't share Step-level
+// expectations with shell/http.
+type SqlSpec struct {
+	DSN                string         `pkl:"dsn"`
+	Query              string         `pkl:"query"`
+	ExpectRowCount     *int           `pkl:"expectRowCount"`
+	ExpectRowsJsonPath map[string]any `pkl:"expectRowsJsonPath"`
+}
+
 // Step mirrors `pkthunder.Test#RenderedStep`. Exactly one of `Cmd`,
 // `Http`, or `Playwright` is set; the executor dispatches on `Kind`.
 type Step struct {
@@ -87,6 +97,7 @@ type Step struct {
 	Http            *HttpRequest        `pkl:"http"`
 	Playwright      *PlaywrightSpec     `pkl:"playwright"`
 	PlaywrightTest  *PlaywrightTestSpec `pkl:"playwrightTest"`
+	Sql             *SqlSpec            `pkl:"sql"`
 	Env             map[string]string   `pkl:"env"`
 	Workdir         *string           `pkl:"workdir"`
 	TimeoutSec      int               `pkl:"timeoutSec"`
@@ -213,6 +224,7 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedScreenshotSnapshot", ScreenshotSnapshot{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedPlaywrightTestSpec", PlaywrightTestSpec{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedConsoleAssertion", ConsoleAssertion{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedSqlSpec", SqlSpec{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

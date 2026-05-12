@@ -851,13 +851,15 @@ func (e *Executor) runStepOnce(ctx context.Context, step *config.Step, t *config
 		return e.runPlaywrightStep(ctx, step, t, defaults, state)
 	case "playwright-test":
 		return e.runPlaywrightTestStep(ctx, step, t, defaults, state)
+	case "sql":
+		return e.runSqlStep(ctx, step, t, defaults, state)
 	case "shell":
 		return e.runShellStep(ctx, step, t, defaults, state)
 	default:
 		return StepResult{
 			Name:    stepDisplayName(step),
 			Outcome: OutcomeErrored,
-			Reasons: []string{"step has no body: set exactly one of cmd / http / playwright / playwrightTest"},
+			Reasons: []string{"step has no body: set exactly one of cmd / http / playwright / playwrightTest / sql"},
 		}
 	}
 }
@@ -917,6 +919,19 @@ func validateStepKind(step *config.Step) string {
 			step.InlineStdout != nil {
 			return "playwrightTest step delegates assertions to @playwright/test — http/shell expectations on the Step are not applied to the suite"
 		}
+	case "sql":
+		if step.ExpectStatus != nil ||
+			len(step.ExpectStatusBetween) > 0 ||
+			step.ExpectBodyEquals != nil ||
+			step.ExpectBodyContains != nil ||
+			len(step.ExpectHeaderEquals) > 0 ||
+			len(step.ExpectBodyJsonPath) > 0 ||
+			step.Cassette != nil ||
+			step.ExpectStdout != nil ||
+			step.ExpectStderr != nil ||
+			step.InlineStdout != nil {
+			return "sql step uses its own expectations (expectRowCount / expectRowsJsonPath on the sql spec) — http/shell expectations on the Step are not applied to a query"
+		}
 	}
 	return ""
 }
@@ -941,6 +956,14 @@ func stepDisplayName(step *config.Step) string {
 	case "playwright-test":
 		if step.PlaywrightTest != nil {
 			return "playwright-test:" + step.PlaywrightTest.SpecPath
+		}
+	case "sql":
+		if step.Sql != nil {
+			preview := step.Sql.Query
+			if len(preview) > 60 {
+				preview = preview[:60] + "…"
+			}
+			return "sql:" + preview
 		}
 	}
 	return "<unnamed step>"
