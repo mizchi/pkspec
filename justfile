@@ -1,6 +1,6 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-release_version := "0.1.1"
+release_version := "0.1.2"
 
 default:
   @just --list

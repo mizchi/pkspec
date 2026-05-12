@@ -7,10 +7,10 @@ branding:
 inputs:
   version:
     description: |
-      pkspec version to install. Accepts a release tag such as `v0.1.1`,
-      a bare semver `0.1.1`, the floating major `v0`, or `latest`.
+      pkspec version to install. Accepts a release tag such as `v0.1.2`,
+      a bare semver `0.1.2`, the floating major `v0`, or `latest`.
       When empty, the action reads its own ref (so pinning via
-      `mizchi/pkspec@v0.1.1` or `@v0` just works) and falls back to the
+      `mizchi/pkspec@v0.1.2` or `@v0` just works) and falls back to the
       latest published release.
     required: false
     default: ""
@@ -47,6 +47,10 @@ inputs:
       `pkl-<hashFiles('**/PklProject.deps.json', '**/*.pkl')>`.
     required: false
     default: ""
+  github-token:
+    description: GitHub token used for release lookup when version is `latest` or `v0`.
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   version:
@@ -62,18 +66,33 @@ runs:
     - name: Resolve version and platform
       id: resolve
       shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         set -euo pipefail
 
+        github_api() {
+          local url="$1"
+          if [ -n "${GH_TOKEN:-}" ]; then
+            curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$url"
+          else
+            curl -fsSL "$url"
+          fi
+        }
+
         latest() {
-          curl -fsSL https://api.github.com/repos/mizchi/pkspec/releases/latest \
+          github_api https://api.github.com/repos/mizchi/pkspec/releases/latest \
             | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' \
             | head -n1
         }
 
         latest_major() {
           local major="$1"
-          curl -fsSL https://api.github.com/repos/mizchi/pkspec/releases \
+          github_api https://api.github.com/repos/mizchi/pkspec/releases \
             | sed -n 's/.*"tag_name": *"\(v'"$major"'\.[^"]*\)".*/\1/p' \
             | head -n1
         }
