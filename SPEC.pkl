@@ -519,6 +519,18 @@ scenarios {
     implementedAt = "internal/inline/rewriter.go:ReplaceMappingEntryValue"
   }
   new {
+    id = "diff.inline-headers"
+    name = "inline_snapshot_per_response_header"
+    description = "`Step.inlineHeaders` is the same `Mapping<String, String>` shape as `inlineJsonPath` but keyed by HTTP header name. Header names use Go's case-insensitive lookup (`http.Header.Get`). Same per-key opt-in contract: only authored header names are checked or rewritten."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "diff.inline-jsonpath" }
+    contributes { "goal.differential"; "goal.lang-independent" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/executor.go:runHttpStep"
+  }
+  new {
     id = "diff.inline-multiline"
     name = "inline_snapshot_uses_triple_quoted_for_multiline"
     description = "When the captured value would need ≥ 2 embedded newlines (and is ≥ 80 chars), or has ≥ 4 newlines, or a single line ≥ 120 chars, the rewriter emits a Pkl triple-quoted (`\"\"\"...\"\"\"`) literal instead of a single-line `\\n`-escaped one. Diff-readable; round-trips byte-for-byte."

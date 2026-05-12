@@ -80,12 +80,27 @@ for hand-authored placeholders, but predictable + type-stable.
 
 ### Skipped / out of scope (still)
 
-- `Step.inlineHeaders` / `inlineSqlRows` / `inlineConsoleLog`
-  — same Mapping primitive applies but each needs schema +
-  executor wiring. Cheap to add once the contract above stabilises.
+- `inlineSqlRows` — the existing `expectRowsJsonPath` lives on
+  `SqlSpec` not on `Step`, so the inline version would either
+  need a Step-level placement (inconsistent) or a nested
+  block-path lookup in the rewriter (extra primitive). Deferred.
+- `inlineConsoleLog` — `expectConsole.containsAll` is a Listing
+  of substrings, not a Mapping. A separate Listing rewriter
+  primitive is required.
 - Block comment `/* */` masking in the rewriter — Pkl convention
   doesn't use block comments in test modules.
 - Adding entries to mappings via `--update`. By design.
+
+### Phase 41.1 — Bonus: inlineHeaders
+
+Same primitive, second consumer. HTTP response header inline
+snapshots. Mirror of inlineJsonPath shape: `Mapping<String,
+String>` per-header opt-in. Header lookup is case-insensitive
+(Go's `http.Header.Get`). Executor wiring lives next to the
+jsonpath loop in `runHttpStep`.
+
+New SPEC.pkl scenario `diff.inline-headers` depends-on
+`diff.inline-jsonpath`.
 
 ### Verified
 

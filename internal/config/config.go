@@ -137,6 +137,7 @@ type Step struct {
 	InlineStdout   *string           `pkl:"inlineStdout"`
 	InlineHttpBody *string           `pkl:"inlineHttpBody"`
 	InlineJsonPath map[string]string `pkl:"inlineJsonPath"`
+	InlineHeaders  map[string]string `pkl:"inlineHeaders"`
 
 	ExpectStatus        *int              `pkl:"expectStatus"`
 	ExpectStatusBetween []int             `pkl:"expectStatusBetween"`

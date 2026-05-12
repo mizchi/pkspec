@@ -1199,6 +1199,7 @@ func hasHttpFields(step *config.Step) bool {
 		len(step.ExpectBodyJsonPath) > 0 ||
 		step.InlineHttpBody != nil ||
 		len(step.InlineJsonPath) > 0 ||
+		len(step.InlineHeaders) > 0 ||
 		step.CaptureBody != nil ||
 		step.CaptureStatus != nil ||
 		len(step.CaptureBodyJsonPath) > 0 ||
@@ -1491,6 +1492,18 @@ func (e *Executor) runHttpStep(ctx context.Context, step *config.Step, t *config
 			continue
 		}
 		if reason := e.checkInlineMappingEntry(*step.Name, "inlineJsonPath", path, expected, result.Raw); reason != "" {
+			sr.Reasons = append(sr.Reasons, reason)
+		}
+	}
+
+	for header, expected := range step.InlineHeaders {
+		if step.Name == nil || *step.Name == "" {
+			sr.Reasons = append(sr.Reasons,
+				fmt.Sprintf("inlineHeaders[%q] requires step.name to be set so the rewriter can locate the source line", header))
+			continue
+		}
+		actual := respHeaders.Get(header)
+		if reason := e.checkInlineMappingEntry(*step.Name, "inlineHeaders", header, expected, actual); reason != "" {
 			sr.Reasons = append(sr.Reasons, reason)
 		}
 	}
@@ -2232,7 +2245,7 @@ func stepHasDeterministicAssertion(s *config.Step) bool {
 	if len(s.ExpectBodyJsonPath) > 0 || len(s.ExpectHeaderEquals) > 0 {
 		return true
 	}
-	if len(s.InlineJsonPath) > 0 {
+	if len(s.InlineJsonPath) > 0 || len(s.InlineHeaders) > 0 {
 		return true
 	}
 	return false

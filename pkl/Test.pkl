@@ -134,6 +134,13 @@ class Step {
   /// placeholder value (commonly `""`). Requires `step.name`.
   inlineJsonPath: Mapping<String, String> = new {}
 
+  /// Per-header inline snapshot. The key is a header name,
+  /// the value is the snapshotted header value. Same
+  /// per-key opt-in contract as `inlineJsonPath`: only
+  /// authored headers are checked or rewritten. Header names
+  /// are case-insensitive on lookup (Go's http.Header.Get).
+  inlineHeaders: Mapping<String, String> = new {}
+
   // ── HTTP expectations ──────────────────────────────────────────
   expectStatus: Int? = null
 
@@ -846,6 +853,7 @@ class RenderedStep {
   inlineStdout: String?
   inlineHttpBody: String?
   inlineJsonPath: Mapping<String, String>
+  inlineHeaders: Mapping<String, String>
   expectStatus: Int?
   expectStatusBetween: Listing<Int>
   expectBodyEquals: String?
@@ -1089,6 +1097,7 @@ local function renderStep(s: Step): RenderedStep = new {
   inlineStdout = s.inlineStdout
   inlineHttpBody = s.inlineHttpBody
   inlineJsonPath = s.inlineJsonPath
+  inlineHeaders = s.inlineHeaders
   expectStatus = s.expectStatus
   expectStatusBetween = s.expectStatusBetween
   expectBodyEquals = s.expectBodyEquals
