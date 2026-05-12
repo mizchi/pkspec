@@ -5,6 +5,72 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 26 — Pkl execution speed: not the bottleneck
+
+- **Question.** pkthunder uses Pkl as the test-definition layer.
+  If Pkl evaluation is slow, the framework's bottom line is
+  capped regardless of how clever the runner is. Measured to
+  find out where the wall-clock cost actually goes.
+- **Setup.** Pkl 0.31.1 on macOS, Apple Silicon arm64,
+  GraalVM JIT mode (the default; not the AOT native-image
+  variant). Fixture generated via `pkl eval` Listing
+  comprehension to vary test count N ∈ {1, 10, 100, 1000}.
+  Three runs per N, averaged.
+- **Scaling table:**
+
+  | N | `pkl eval` (raw) | `pkt exec` (full pipeline) |
+  | --- | ---:| ---: |
+  | 1 | 619 ms | 719 ms |
+  | 10 | 566 ms | 741 ms |
+  | 100 | 634 ms | 922 ms |
+  | 1000 | 684 ms | 2615 ms |
+
+- **Pkl is essentially flat in N.** 1 → 1000 tests grows Pkl
+  evaluation from 619 ms to 684 ms — +65 ms for 1000× the
+  fixture size. The cost is **JVM cold-start (~550 ms)**, not
+  Pkl's interpretation of the test definitions. The language
+  itself is not the bottleneck.
+- **pkt exec grows linearly with N — but it's shell-exec
+  cost, not Pkl.** `pkt exec - pkl eval` = +100 ms (N=1),
+  +1931 ms (N=1000). With 1000 `cmd = "true"` Tests, ~2ms per
+  fork+exec ≈ 2 seconds of OS-level process startup. This is
+  physics, not pkthunder overhead.
+- **pkt's own overhead (decode + executor + reporter) is ~80
+  ms.** Estimated from the N=1 case: 100 ms diff = ~80 ms for
+  the second pkl evaluate (canonical bytes for inline-snapshot
+  rewrite, via `config.Load`'s second `EvaluateOutputBytes`
+  call) + ~20 ms for Go-side decode and runner setup.
+- **Possible mitigations (not implemented):**
+  - **(A) Skip the second `EvaluateOutputBytes`** when
+    `--update-inline-snapshots` is not in play. Cheap, ~80 ms
+    savings on the warm path. The canonical bytes are only
+    needed by the inline-snapshot rewriter.
+  - **(B) `pkl native`** (GraalVM AOT image): ~50 ms startup,
+    -500 ms. Cost: distribution complexity (build per-arch,
+    feature limitations), needs separate binary.
+  - **(C) Long-lived evaluator** for "watch mode" / repeated
+    `pkt exec` calls during dev — Pkl evaluated once, reused.
+    Out of scope for the single-shot CLI shape pkt has today.
+- **Decision: don't optimise.** 700 ms cold start is
+  acceptable for "run a test fixture and see the result";
+  N=1000 in 2.6 s is acceptable for a heavy CI run; nothing
+  on the curve smells like a Pkl design problem. If the
+  workflow shifts to repeated runs during inline-snapshot
+  authoring, (A) is the obvious first lever. (B) is reserved
+  for if pkthunder ever becomes a hot dev-loop tool that gets
+  invoked dozens of times per minute.
+- **What the data also rules out.** "Pkl scales badly with
+  fixture size" — false. "pkl-go decode is slow" — false
+  (~20 ms for 1000 Tests). "Big fixtures are slow because
+  of Pkl" — also false (it's the shell execs themselves).
+- **Side observation: pkl emits `unhandled Platform key
+  FamilyDisplayName` warnings constantly on macOS.** Harmless
+  but noisy in scripted output. Affects every `pkl eval` call
+  with the current Pkl 0.31.1 / macOS 26 combination. Not a
+  pkthunder issue; logged here for posterity.
+
+---
+
 ## Phase 25 — Input polymorphism story: pick C, manual unmarshal turned out unnecessary
 
 - **Method.** Phase 24 shipped `Test.inputs: Mapping<String, IntInput>` — Int only. To
