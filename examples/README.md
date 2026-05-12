@@ -77,6 +77,9 @@ pkt exec -f examples/<name>/Test.pkl
 - [`quickcheck-subprocess`](quickcheck-subprocess/) —
   `Test.iterations` against a shell body; failure reports the
   seed for reproduction
+- [`quickcheck-input-space`](quickcheck-input-space/) — typed
+  `IntInput` generators with per-input shrinking; failure
+  reports the minimal-ish input set (e.g. `{A=7, B=15}`)
 
 ## What every example tries to do
 

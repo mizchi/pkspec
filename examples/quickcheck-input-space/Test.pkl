@@ -1,0 +1,45 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  // PASSING property: 0 ≤ a + b ≤ 200 for a,b ∈ [0, 100].
+  // Always holds — runs 30 iterations and reports all-pass.
+  new {
+    name = "addition_in_range"
+    description = "0 ≤ a + b ≤ 200 for a,b ∈ [0,100]"
+    iterations = 30
+    iterationSeed = 7
+    inputs {
+      ["A"] = new IntInput { lo = 0; hi = 100 }
+      ["B"] = new IntInput { lo = 0; hi = 100 }
+    }
+    cmd = """
+      sum=$(( A + B ))
+      [ $sum -ge 0 ] && [ $sum -le 200 ]
+    """
+  }
+
+  // FAILING property (deliberate): a * b < 100.
+  // Doesn't hold for large pairs; the shrinker narrows the
+  // counterexample to the boundary.
+  new {
+    name = "multiplication_bounded"
+    description = "a * b < 100 (false in general; deliberately failing)"
+    tags { "spec" }
+    pending = true  // enable to see input-space shrink in action
+    iterations = 30
+    iterationSeed = 1234567
+    shrink = true
+    shrinkAttempts = 50
+    inputs {
+      ["A"] = new IntInput { lo = 0; hi = 50 }
+      ["B"] = new IntInput { lo = 0; hi = 50 }
+    }
+    cmd = """
+      product=$(( A * B ))
+      if [ $product -ge 100 ]; then
+        echo "A=$A B=$B product=$product"
+        exit 1
+      fi
+    """
+  }
+}

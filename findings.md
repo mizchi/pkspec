@@ -5,6 +5,95 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 24 — True input-space shrinking (Int MVP)
+
+- **Why phase 23.1 wasn't enough.** Seed-space shrinking
+  surfaces "smaller seed that still fails," but the user has
+  to mentally map seed → input themselves. For `PKT_SEED %
+  N`-style derivations the mapping is clean; for any other
+  derivation it's noise. Real QuickCheck shows the actual
+  failing **values**, not a number that derives them.
+- **MVP: typed Int inputs.** Schema adds `Test.inputs:
+  Mapping<String, IntInput>` where `IntInput { lo, hi }`.
+  Non-empty triggers the new property loop:
+  - Each iteration: derive an Int per named input from a
+    per-input sub-seed (xorshift-stepped K times for the
+    Kth input), inject as `$<name>`.
+  - On failure: per-input shrink — for each input, probe
+    `{lo, halve, val-1}`; adopt any candidate that still
+    fails; recurse until no probe shrinks further or budget
+    runs out.
+  - Report the **values** (`{A=7, B=15}`) instead of just
+    the seed.
+- **Why Int only as MVP.** Polymorphic decode in pkl-go is a
+  known friction point (phase 18 covered it). Going with
+  `Mapping<String, IntInput>` keeps the decode trivial — one
+  concrete type, no kind discriminator. List / String / Map
+  generators land in a follow-up phase that picks the
+  polymorphism story for input shapes (either tagged-union
+  or flat-union per the proposals/ debate).
+- **Per-input independent shrinking** is the simplest
+  correct approach. Each input shrinks toward its `lo`
+  independently; the loop recurses until no probe across any
+  input produces a further failure. The trade-off is local
+  vs global minima: when the failure depends on a
+  correlation between inputs (`A * B ≥ 100`, can be hit by
+  `{A=2, B=50}`), the per-input greedy stops at a local
+  boundary (`{A=7, B=15}`). Documented as a limitation; the
+  fix (cross-input shrink) requires a real shrink-tree
+  algorithm not warranted by current usage.
+- **Probe order: `{lo, halve, val-1}`.** Most-aggressive
+  first. Probably half the failures shrink to `lo` for one
+  input in 1 probe; the halve handles cases where `lo`
+  isn't tight (passes), and `val-1` handles the boundary
+  refinement near the original value. The trace shows only
+  adopted shrinks, so the user sees the path, not the
+  exhaustive search.
+- **Sub-seed derivation.** Each input gets a sub-seed =
+  `xorshift32` stepped K times from the iteration seed,
+  where K is the input's position in the sorted name list.
+  Result: different inputs in the same iteration draw
+  uncorrelated values, but the overall stream is still
+  deterministic from `iterationSeed`.
+- **Smoke: 5 shrink steps, `{A=10, B=17} → {A=7, B=15}`.**
+  Property `A * B < 100` on `[0, 50]^2`. Original failing
+  sample landed via the random iteration. Shrink path:
+  - A: probe `{0, 5, 9}` — `0` and `5` pass (no product
+    bug), `9` fails (9*17=153) — adopt
+  - B: probe `{0, 8, 16}` — `0` / `8` pass, `16` fails
+    (9*16=144) — adopt
+  - Continue: A 9→8→7, B 16→15. Lands at `{A=7, B=15}`
+    (product = 105, the boundary for an integer pair where
+    both inputs are roughly equal).
+- **Mutually exclusive with seed-space shrink.** When
+  `inputs` is non-empty, the seed-space path (phase 23.1)
+  is skipped. The `shrink` / `shrinkAttempts` fields are
+  reinterpreted as the per-input shrink budget. Documented:
+  use `inputs` for typed Int properties, raw `$PKT_SEED` +
+  `shrink` for everything else.
+- **Implementation: ~200 lines in `internal/executor/inputs.go`.**
+  Generation (~30 LOC), env composition (~10 LOC), shrink
+  loop (~60 LOC), helpers (~30 LOC), reporting / formatting
+  (~30 LOC). Decoupled from the executor's main file so the
+  property-mode complexity sits in its own module.
+- **What this validates about the schema philosophy.**
+  Phase 18's "kind-private fields live on the Spec" survives
+  the new feature. `Test.inputs` is one new field on Test,
+  the Spec (`IntInput`) is self-contained, the runner
+  branches on `len(t.Inputs) > 0` exactly once. No
+  god-class growth. The exit criterion ("re-evaluate at
+  kind 5 / new validation matrix entries") is unmoved by
+  this phase.
+- **What's left for proper QuickCheck parity.** List /
+  String / Map generators; cross-input shrink; biased
+  distributions (mostly-small, edge-case-heavy); generator
+  composition (`tuple(intGen, intGen)`). Each is its own
+  feature, none blocking; pkt's MVP now covers the
+  canonical "named Int parameters" case which is the
+  majority of practical property tests.
+
+---
+
 ## Phase 23.1 — Seed-space shrinking
 
 - **Scope: seed-space, not input-space.** Honest framing

@@ -329,6 +329,19 @@ class PlaywrightTestSpec {
   shard: String? = null
 }
 
+/// Generator + shrink spec for a single integer input. The runner
+/// derives a value in `[lo, hi]` from the iteration's seed for
+/// each named input, injects it into the env, and on failure
+/// shrinks the value toward `lo` via halving + decrement probes.
+class IntInput {
+  /// Inclusive lower bound. Shrink targets this value as the
+  /// "simplest" candidate.
+  lo: Int
+
+  /// Inclusive upper bound. Generated values are in `[lo, hi]`.
+  hi: Int(this >= lo)
+}
+
 /// SQL query spec. The runner opens a database connection by DSN,
 /// executes the query, and serialises rows as JSON for downstream
 /// assertions.
@@ -531,6 +544,29 @@ class Test {
   /// repeated halving.
   shrinkAttempts: Int(this >= 0) = 32
 
+  /// Typed input-space generators. When non-empty, the runner
+  /// switches from raw `$PKT_SEED` injection to per-input
+  /// generation: each entry's value is derived from the iteration
+  /// seed (using a per-input sub-seed via `QuickCheck.seedAt`) and
+  /// injected into the env under the entry's name.
+  ///
+  /// On failure, the runner performs **input-space shrinking**:
+  /// each input is independently reduced toward 0 (or `lo`) via
+  /// halving / decrement probes, candidates are re-run, and the
+  /// process recurses on any shrink that still fails. Result: the
+  /// reported failing input is genuinely minimal-ish per-input,
+  /// not just a smaller seed that happens to fail.
+  ///
+  /// MVP supports `IntInput` only. List / String / Map inputs
+  /// land in later phases.
+  ///
+  /// `inputs` is mutually informative with `iterations` —
+  /// iterations > 1 + inputs non-empty enables the input-space
+  /// property loop. `iterationSeed` still controls the starting
+  /// seed; `shrink` / `shrinkAttempts` are reinterpreted as
+  /// per-input shrink budget when inputs are present.
+  inputs: Mapping<String, IntInput> = new {}
+
   // ── Body: pick exactly one ─────────────────────────────────────
   cmd: (String(length > 0))? = null
   stdin: String? = null
@@ -664,6 +700,11 @@ class RenderedScreenshotSnapshot {
   thresholdPct: Float
 }
 
+class RenderedIntInput {
+  lo: Int
+  hi: Int
+}
+
 class RenderedStep {
   name: String?
   kind: String
@@ -729,6 +770,7 @@ class RenderedTest {
   iterationSeed: Int
   shrink: Boolean
   shrinkAttempts: Int
+  inputs: Mapping<String, RenderedIntInput>
 
   cmd: String?
   stdin: String?
@@ -894,6 +936,14 @@ local function renderTest(t: Test): RenderedTest = new {
   iterationSeed = t.iterationSeed
   shrink = t.shrink
   shrinkAttempts = t.shrinkAttempts
+  inputs = new Mapping<String, RenderedIntInput> {
+    for (k, v in t.inputs) {
+      [k] = new RenderedIntInput {
+        lo = v.lo
+        hi = v.hi
+      }
+    }
+  }
   cmd = t.cmd
   stdin = t.stdin
   expectExitCode = t.expectExitCode

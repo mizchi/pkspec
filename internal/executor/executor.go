@@ -612,7 +612,16 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 	// are ignored — a property check treats the first failure as the
 	// bug, not as flake. The failing seed is surfaced for
 	// deterministic reproduction.
+	//
+	// With Test.inputs non-empty, the property loop switches to
+	// input-space mode: typed values are generated per-iteration
+	// and shrunk independently on failure. Otherwise the older
+	// seed-only path (PKT_SEED env injection + seed-space shrink)
+	// is used.
 	if t.Iterations > 1 {
+		if len(t.Inputs) > 0 {
+			return e.runInputIterated(ctx, name, mode, t, defaults, extraEnv, start)
+		}
 		return e.runIterated(ctx, name, mode, t, defaults, extraEnv, start)
 	}
 

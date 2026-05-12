@@ -169,12 +169,84 @@ want a tighter shrink; decrease if the body is slow (browser
 launch, etc.) and 32 × per-iteration cost exceeds your
 patience budget.
 
+## Input-space shrinking (typed inputs)
+
+When a Test declares `inputs: Mapping<String, IntInput>`, the
+runner switches from raw `$PKT_SEED` injection to typed-value
+generation. Each named input gets a value in `[lo, hi]` derived
+from a per-input sub-seed (xorshift-stepped from the iteration
+seed), the value is injected as `$<name>` into the env, and the
+body asserts the property.
+
+On failure, **per-input shrinking** runs: each input is reduced
+independently toward its `lo` via the probe sequence
+`[lo, lo + (val-lo)/2, val-1]`. Any candidate that still fails
+is adopted; the loop recurses across all inputs until no probe
+produces a further failure (or `shrinkAttempts` runs out).
+
+```pkl
+new Test {
+  name = "multiplication_bounded"
+  iterations = 30
+  iterationSeed = 1234567
+  shrink = true
+  shrinkAttempts = 50
+  inputs {
+    ["A"] = new IntInput { lo = 0; hi = 50 }
+    ["B"] = new IntInput { lo = 0; hi = 50 }
+  }
+  cmd = """
+    product=$(( A * B ))
+    [ $product -lt 100 ]
+  """
+}
+```
+
+Failure output reports the **values**, not just the seed:
+
+```
+property failed at iteration 0/30 (seed=1234567) with inputs {A=7, B=15}
+shrink: {A=10, B=17} → {A=7, B=15} (5 steps)
+shrink: A 10 → 9 still fails
+shrink: B 17 → 16 still fails
+...
+```
+
+This is true input-space shrinking: the reported values are
+genuinely minimal-ish per-input, not just a smaller seed that
+happens to fail.
+
+### Limitations of MVP
+
+- **Int only.** List / String / Map inputs are TODO. The schema
+  is `Mapping<String, IntInput>`, not a polymorphic generator
+  union (yet).
+- **Per-input shrinking is greedy.** Each input shrinks toward
+  `lo` independently. When the failure depends on a product /
+  correlation between inputs, the shrunk values land on a local
+  boundary, not a global minimum. (Example: `A * B ≥ 100` can
+  be hit by `{A=2, B=50}`, but per-input greedy stops earlier.)
+- **No generator state.** Each iteration's value is a pure
+  function of `(sub_seed, lo, hi)`. Stateful generators
+  (sequence, weighted, alternating) need an extended schema.
+
+### Choosing between modes
+
+| Mode | When | Failure output |
+| --- | --- | --- |
+| `inputs { ... }` (typed) | named Int parameters | `{A=7, B=15}` |
+| Raw `$PKT_SEED` | complex / non-Int inputs | only the seed |
+| `inputs` + `shrink` | typed + want minimal-ish input | shrunk values + trace |
+| `shrink` without `inputs` | want seed-space shrink (hint, not minimum) | shrunk seed + trace |
+
 ## What's still NOT in scope today
 
-- **Input-space shrinking** (the proper QuickCheck flavour).
-  Would require pkt to know the input type and generator. See
-  the "Why seed-space" note above.
-- **Custom generators**: only `intCases` is provided. For
+- **List / String / Map inputs.** Schema accepts only `IntInput`
+  today. Adding `ListIntInput`, `StringInput`, etc. is the
+  obvious next phase but requires a polymorphic decode story
+  (Pkl tagged-union → Go interface) or a flat-union approach.
+- **Custom generators**: only `intCases` is provided in
+  `pkl/QuickCheck.pkl`. For
   strings / structs / lists, derive in the subprocess from
   `$PKT_SEED` directly. Adding generator helpers in Pkl is
   cheap when needed.

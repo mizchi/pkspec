@@ -64,6 +64,13 @@ type ScreenshotSnapshot struct {
 	ThresholdPct float64 `pkl:"thresholdPct"`
 }
 
+// IntInput mirrors `pkthunder.Test#RenderedIntInput` — a typed
+// generator + shrink spec for a single integer input.
+type IntInput struct {
+	Lo int `pkl:"lo"`
+	Hi int `pkl:"hi"`
+}
+
 // PlaywrightTestSpec mirrors `pkthunder.Test#RenderedPlaywrightTestSpec`.
 // The runner shells out to `npx playwright test` and aggregates the
 // JUnit XML output into a single Step outcome.
@@ -160,10 +167,11 @@ type Test struct {
 	Retries         int               `pkl:"retries"`
 	FlakyAcceptable bool              `pkl:"flakyAcceptable"`
 	Pending         bool              `pkl:"pending"`
-	Iterations      int               `pkl:"iterations"`
-	IterationSeed   int               `pkl:"iterationSeed"`
-	Shrink          bool              `pkl:"shrink"`
-	ShrinkAttempts  int               `pkl:"shrinkAttempts"`
+	Iterations      int                  `pkl:"iterations"`
+	IterationSeed   int                  `pkl:"iterationSeed"`
+	Shrink          bool                 `pkl:"shrink"`
+	ShrinkAttempts  int                  `pkl:"shrinkAttempts"`
+	Inputs          map[string]*IntInput `pkl:"inputs"`
 
 	Cmd                  *string            `pkl:"cmd"`
 	Stdin                *string            `pkl:"stdin"`
@@ -230,6 +238,7 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedPlaywrightTestSpec", PlaywrightTestSpec{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedConsoleAssertion", ConsoleAssertion{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedSqlSpec", SqlSpec{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedIntInput", IntInput{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects
