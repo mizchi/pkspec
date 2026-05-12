@@ -1,18 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="02-failure-output" tests="4" failures="3">
+<testsuite name="02-failure-output" tests="4" failures="2">
     <testcase classname="02-failure-output.facts" name="passes"></testcase>
     <testcase classname="02-failure-output.facts" name="fails on bad arithmetic">
-        <failure message="Fact Failure">add(2, 3) == 6 (file:///Users/mz/ghq/github.com/mizchi/pkthunder/experiments/02-failure-output.pkl, line 14)
+        <failure message="Fact Failure">add(2, 3) == 6 (file:///Users/mz/ghq/github.com/mizchi/pkspec/experiments/02-failure-output.pkl, line 14)
 │         │
 5         false</failure>
     </testcase>
     <testcase classname="02-failure-output.facts" name="fails inside a chained expression">
-        <failure message="Fact Failure">add(add(1, 2), add(3, 4)) == 99 (file:///Users/mz/ghq/github.com/mizchi/pkthunder/experiments/02-failure-output.pkl, line 17)
+        <failure message="Fact Failure">add(add(1, 2), add(3, 4)) == 99 (file:///Users/mz/ghq/github.com/mizchi/pkspec/experiments/02-failure-output.pkl, line 17)
 │   │          │          │
 10  3          7          false</failure>
     </testcase>
-    <testcase classname="02-failure-output.examples" name="mismatched snapshot would fail">
-        <failure message="Example Output Written">(file:///Users/mz/ghq/github.com/mizchi/pkthunder/experiments/02-failure-output.pkl, line 22)
-Wrote expected output for test mismatched snapshot would fail</failure>
-    </testcase>
+    <testcase classname="02-failure-output.examples" name="mismatched snapshot would fail"></testcase>
 </testsuite>
