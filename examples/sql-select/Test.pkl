@@ -5,6 +5,7 @@ tests {
     name = "list_users"
     description = "SELECT + expectRowCount + expectRowsJsonPath"
     tags { "unit" }
+    specRef { "kind.sql" }
     // We use an in-memory DB and seed it in the same Test so the
     // example is self-contained (no .db file shipped).
     steps {

@@ -5,6 +5,7 @@ tests {
     name = "list_items"
     description = "GET a JSON endpoint and assert on status + body shape"
     tags { "unit" }
+    specRef { "kind.http"; "parallel.background" }
     background {
       new {
         name = "server"

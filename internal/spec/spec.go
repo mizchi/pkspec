@@ -13,6 +13,7 @@ package spec
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -277,7 +278,7 @@ func checkFromScenarios(plans []*config.Plan) []SpecIssue {
 
 	out := make([]SpecIssue, 0, len(decls))
 	for id, sc := range decls {
-		if len(impls[id]) > 0 {
+		if scenarioIsImplemented(sc, impls) {
 			continue
 		}
 		out = append(out, SpecIssue{
@@ -287,6 +288,25 @@ func checkFromScenarios(plans []*config.Plan) []SpecIssue {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].SpecID < out[j].SpecID })
 	return out
+}
+
+// scenarioIsImplemented decides whether a Scenario should be
+// considered verified. Three paths:
+//   - "test"  (default): an active Test.pkl carries the id in specRef
+//   - "code"             implementedAt is non-null (the impl lives in
+//                        framework / language source, not a Pkl test)
+//   - "doc"              implementedAt is non-null (the guarantee is a
+//                        reviewed doc, not a runnable assertion)
+func scenarioIsImplemented(sc *config.Scenario, impls map[string][]string) bool {
+	switch sc.ImplementedBy {
+	case "code", "doc":
+		return sc.ImplementedAt != nil && *sc.ImplementedAt != ""
+	default: // "test" or empty
+		if sc.ID == nil {
+			return false
+		}
+		return len(impls[*sc.ID]) > 0
+	}
 }
 
 func checkLegacy(plans []*config.Plan) []SpecIssue {
@@ -379,7 +399,7 @@ func Coverage(plans []*config.Plan) CoverageReport {
 	}
 	impls := collectImpls(plans)
 	for id, sc := range decls {
-		implemented := len(impls[id]) > 0
+		implemented := scenarioIsImplemented(sc, impls)
 		rep.Total++
 		if implemented {
 			rep.Implemented++
@@ -588,7 +608,7 @@ func Goals(plans []*config.Plan) []GoalReport {
 			if sc.ID == nil {
 				continue
 			}
-			implemented := len(impls[*sc.ID]) > 0
+			implemented := scenarioIsImplemented(sc, impls)
 			for _, gid := range sc.Contributes {
 				contribs[gid] = append(contribs[gid], ContributingScenario{
 					SpecID:      *sc.ID,
@@ -711,7 +731,7 @@ func NextActions(plans []*config.Plan) []NextAction {
 			if sc.ID == nil || sc.Deprecated || sc.ReviewStatus == "draft" {
 				continue
 			}
-			if len(impls[*sc.ID]) > 0 {
+			if scenarioIsImplemented(sc, impls) {
 				continue
 			}
 			n := NextAction{
@@ -755,6 +775,195 @@ func severityRank(s string) int {
 		return 1
 	}
 	return 0
+}
+
+// OrphanTest is one entry in the `pkt spec --orphans` listing:
+// an active Test (non-pending) that does not declare any specRef.
+// For projects transitioning to spec-driven, this is the backlog
+// of "tests that exist but verify nothing nameable."
+type OrphanTest struct {
+	Name       string
+	SourcePath string
+	Tags       []string
+}
+
+// Orphans returns active Tests with no specRef. Pending tests are
+// excluded — their job is to declare intent, not verify.
+func Orphans(plans []*config.Plan) []OrphanTest {
+	var out []OrphanTest
+	for _, p := range plans {
+		for name, t := range p.Tests {
+			if isPending(t) {
+				continue
+			}
+			if len(t.SpecRef) > 0 {
+				continue
+			}
+			out = append(out, OrphanTest{
+				Name:       name,
+				SourcePath: p.SourcePath,
+				Tags:       t.Tags,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SourcePath != out[j].SourcePath {
+			return out[i].SourcePath < out[j].SourcePath
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// FormatOrphans renders an Orphans listing.
+func FormatOrphans(orphans []OrphanTest) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Orphan tests (%d)\n\n", len(orphans))
+	if len(orphans) == 0 {
+		b.WriteString("_Every active test references at least one spec id._\n")
+		return b.String()
+	}
+	b.WriteString("Active tests with no `specRef` — candidates for either ")
+	b.WriteString("linking to an existing spec or declaring a new one:\n\n")
+	currentPath := ""
+	for _, o := range orphans {
+		if o.SourcePath != currentPath {
+			fmt.Fprintf(&b, "## `%s`\n\n", o.SourcePath)
+			currentPath = o.SourcePath
+		}
+		tagStr := ""
+		if len(o.Tags) > 0 {
+			tagStr = " — tags: " + strings.Join(o.Tags, ", ")
+		}
+		fmt.Fprintf(&b, "- **%s**%s\n", o.Name, tagStr)
+	}
+	return b.String()
+}
+
+// ImplIssue is one row of `pkt spec --check --strict` output:
+// a Scenario whose `implementedAt` path can't be resolved on disk.
+type ImplIssue struct {
+	SpecID string
+	Path   string
+	Reason string
+}
+
+// VerifyImplementedAt walks every Scenario with implementedAt set
+// and checks that the file portion of the pointer (before any
+// `:Symbol` suffix) exists relative to `repoRoot`. Symbol names are
+// not verified — the runner can't reasonably parse Go / Pkl AST for
+// every kind of marker. Missing files are returned as ImplIssues.
+func VerifyImplementedAt(plans []*config.Plan, repoRoot string) []ImplIssue {
+	var out []ImplIssue
+	seen := map[string]struct{}{}
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ImplementedAt == nil || *sc.ImplementedAt == "" {
+				continue
+			}
+			pathPart := *sc.ImplementedAt
+			if idx := strings.IndexByte(pathPart, ':'); idx >= 0 {
+				pathPart = pathPart[:idx]
+			}
+			if idx := strings.IndexByte(pathPart, '#'); idx >= 0 {
+				pathPart = pathPart[:idx]
+			}
+			abs := pathPart
+			if !filepath.IsAbs(abs) {
+				abs = filepath.Join(repoRoot, pathPart)
+			}
+			if _, err := os.Stat(abs); err == nil {
+				continue
+			}
+			id := sc.Name
+			if sc.ID != nil {
+				id = *sc.ID
+			}
+			key := id + "|" + pathPart
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, ImplIssue{
+				SpecID: id,
+				Path:   pathPart,
+				Reason: "file not found",
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SpecID < out[j].SpecID })
+	return out
+}
+
+// FilterPlansForSpec narrows a plan slice to scenarios matching the
+// given goal id (contributes contains it) and / or severity. Tests
+// are filtered to those whose specRef points at any retained
+// scenario id, so coverage / check / next stay consistent with the
+// filtered view. Empty filter values mean "no restriction."
+//
+// The retained scenario id set is computed across ALL plans first,
+// then applied to Tests in every plan — this matters because Spec
+// and Test typically live in different modules (the Spec plan
+// declares the scenarios; the Test plan implements them with
+// `specRef`), and a per-plan retained set would drop every Test
+// whose Plan happens to declare no scenarios.
+func FilterPlansForSpec(plans []*config.Plan, goal, severity string) []*config.Plan {
+	if goal == "" && severity == "" {
+		return plans
+	}
+
+	survives := func(sc *config.Scenario) bool {
+		if goal != "" {
+			match := false
+			for _, g := range sc.Contributes {
+				if g == goal {
+					match = true
+					break
+				}
+			}
+			if !match {
+				return false
+			}
+		}
+		if severity != "" && sc.Severity != severity {
+			return false
+		}
+		return true
+	}
+
+	retained := map[string]struct{}{}
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if !survives(sc) {
+				continue
+			}
+			if sc.ID != nil {
+				retained[*sc.ID] = struct{}{}
+			}
+		}
+	}
+
+	out := make([]*config.Plan, 0, len(plans))
+	for _, p := range plans {
+		np := *p
+		np.Scenarios = map[string]*config.Scenario{}
+		for n, sc := range p.Scenarios {
+			if survives(sc) {
+				np.Scenarios[n] = sc
+			}
+		}
+		np.Tests = map[string]*config.Test{}
+		for n, t := range p.Tests {
+			for _, sr := range t.SpecRef {
+				if _, ok := retained[sr]; ok {
+					np.Tests[n] = t
+					break
+				}
+			}
+		}
+		out = append(out, &np)
+	}
+	return out
 }
 
 // FormatNext renders a NextActions list as a numbered Markdown list.

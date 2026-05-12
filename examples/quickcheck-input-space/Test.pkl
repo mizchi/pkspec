@@ -6,6 +6,7 @@ tests {
   new {
     name = "addition_in_range"
     description = "0 ≤ a + b ≤ 200 for a,b ∈ [0,100]"
+    specRef { "pbt.iterations"; "pbt.inputs" }
     iterations = 30
     iterationSeed = 7
     inputs {

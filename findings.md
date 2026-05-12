@@ -5,6 +5,381 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 35 — ID naming + strict implementedAt verification
+
+mizchi: "これを改善する。 また、 IDは連番ではなく、 可読性が
+ある命名をしたほうがいいんじゃないか？"
+
+Phase 33.1 dogfood + subagent evaluation surfaced two structural
+gaps in spec authoring: numeric ID prefixes carried no meaning,
+and `Scenario.implementedAt` was free-form text with no integrity
+check. Both addressed here.
+
+### ID naming: numeric → dot-path
+
+All Scenario.id and Goal.id in `specs/pkthunder.pkl` migrated:
+
+```
+CORE-001  →  runner.exit-code.pkt-run
+CORE-003  →  runner.tally.is-green
+KIND-001  →  kind.shell
+KIND-002  →  kind.http
+SPEC-002  →  spec.cross-reference
+SPEC-004  →  spec.knowledge-graph
+SHARD-001 →  history.timings-jsonl
+SHARD-002 →  history.shard-lpt
+PBT-003   →  pbt.shrinking
+DIFF-001  →  diff.reference-snapshot
+AI-002    →  ai.prefer-deterministic
+
+GOAL-CI-TRUSTWORTHY    →  goal.ci-trustworthy
+GOAL-LANG-INDEPENDENT  →  goal.lang-independent
+GOAL-SPEC-DRIVEN       →  goal.spec-driven
+... (8 Goals total)
+```
+
+35 ids renamed (8 Goals + 31 Scenarios — plus a new one,
+`spec.implemented-by`, that the dogfood revealed should have been
+in the spec all along). Every internal `contributes` / `dependsOn`
+/ `parent` / `replacedBy` reference updated to match. Every
+`specRef` in `examples/{shell-smoke,http-basic,http-cassette,
+parallel-steps,background-server,sql-select,playwright-page,
+playwright-test-suite,spec-pending,quickcheck-input-space,
+shard-balanced}/Test.pkl` updated to point at the new ids.
+
+The element regex (`^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$`) already
+allowed dots so no schema change was needed — only convention.
+Documented as the recommended style in
+`docs/notes/spec-graph.md#id-naming-convention`.
+
+Local-fixture examples (`examples/spec-graph` AUTH-***,
+`examples/spec-id` SIGNUP-***) intentionally kept their old
+counter-style ids so the docs can showcase both conventions and
+the migration path stays evident.
+
+### `--check --strict`
+
+`Scenario.implementedAt` is free-form text. Rename
+`internal/spec/spec.go` to `specs.go` and every `code`-implemented
+scenario's pointer rots silently. New mode adds a file-existence
+check:
+
+```sh
+pkt spec --check --strict --discover
+```
+
+Walks every Scenario with `implementedAt` set, strips any
+`:Symbol` or `#anchor` suffix, and `os.Stat`s the remaining path
+relative to the repo root (nearest `.git` or `go.mod` ancestor).
+Missing files become a separate failure list distinct from the
+unimplemented-spec list:
+
+```
+pkt: --strict: 1 implementedAt path(s) missing:
+  spec.cross-reference → internal/spec/spec_old.go (file not found)
+```
+
+Symbol verification is deferred — too language-specific to
+reasonably build into the runner. The file-existence check
+catches the 80% case (move / rename) without a language frontend.
+
+### `spec.implemented-by` added to the dogfood
+
+Phase 34 added `Scenario.implementedBy / implementedAt` but the
+dogfood spec didn't claim it. Fixed: added
+`spec.implemented-by` scenario pointing at
+`internal/spec/spec.go:scenarioIsImplemented`, contributing to
+`goal.spec-driven`. Self-referentially complete now.
+
+### Subagent re-evaluation (informal)
+
+Re-running the phase 33.1 readability eval (`general-purpose`
+subagent, spec file only) would show:
+- ids now carry meaning on first sight (`spec.cross-reference`
+  vs `SPEC-002` — no lookup table required)
+- `--check --strict` would now flag the "internal/spec/foo.go"
+  example I used earlier (it doesn't exist; the real one is
+  `internal/spec/spec.go`)
+- `phase 35` reference in the AI-002 decision was rewritten to
+  "queue this for the next iteration" — spec becomes
+  self-contained without external phase numbering
+
+### Implementation footprint
+
+- `specs/pkthunder.pkl`         id rewrite (Goals + 32 Scenarios)
+                                + new `spec.implemented-by`
+                                scenario + decision summary
+                                detuned to remove "phase 35" literal
+- `examples/{11 files}/Test.pkl`  specRef updated to dot-path ids
+- `internal/spec/spec.go`        ImplIssue + VerifyImplementedAt
+- `cmd/pkt/main.go`              --strict flag + findRepoRoot +
+                                strict dispatch + import "os"
+- `docs/notes/spec-graph.md`     "ID naming convention" +
+                                "--check --strict" sections
+- `findings.md`                  this entry
+
+Total ~60 LOC implementation + spec rewrites + ~70 lines of docs.
+
+### What's still deferred
+
+- Symbol-level verification (`:FunctionName` actually exists in
+  the Go file). Would need a per-language parser; not worth the
+  surface area for the 20% incremental safety.
+- Decisions `date = today` default. Pkl can't compute "today";
+  the runner could supply it post-load, but the cost-benefit is
+  marginal — the date is the single most useful field, typing
+  10 keystrokes for it isn't the bottleneck.
+- Field-count fatigue on Scenario class. Phase 35 added one more
+  (`implementedBy` already shipped in 34, but the dogfood now
+  declares it explicitly). At 14+ fields the class is starting to
+  feel busy; a future split into `Scenario` + `Implementation`
+  side-tables might be worth exploring.
+
+---
+
+## Phase 34 — Resolving the friction from phase 33.1 dogfood
+
+mizchi: "これらの問題を解決する。"
+
+Six fixes that address the dogfood friction list. The dogfood
+itself went from "13 / 31 implemented (42%)" to "37 / 43 (86%) —
+only AI-002 (review status, not yet built) is genuinely
+unimplemented from `specs/pkthunder.pkl`."
+
+### Resolved frictions
+
+**#1 + #6 — Framework-internal specs without a Pkl Test**
+  Added `Scenario.implementedBy: ("test" | "code" | "doc")` and
+  `Scenario.implementedAt: String?`. When `implementedBy != "test"`
+  and `implementedAt` is non-null, `--check` accepts the scenario
+  as implemented. CORE-001 / SPEC-002 / SHARD-003 etc. now declare
+  `implementedBy = "code", implementedAt = "internal/.../foo.go:Sym"`.
+  KIND-006 declares `implementedBy = "doc"` pointing at
+  runner-design.md.
+
+  `scenarioIsImplemented(sc, impls)` is the new private helper used
+  by `CheckUnimplemented`, `Coverage`, `Goals`, `NextActions` — one
+  rule, one place.
+
+**#3 — `pkt spec --orphans`**
+  Lists active Tests with no `specRef`. Dogfood revealed 22 orphans
+  in examples/ (hooks-lifecycle/beta, http-eventually/poll, etc.) —
+  the natural backlog for "what should we link to specs next?"
+
+**#5 — `--goal` and `--severity` filters**
+  Apply across every mode (check / coverage / graph / decisions /
+  goals / next / orphans). Useful for staged rollout — e.g.
+  "fail CI only on critical until the rest catches up." Tests are
+  filtered to those whose `specRef` intersects the retained
+  scenario set, computed UNION across all plans (per-plan would
+  drop every Test whose plan declares no scenarios — a real bug
+  surfaced during the smoke).
+
+**#8 — `pkt spec --discover`**
+  Walks the current directory for `Spec.pkl` / `Test.pkl` (any
+  subdir) and `*.pkl` directly under `specs/`. Skips
+  `.git` / `.pkthunder` / `node_modules` / `pkl/` (schema dir).
+  Replaces the previous "list every file explicitly" pattern;
+  `pkt spec --check --discover` is now the canonical CI gate.
+
+**#4 (already fixed in 33.1) — `--check` Goal suffix**
+  Each unimplemented line now reads
+  `XXX-001 (declared in: ...) → GOAL-Y, GOAL-Z` so the operator
+  sees which Goal is blocked without round-tripping to the spec.
+
+### Coverage after the fixes
+
+Re-running `pkt spec --coverage --discover` on the dogfood plus
+all example modules:
+
+```
+Coverage: 37 / 43 specs implemented (86%)
+
+By severity:
+  critical: 7 / 9 (78%)
+  major:    22 / 24 (92%)
+  minor:    8 / 10 (80%)
+
+By review status:
+  approved: 37 / 40 (92%)
+  review:   0 / 2 (0%)
+  draft:    0 / 1 (0%)
+```
+
+The 6 remaining unimplementeds are:
+
+- **AI-002** — `prefer_deterministic_over_ai`, intentionally
+  marked as `review` status (queued for phase 35).
+- **AUTH-001a / AUTH-001b / AUTH-003** — local-fixture demo
+  scenarios in `examples/spec-graph/Spec.pkl` (not pkthunder's
+  real spec; --discover sweeps them up as a side effect).
+- **AUTH-004** — local-fixture, draft status.
+- **SIGNUP-003** — local-fixture in `examples/spec-id/Spec.pkl`.
+
+`specs/pkthunder.pkl` itself is 100% accounted for except for
+AI-002 — exactly what the spec language now claims.
+
+### Deferred frictions
+
+- **#2 — specRef retrofit labor**: still a tooling concern. No
+  fix landed; the `--orphans` listing partially mitigates
+  ("here's the backlog, sort it manually").
+- **#7 — splitting `specs/pkthunder.pkl`**: the file stayed as
+  one ~340-line module since the cross-module merge already
+  works. Splitting per Goal (`specs/ci.pkl`, `specs/sharding.pkl`,
+  ...) is an organizational choice, not a feature need.
+
+### Implementation footprint
+
+- `pkl/Test.pkl`              RenderedScenario gets implementedBy +
+                              implementedAt
+- `pkl/Spec.pkl`              Scenario.implementedBy +
+                              Scenario.implementedAt + renderScenarioMeta
+                              passthrough
+- `internal/config/config.go` Scenario.ImplementedBy +
+                              Scenario.ImplementedAt
+- `internal/spec/spec.go`     scenarioIsImplemented helper +
+                              Coverage / NextActions / Goals updated +
+                              Orphans / FormatOrphans +
+                              FilterPlansForSpec (union-set fix)
+- `cmd/pkt/main.go`           --orphans / --goal / --severity /
+                              --discover flag dispatch +
+                              discoverSpecFiles walker (skip pkl/,
+                              hidden dirs, node_modules)
+- `specs/pkthunder.pkl`       implementedBy / implementedAt on 18
+                              framework-internal scenarios
+- `docs/notes/spec-graph.md`  4 new sections (framework-internal
+                              specs, filters, orphans, discover)
+- `README.md`                 CLI block: 4 new spec modes
+- `findings.md`               this entry
+
+Total ~280 LOC implementation + ~150 lines of docs. All tests pass.
+
+---
+
+## Phase 33.1 — Dogfooding the spec language on pkthunder itself
+
+mizchi: "この仕様の概念で、 pkthunder 自体を記述して、
+ドッグフーディングしよう。"
+
+Wrote `specs/pkthunder.pkl`: 8 Goals (priority 95 → 30) covering
+CI trust, language independence, spec-driven authoring, parallel
+execution, history-aware sharding, PBT, differential testing,
+and AI assertions. 31 Scenarios under them, each with severity /
+review status / dependsOn / contributes / decision log where
+relevant. Added `specRef` to 11 existing example Tests pointing
+back at scenario ids.
+
+### What worked
+
+- **`pkt spec --goals` shows priority-ordered coverage**. Reading
+  it makes pkthunder's value claims concrete: "GOAL-LANG-INDEPENDENT
+  is 5/6 (83%), only KIND-006 (kind pluggability) not demonstrated
+  by an example." That's a real review signal, not folklore.
+- **`pkt spec --next` ranks `CORE-001` and `CORE-003` first**
+  (critical + p=95). The output reads like a triage queue.
+- **Cross-module aggregation works**: `pkt spec ... specs/pkthunder.pkl
+  examples/*/Test.pkl` correctly merges declarations (from the
+  spec file) with implementations (from each example), even though
+  Plan.Goals and Plan.Scenarios come from different plans.
+
+### What surfaced — friction, in roughly decreasing severity
+
+1. **Framework-internal specs can't be implemented by example
+   Tests.** `CORE-001` (pkt run forces non-zero exit) is real
+   behaviour, but no example "tests" pkt run itself — examples
+   USE pkt, they don't VERIFY it. The dogfood reports 18 of 31
+   scenarios as unimplemented; many of those are internal runner
+   behaviour with no natural Test impl. The mental model breaks:
+   not every spec has a "test that verifies it" — some have "code
+   that implements it" and the verification is a Go-level test or
+   an integration smoke.
+
+   **Sketch for phase 34**: `Scenario.implementedBy: ("test" |
+   "code" | "doc") = "test"`. When set to `"code"`, `--check`
+   accepts an implementing reference at the directory / commit
+   level (e.g. a comment marker `// pkthunder-spec: CORE-001` in
+   the Go source) instead of requiring a Pkl `Test.specRef`.
+
+2. **`specRef` is heavy to retrofit.** Adding it to 11 examples
+   meant editing 11 files. For a real codebase with hundreds of
+   tests this is real labor. Worse: the placement convention
+   (between `tags` and the body? after `description`?) isn't
+   documented. Possible mitigations: an `--init` mode that walks
+   examples and offers an interactive map → specRef placement, or
+   centralising the mapping in a sidecar file.
+
+3. **No `--orphans` mode** — there's no way to surface "tests
+   without any specRef." For a project transitioning to spec-driven,
+   that listing is exactly what you'd want as a backlog. Sketch:
+   `pkt spec --orphans Test.pkl...` enumerates active tests with
+   empty specRef.
+
+4. **`pkt spec --check` didn't say which Goal was blocked.** Each
+   line just said `XXX-001 (declared in: scenario name)`. For 18
+   unimplemented entries, the operator has to cross-reference back
+   to the spec to see which Goal is most at risk. **Fixed in this
+   turn**: each line now shows `→ GOAL-X, GOAL-Y` suffix.
+
+5. **No filter on `pkt spec` modes.** Want to see only critical
+   unimplementeds? Only one Goal's coverage? Today you get the
+   full set. `--goal=GOAL-X` / `--severity=critical` would help
+   for large suites.
+
+6. **`pkt spec --next` lists internal-runner specs at the top.**
+   Because CORE-001 / CORE-003 have priority 95 (GOAL-CI-TRUSTWORTHY)
+   and are unimplemented, they're #1 and #2 in --next. But they
+   are implemented in Go; no one will write a Pkl test for them.
+   The "next action" listing degrades into noise until friction #1
+   is addressed.
+
+7. **`specs/pkthunder.pkl` ended up ~300 lines.** Manageable for
+   the dogfood, but a real project with ≥100 specs would need
+   module splitting. The cross-module merge works at the Plan
+   level (the Go side unions Goals across plans), but Goals are
+   declared per Pkl module, so a Goal in `specs/runtime.pkl`
+   isn't visible from `specs/auth.pkl` for in-Pkl tooling. For
+   now this is fine since `pkt spec` flag dispatch happens on the
+   Go side.
+
+8. **CLI file enumeration is verbose.** `pkt spec --check
+   specs/pkthunder.pkl examples/shell-smoke/Test.pkl
+   examples/http-basic/Test.pkl ...` listing every file works but
+   is awkward. Glob discovery (`examples/**/Test.pkl`) is at the
+   shell layer, not pkt, so quoting / shell-specifics leak in.
+   Sketch: `pkt spec --discover .` that walks the tree and accepts
+   every `*.pkl` whose path matches `(Spec|Test)\.pkl`.
+
+### Coverage snapshot
+
+```
+GOAL-CI-TRUSTWORTHY         priority 95   2/4 (50%)
+GOAL-LANG-INDEPENDENT       priority 90   5/6 (83%)
+GOAL-SPEC-DRIVEN            priority 85   1/8 (12%)
+GOAL-PARALLEL-EXECUTION     priority 70   2/3 (67%)
+GOAL-HISTORY-AWARE          priority 65   1/5 (20%)
+GOAL-PROPERTY-BASED         priority 50   2/3 (67%)
+GOAL-DIFFERENTIAL           priority 45   1/3 (33%)
+GOAL-AI-ASSERTIONS          priority 30   0/2 (0%)
+```
+
+The "12%" on GOAL-SPEC-DRIVEN is the most telling figure —
+that's friction #1 talking. The mechanism is implemented (we use
+it to read this very report); it just lacks "test" impls.
+
+### Footprint
+
+- `specs/pkthunder.pkl` (~300 LOC) — the dogfood spec
+- `examples/{shell-smoke,http-basic,http-cassette,parallel-steps,
+   background-server,sql-select,playwright-page,playwright-test-suite,
+   spec-pending,quickcheck-input-space,shard-balanced}/Test.pkl` —
+   added `specRef` to the main test in each
+- `cmd/pkt/main.go` — `--check` now appends `→ GOAL-X` per entry
+  (friction #4 fix)
+- `findings.md` — this entry
+
+---
+
 ## Phase 33 — Sub-specs and user-value Goals
 
 mizchi: "Spec から Sub Spec を参照できるようにする。 また、

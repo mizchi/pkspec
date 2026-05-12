@@ -5,6 +5,7 @@ tests {
     name = "background_lifecycle"
     description = "demonstrate `background` block: spawn → readyProbe → body → grace-kill"
     tags { "unit" }
+    specRef { "parallel.background" }
     background {
       new {
         name = "tiny_server"

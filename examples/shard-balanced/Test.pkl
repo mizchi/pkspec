@@ -3,7 +3,7 @@ amends "../../pkl/Test.pkl"
 // Mixed-duration fixture for shard balancing demo / dogfood.
 // 10 tests with intentionally uneven durations so LPT has to work.
 tests {
-  new { name = "fast_a"; cmd = "sleep 0.05" }
+  new { name = "fast_a"; cmd = "sleep 0.05"; specRef { "history.timings-jsonl"; "history.shard-lpt" } }
   new { name = "fast_b"; cmd = "sleep 0.05" }
   new { name = "fast_c"; cmd = "sleep 0.05" }
   new { name = "fast_d"; cmd = "sleep 0.05" }

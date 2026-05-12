@@ -296,6 +296,10 @@ pkt spec --graph Spec.pkl Test.pkl      graphviz dot of dependsOn / supersedes /
 pkt spec --decisions Spec.pkl Test.pkl  newest-first Markdown decision log
 pkt spec --goals Spec.pkl Test.pkl      user-facing Goals + their contributing-spec coverage
 pkt spec --next Spec.pkl Test.pkl       unimplemented specs ranked by Goal priority + severity
+pkt spec --orphans Test.pkl...          active tests with no specRef (spec-link backlog)
+pkt spec --discover                     auto-walk for Spec.pkl / Test.pkl / specs/*.pkl
+pkt spec --check --goal GOAL-X          filter every mode to one Goal
+pkt spec --check --severity critical    filter every mode to one severity
 
 pkt timings -f Test.pkl                 per-test runs / median / p90 / latest / kind
 pkt timings -f Test.pkl --failing       only tests whose latest record is non-pass

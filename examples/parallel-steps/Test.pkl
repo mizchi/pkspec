@@ -17,6 +17,7 @@ tests {
     name = "parallel"
     description = "same 3 sleeps fanned out via parallelSteps"
     tags { "unit" }
+    specRef { "parallel.parallel-steps" }
     parallelSteps {
       new { name = "p1"; cmd = "sleep 0.2" }
       new { name = "p2"; cmd = "sleep 0.2" }

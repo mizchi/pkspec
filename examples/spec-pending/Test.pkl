@@ -18,6 +18,7 @@ tests {
     name = "creates_user"
     description = "POST /users returns 201 + Location header"
     tags { "spec" }
+    specRef { "spec.auto-pending" }
     // Body has been implemented; this one is no longer pending.
     cmd = "echo 201"
     inlineStdout = "201\n"

@@ -271,6 +271,149 @@ A Goal can be `deprecated = true` to retire it without deleting it;
 deprecated Goals are excluded from `--goals` but their contributing
 scenarios still appear in coverage / check / next.
 
+## ID naming convention (phase 35)
+
+`Scenario.id` and `Goal.id` are dot-separated paths from a short
+domain prefix to a specific aspect. The element regex is
+`^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$` so any of `dot.path`, `kebab-case`,
+or `slash/path` works.
+
+Convention:
+
+```
+<domain>.<feature>[.<aspect>]
+
+  goal.ci-trustworthy
+  runner.exit-code.pkt-run
+  kind.http
+  spec.cross-reference
+  history.shard-lpt
+  pbt.shrinking
+```
+
+Two or three levels is typical. The domain prefix carries the
+project area (`runner` / `kind` / `spec` / `history` / `pbt` / ...
+for scenarios; `goal.` for Goals). The trailing component names
+the specific behaviour.
+
+Why named (not numeric):
+
+- IDs read independently of the spec body — `kind.http` tells you
+  the area before you click through.
+- Re-ordering / inserting between two ids needs no renumbering.
+- A renamed spec keeps its meaning visible in cross-references;
+  a renumbered one becomes a paper trail.
+
+The previous convention was uppercase + counter (`SIGNUP-003`,
+`KIND-001`). It still parses — the regex hasn't changed — but new
+authoring should prefer dot-paths.
+
+## `--check --strict` (phase 35)
+
+When a Scenario sets `implementedBy = "code"` and
+`implementedAt = "path/to/file.go:Symbol"`, the path part is
+referenced text only — rename the file and the spec quietly rots.
+`pkt spec --check --strict` adds a verification pass:
+
+```sh
+pkt spec --check --strict --discover
+```
+
+For every Scenario whose `implementedAt` is set, the file portion
+(before any `:Symbol` or `#anchor` suffix) is checked against the
+repo root (nearest `.git` or `go.mod` ancestor). Missing files
+become a failure:
+
+```
+pkt: --strict: 1 implementedAt path(s) missing:
+  spec.cross-reference → internal/spec/spec_old.go (file not found)
+```
+
+Symbol names inside the file are not verified — the runner cannot
+reasonably parse every kind of marker. The check catches the
+common case (file renamed / moved) without growing into a
+language-specific symbol resolver.
+
+## Framework-internal specs (phase 34)
+
+Some specs can't realistically have a Pkl Test that verifies them —
+they describe the runner's own behaviour, or guarantees that live in
+prose. Two fields capture this:
+
+```pkl
+new Scenario {
+  id = "CORE-001"
+  name = "pkt_run_returns_nonzero_on_assertion_failure"
+  // ...
+  implementedBy = "code"
+  implementedAt = "cmd/pkt/main.go:cmdRun"
+}
+
+new Scenario {
+  id = "KIND-006"
+  name = "kind_is_pluggable_via_pkl_class_plus_go_executor"
+  // ...
+  implementedBy = "doc"
+  implementedAt = "docs/notes/runner-design.md"
+}
+```
+
+- **`implementedBy = "test"`** (default) — `--check` requires a
+  Test.pkl with matching `specRef`.
+- **`implementedBy = "code"`** — `--check` accepts the scenario as
+  implemented when `implementedAt` is non-null. The pointer is
+  free-form text ("path/file.go:Symbol", "internal/spec/spec.go:Graph").
+  The runner doesn't verify the file exists — reviewers do.
+- **`implementedBy = "doc"`** — same shape, semantically "the
+  guarantee lives in a doc that reviewers must cross-check."
+
+This dissolves the friction surfaced in phase 33.1 dogfood:
+pkthunder's own functions (CORE-001, SPEC-002, SHARD-003, ...) had
+no Test.pkl to verify them and showed up as 18 unimplemented in
+`--check`. With `implementedBy = "code"` + a pointer, they're
+accounted for.
+
+## Filters: `--goal` and `--severity` (phase 34)
+
+Every `pkt spec` mode (`--check / --coverage / --graph / --decisions
+/ --goals / --next / --orphans`) accepts:
+
+- `--goal GOAL-XYZ` — restrict to scenarios contributing to one Goal
+- `--severity critical|major|minor` — restrict to one severity bucket
+
+Filters compose with each other and with positional file selection.
+Useful for staged rollout ("fail CI only on critical specs until the
+team catches up") and for per-Goal reports in code review.
+
+The retained scenario-id set is computed across all plans first,
+then applied to every plan's Tests — so a Spec.pkl module and its
+sibling Test.pkl modules stay coherent under the filter.
+
+## Orphan tests: `--orphans` (phase 34)
+
+```sh
+pkt spec --orphans --discover
+```
+
+Lists active (non-pending) Tests whose `specRef` is empty. These
+are the candidates for either linking to an existing spec or
+declaring a new one in `Spec.pkl`. Useful when transitioning a
+project to spec-driven authoring — the orphan list IS the
+backlog.
+
+## Auto-discovery: `--discover` (phase 34)
+
+```sh
+pkt spec --check --discover
+```
+
+Walks the current directory and adds every `Spec.pkl` / `Test.pkl`
+(and any `*.pkl` directly under a `specs/` directory) to the
+positional file set. Skips `.git`, `.pkthunder`, `node_modules`,
+and the pkthunder schema directory `pkl/`. Project-level spec
+modules live under `specs/foo.pkl`; per-test schemas live as
+`examples/<name>/Test.pkl`; both are picked up automatically.
+
 ## Known limits / future work
 
 - **No per-id severity in `--check`.** Today `--check` fails on

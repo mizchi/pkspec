@@ -5,6 +5,7 @@ tests {
     name = "render_label"
     description = "lightweight playwright: setContent + return text"
     tags { "unit" }
+    specRef { "kind.playwright" }
     env { ["LABEL"] = "world" }
     steps {
       new {

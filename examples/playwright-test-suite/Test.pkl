@@ -6,6 +6,7 @@ tests {
     name = "auth_suite"
     description = "delegate to @playwright/test; aggregate JUnit XML into one Step"
     tags { "unit" }
+    specRef { "kind.playwright-test"; "runner.junit-report" }
     steps {
       new {
         name = "run"

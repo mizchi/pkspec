@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -336,19 +337,31 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	output := fs.String("output", "", "write the SPEC to this path (default: stdout)")
 	root := fs.String("root", "", "make source paths relative to this directory (default: current dir)")
 	check := fs.Bool("check", false, "instead of rendering, exit non-zero when any non-draft non-deprecated spec id has no implementing test")
+	strict := fs.Bool("strict", false, "with --check: also fail when any Scenario.implementedAt path does not exist on disk (verifies the file portion only, not the symbol)")
 	coverage := fs.Bool("coverage", false, "instead of rendering, print a coverage report (declared specs vs implementing tests, broken down by severity / review-status)")
 	graph := fs.Bool("graph", false, "instead of rendering, output a graphviz `dot` document of the spec knowledge graph (dependsOn / supersedes / replacedBy)")
 	decisions := fs.Bool("decisions", false, "instead of rendering, output a Markdown decision log flattened across every scenario (newest first)")
 	goalsFlag := fs.Bool("goals", false, "instead of rendering, list user-facing Goals with each Goal's contributing-scenario coverage (priority desc)")
 	next := fs.Bool("next", false, "instead of rendering, list unimplemented specs ranked by their Goal's priority then severity — the \"what to work on next\" view")
+	orphans := fs.Bool("orphans", false, "instead of rendering, list active tests whose `specRef` is empty (candidates for spec-linking)")
+	goalFilter := fs.String("goal", "", "limit every mode to scenarios that contribute to this Goal id")
+	severityFilter := fs.String("severity", "", "limit every mode to this severity (critical/major/minor)")
+	discover := fs.Bool("discover", false, "auto-discover Spec.pkl / Test.pkl / *.test.pkl files under the current directory (in addition to any positional args)")
 	var tags multiString
 	fs.Var(&tags, "tag", "only include tests whose `tags` Listing contains this exact value (repeatable; OR)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	positional := fs.Args()
+	if *discover {
+		found, err := discoverSpecFiles(".")
+		if err != nil {
+			return fmt.Errorf("discover spec files: %w", err)
+		}
+		positional = append(positional, found...)
+	}
 	if len(positional) == 0 {
-		return fmt.Errorf("spec needs at least one Test.pkl path")
+		return fmt.Errorf("spec needs at least one Test.pkl path (or use --discover)")
 	}
 
 	ctx := context.Background()
@@ -380,6 +393,17 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		rootDir = abs
 	}
 
+	// Apply --goal / --severity filter before any mode-specific
+	// processing so coverage / check / next / goals / decisions all
+	// see the same restricted view.
+	if *goalFilter != "" || *severityFilter != "" {
+		plans = spec.FilterPlansForSpec(plans, *goalFilter, *severityFilter)
+	}
+
+	if *orphans {
+		_, err := io.WriteString(stdout, spec.FormatOrphans(spec.Orphans(plans)))
+		return err
+	}
 	if *coverage {
 		rep := spec.Coverage(plans)
 		_, err := io.WriteString(stdout, spec.FormatCoverage(rep))
@@ -412,15 +436,37 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 				unimplemented = append(unimplemented, iss)
 			}
 		}
-		if len(unimplemented) == 0 {
+
+		var strictIssues []spec.ImplIssue
+		if *strict {
+			strictIssues = spec.VerifyImplementedAt(plans, findRepoRoot())
+		}
+
+		if len(unimplemented) == 0 && len(strictIssues) == 0 {
 			fmt.Fprintf(stdout, "pkt: all %d declared spec(s) have at least one implementing test\n", len(issues))
+			if *strict {
+				fmt.Fprintf(stdout, "pkt: --strict: every implementedAt path resolves on disk\n")
+			}
 			return nil
 		}
-		fmt.Fprintf(stderr, "pkt: %d unimplemented spec(s):\n", len(unimplemented))
-		for _, iss := range unimplemented {
-			fmt.Fprintf(stderr, "  %s (declared in: %s)\n", iss.SpecID, strings.Join(iss.DeclaredIn, ", "))
+		if len(unimplemented) > 0 {
+			fmt.Fprintf(stderr, "pkt: %d unimplemented spec(s):\n", len(unimplemented))
+			for _, iss := range unimplemented {
+				goalSuffix := ""
+				if contribs := contributesFor(plans, iss.SpecID); len(contribs) > 0 {
+					goalSuffix = " → " + strings.Join(contribs, ", ")
+				}
+				fmt.Fprintf(stderr, "  %s (declared in: %s)%s\n",
+					iss.SpecID, strings.Join(iss.DeclaredIn, ", "), goalSuffix)
+			}
 		}
-		return fmt.Errorf("%d unimplemented spec(s)", len(unimplemented))
+		if len(strictIssues) > 0 {
+			fmt.Fprintf(stderr, "pkt: --strict: %d implementedAt path(s) missing:\n", len(strictIssues))
+			for _, iss := range strictIssues {
+				fmt.Fprintf(stderr, "  %s → %s (%s)\n", iss.SpecID, iss.Path, iss.Reason)
+			}
+		}
+		return fmt.Errorf("%d unimplemented spec(s), %d missing impl path(s)", len(unimplemented), len(strictIssues))
 	}
 
 	entries := spec.Collect(plans, []string(tags))
@@ -593,6 +639,91 @@ func (m *multiString) String() string {
 
 func (m *multiString) Set(v string) error {
 	*m = append(*m, v)
+	return nil
+}
+
+// findRepoRoot walks up from the current directory looking for the
+// nearest `.git` or `go.mod`. Falls back to cwd when neither is
+// found. Used to resolve relative `Scenario.implementedAt` paths
+// under `--check --strict`.
+func findRepoRoot() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	dir := cwd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return cwd
+		}
+		dir = parent
+	}
+}
+
+// discoverSpecFiles walks `root` and returns every Spec.pkl /
+// Test.pkl / *.test.pkl path so `pkt spec --discover` can pick up an
+// entire repo without the operator listing each file. Hidden dirs
+// (`.git`, `.pkthunder`, ...) and `node_modules` are skipped.
+func discoverSpecFiles(root string) ([]string, error) {
+	var out []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			base := d.Name()
+			if path != root && strings.HasPrefix(base, ".") {
+				return filepath.SkipDir
+			}
+			if base == "node_modules" {
+				return filepath.SkipDir
+			}
+			// The `pkl/` directory holds pkthunder's own schema modules
+			// (Test.pkl, Spec.pkl, QuickCheck.pkl). They are amended by
+			// users, not loaded directly as a Plan.
+			if base == "pkl" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		base := filepath.Base(path)
+		// Canonical pkthunder filenames anywhere in the tree, plus
+		// any *.pkl directly inside a `specs/` directory (for
+		// project-level spec modules like `specs/pkthunder.pkl`).
+		// `*.test.pkl` is the pkl-test convention for native modules
+		// that don't necessarily amend our Test.pkl, so we skip it.
+		if base == "Spec.pkl" || base == "Test.pkl" {
+			out = append(out, path)
+			return nil
+		}
+		if strings.HasSuffix(base, ".pkl") && filepath.Base(filepath.Dir(path)) == "specs" {
+			out = append(out, path)
+		}
+		return nil
+	})
+	sort.Strings(out)
+	return out, err
+}
+
+// contributesFor scans every plan for a Scenario with the given id and
+// returns its `contributes` list (Goal ids). Surfaced in `pkt spec
+// --check` so each reported unimplemented entry says which Goal it
+// would advance.
+func contributesFor(plans []*config.Plan, id string) []string {
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID != nil && *sc.ID == id {
+				return sc.Contributes
+			}
+		}
+	}
 	return nil
 }
 

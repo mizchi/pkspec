@@ -5,6 +5,7 @@ tests {
     name = "first_call_recorded"
     description = "record/replay: the counter response is cached after the first run"
     tags { "unit" }
+    specRef { "kind.http"; "diff.cross-language" }
     background {
       new {
         name = "server"

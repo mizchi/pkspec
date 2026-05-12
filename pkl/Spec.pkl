@@ -200,6 +200,28 @@ class Scenario {
   /// `major` so most specs land in the middle bucket.
   severity: ("critical" | "major" | "minor") = "major"
 
+  /// How this scenario is verified.
+  ///   - "test" (default): a Test.pkl module declares
+  ///     `specRef { id }`. `pkt spec --check` requires the link.
+  ///   - "code": the guarantee lives in Go (or other) source
+  ///     that no Pkl Test can naturally reach. Set `implementedAt`
+  ///     to point at the file / function; `--check` accepts it.
+  ///   - "doc": the guarantee is a prose claim. `--check` accepts
+  ///     it when `implementedAt` is set (treat the doc as the
+  ///     reviewed artefact).
+  /// Used by framework-internal specs (the runner's own behaviour)
+  /// and by glue-by-prose claims that no test can reasonably
+  /// assert.
+  implementedBy: ("test" | "code" | "doc") = "test"
+
+  /// Free-form pointer to the implementing artefact when
+  /// `implementedBy` is "code" or "doc". Examples:
+  ///   "internal/executor/executor.go:Run"
+  ///   "docs/notes/timing-shard.md#total-timeout-semantics"
+  /// Required (non-null) for `--check` to accept the scenario as
+  /// implemented when `implementedBy != "test"`.
+  implementedAt: String? = null
+
   /// Outstanding ambiguities or open questions about this spec.
   /// `pkt spec` renders these as a TODO list at the end of the
   /// SPEC.md so reviewers can answer them in one pass instead of
@@ -338,6 +360,8 @@ local function renderScenarioMeta(s: Scenario): base.RenderedScenario = new {
   deprecatedReason = s.deprecatedReason
   replacedBy = s.replacedBy
   severity = s.severity
+  implementedBy = s.implementedBy
+  implementedAt = s.implementedAt
   openQuestions = s.openQuestions
   decisions = new Listing<base.RenderedDecision> {
     for (d in s.decisions) { renderDecision(d) }

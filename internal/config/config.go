@@ -259,6 +259,8 @@ type Scenario struct {
 	DeprecatedReason *string     `pkl:"deprecatedReason"`
 	ReplacedBy       *string     `pkl:"replacedBy"`
 	Severity         string      `pkl:"severity"`
+	ImplementedBy    string      `pkl:"implementedBy"`
+	ImplementedAt    *string     `pkl:"implementedAt"`
 	OpenQuestions    []string    `pkl:"openQuestions"`
 	Decisions        []*Decision `pkl:"decisions"`
 }

@@ -926,6 +926,17 @@ class RenderedScenario {
   deprecatedReason: String?
   replacedBy: String?
   severity: String            // "critical" | "major" | "minor"
+  /// How the scenario is verified — "test" (a Test.pkl with
+  /// matching specRef), "code" (framework-internal Go behaviour
+  /// pointed at by `implementedAt`), or "doc" (prose guarantee
+  /// pointed at by `implementedAt`). `pkt spec --check` accepts
+  /// `code` / `doc` entries whose `implementedAt` is non-null.
+  implementedBy: String       // "test" | "code" | "doc"
+  /// Free-form pointer to the implementing artefact —
+  /// "path/file.go:Symbol", "docs/x.md#anchor", etc. Used by
+  /// reviewers; the runner only validates that it is non-null
+  /// when `implementedBy != "test"`.
+  implementedAt: String?
   openQuestions: Listing<String>
   decisions: Listing<RenderedDecision>
 }

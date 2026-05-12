@@ -1,0 +1,506 @@
+/// pkthunder's own spec — dogfooded.
+///
+/// Every scenario is `tags { "spec" }` with no body, so the runner
+/// reports them as pending. Implementations come in two shapes:
+///   - "test" scenarios — verified by an `examples/*/Test.pkl` that
+///     declares matching `specRef`.
+///   - "code" / "doc" scenarios — verified by Go source or by a
+///     reviewed doc; `implementedBy + implementedAt` are the
+///     pointer. `--check` accepts them without a Pkl Test.
+///
+/// `pkt spec --check specs/pkthunder.pkl --discover` is the canonical
+/// invocation: the spec module plus auto-discovered examples.
+///
+/// ── ID naming convention ────────────────────────────────────
+///
+/// Both Scenario.id and Goal.id are dot-separated paths from a
+/// short domain (`runner` / `kind` / `spec` / `parallel` /
+/// `history` / `pbt` / `diff` / `ai` for scenarios; `goal` for
+/// Goals) to a specific aspect. Two or three levels is typical:
+///
+///   runner.exit-code.pkt-run
+///   kind.http
+///   spec.cross-reference
+///   goal.ci-trustworthy
+///
+/// Reads independently of the spec body and survives
+/// re-ordering — there is no global numeric sequence to keep
+/// in sync.
+amends "../pkl/Spec.pkl"
+
+feature = "pkthunder — language-agnostic Pkl-based test runner"
+
+// ── Goals ───────────────────────────────────────────────────────────
+
+goals {
+  new Goal {
+    id = "goal.ci-trustworthy"
+    name = "CI gets a trustworthy exit code"
+    priority = 95
+    reviewStatus = "approved"
+    description = "Any test failure surfaces as a non-zero exit. pkl test's silent-zero-on-failure gap is closed."
+    rationale = "Without this, no other feature matters — a green CI lying about a red suite poisons every downstream decision."
+  }
+  new Goal {
+    id = "goal.lang-independent"
+    name = "tests are language-agnostic"
+    priority = 90
+    reviewStatus = "approved"
+    description = "Authoring happens in Pkl, execution dispatches to per-kind Go executors. A new test kind = a Pkl class + a Go file."
+    rationale = "Bash chains and per-ecosystem runners both break at the seams of cross-language projects. The schema lives above the language."
+  }
+  new Goal {
+    id = "goal.spec-driven"
+    name = "specs and tests cross-reference"
+    priority = 85
+    reviewStatus = "approved"
+    description = "Specs are first-class Pkl values with stable ids, lifecycle, and a knowledge graph. Tests declare which specs they verify."
+    rationale = "Without traceability, specs rot into design-doc folklore and tests become orphaned artefacts. Cross-references are the load-bearing edge."
+  }
+  new Goal {
+    id = "goal.parallel-execution"
+    name = "tests run in parallel where possible"
+    priority = 70
+    reviewStatus = "approved"
+    description = "Within a test (parallelSteps), background-and-poll patterns (readyProbe), and across the test set (--shard)."
+    rationale = "Sequential CI wall-clock is a productivity tax; the framework should hide the orchestration."
+  }
+  new Goal {
+    id = "goal.history-aware"
+    name = "the runner learns from previous runs"
+    priority = 65
+    reviewStatus = "approved"
+    description = "Wall-clock history balances shards via LPT; the last-failed set is replayable; in-flight ctx-cancels become legible \"aborted by total-timeout\" outcomes."
+    rationale = "Static configuration can't model real test costs. Recording observations and feeding them back is the only path to a balanced 4-machine matrix."
+  }
+  new Goal {
+    id = "goal.property-based"
+    name = "property-based + fuzzing first-class"
+    priority = 50
+    reviewStatus = "approved"
+    description = "Test.iterations + Test.inputs (polymorphic Input schema), seed-deterministic generation, input-space shrinking on failure."
+    rationale = "Examples cover known cases; properties cover the unknown ones. The framework should make both first-class so the gap between them is a choice, not friction."
+  }
+  new Goal {
+    id = "goal.differential"
+    name = "snapshot + differential testing"
+    priority = 45
+    reviewStatus = "approved"
+    description = "Reference bytes are committed; ports of the same spec must produce identical output. Inline snapshots rewrite themselves on demand."
+    rationale = "Cross-language ports without diff testing degenerate into folklore comparisons of half-remembered behaviour."
+  }
+  new Goal {
+    id = "goal.ai-assertions"
+    name = "natural-language assertions transition into code"
+    priority = 30
+    reviewStatus = "review"
+    description = "expectAi delegates fuzzy claims to an LLM judge with content-hash caching, so the team can write the spec before the deterministic test exists."
+    rationale = "Specs are often written before assertions can be made deterministic. The AI path is the placeholder, not the destination — `ai.prefer-deterministic` will surface coded checks once they exist."
+  }
+}
+
+// ── Scenarios ───────────────────────────────────────────────────────
+
+scenarios {
+
+  // ── goal.ci-trustworthy ──────────────────────────────────────────
+
+  new {
+    id = "runner.exit-code.pkt-run"
+    name = "pkt_run_returns_nonzero_on_assertion_failure"
+    description = "`pkt run` wraps `pkl test` and forces a non-zero exit code when any test fails or any example writes a fresh snapshot — closing pkl test's silent-zero gap."
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "goal.ci-trustworthy" }
+    implementedBy = "code"
+    implementedAt = "cmd/pkt/main.go:cmdRun"
+  }
+  new {
+    id = "runner.exec.assert-streams"
+    name = "pkt_exec_asserts_exit_and_streams"
+    description = "Each Test.cmd is run as a subprocess; expectExitCode, expectStdout / expectStderr (or inline equivalents) are checked literally."
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "goal.ci-trustworthy" }
+  }
+  new {
+    id = "runner.tally.is-green"
+    name = "tally_is_green_only_when_nothing_is_red"
+    description = "Tally.IsGreen returns true only when Failed == 0, Errored == 0, and Skipped == 0. Pending / flaky / passed do not block; timeout-skipped does."
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "goal.ci-trustworthy" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/executor.go:Tally.IsGreen"
+  }
+  new {
+    id = "runner.junit-report"
+    name = "junit_report_round_trips"
+    description = "--junit-reports DIR writes JUnit XML matching the Tally; failures and errors are surfaced as `<failure>` and `<error>` so downstream CI dashboards work unchanged."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.ci-trustworthy" }
+  }
+
+  // ── goal.lang-independent ────────────────────────────────────────
+
+  new {
+    id = "kind.shell"
+    name = "shell_kind_dispatches_subprocesses"
+    description = "Step.cmd runs in the configured shell with merged env / workdir / stdin and capture options."
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "goal.lang-independent" }
+  }
+  new {
+    id = "kind.http"
+    name = "http_kind_with_cassette_replay"
+    description = "Step.http issues an HTTP request with body/headers/method; the `cassette` option records or replays the response so the test is deterministic offline."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.lang-independent" }
+  }
+  new {
+    id = "kind.playwright"
+    name = "playwright_kind_lightweight_harness"
+    description = "Step.playwright drives a single page via the embedded Node harness; pixel-diff against ScreenshotSnapshot and expectConsole assertions land here."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.lang-independent" }
+  }
+  new {
+    id = "kind.playwright-test"
+    name = "playwrightTest_kind_wraps_external_runner"
+    description = "Step.playwrightTest delegates to `@playwright/test` (fixtures, traces, retries) and round-trips the JUnit output back to pkthunder's tally."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.lang-independent" }
+  }
+  new {
+    id = "kind.sql"
+    name = "sql_kind_with_embedded_sqlite"
+    description = "Step.sql runs against modernc.org/sqlite (pure Go, no cgo). DML and parameterised queries are first-class."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.lang-independent" }
+  }
+  new {
+    id = "kind.pluggable"
+    name = "kind_is_pluggable_via_pkl_class_plus_go_executor"
+    description = "Adding a new kind = a Pkl Spec class on Step + a `Step.kind` value + a Go function under internal/executor/. No core changes."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.lang-independent" }
+    implementedBy = "doc"
+    implementedAt = "docs/notes/runner-design.md"
+  }
+
+  // ── goal.spec-driven ─────────────────────────────────────────────
+
+  new {
+    id = "spec.auto-pending"
+    name = "spec_tag_with_empty_body_auto_pending"
+    description = "Test with `tags { \"spec\" }` and no cmd / steps / parallelSteps is reported as pending — written-down intent, no failure."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+  }
+  new {
+    id = "spec.cross-reference"
+    name = "scenario_id_cross_references_test_specRef"
+    description = "Scenario.id (in Spec.pkl) and Test.specRef (in Test.pkl) form the bidirectional cross-reference. The runner prints `(verifies <id>)` on each test line."
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:CheckUnimplemented"
+  }
+  new {
+    id = "spec.lifecycle"
+    name = "review_status_lifecycle"
+    description = "draft → review → approved; deprecated retires a spec; replacedBy is the forwarding pointer. `--check` skips draft + deprecated."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.cross-reference" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:checkFromScenarios"
+  }
+  new {
+    id = "spec.knowledge-graph"
+    name = "knowledge_graph_edges"
+    description = "dependsOn (precondition), supersedes (replaces a retired spec), parent (sub-spec refinement). `pkt spec --graph` emits a graphviz `dot` document."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.cross-reference" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:Graph"
+  }
+  new {
+    id = "spec.decision-log"
+    name = "decision_log_is_append_only"
+    description = "Each Scenario.decisions entry records date + author + summary + rationale. Append-only by convention; `pkt spec --decisions` flattens newest-first."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:DecisionLog"
+  }
+  new {
+    id = "spec.goals"
+    name = "goal_concept_with_priority"
+    description = "Goals carry user-facing value statements with no test of their own. Scenarios point at Goals via `contributes`; `pkt spec --next` ranks unimplemented specs by best Goal priority then severity."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.cross-reference" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:Goals"
+  }
+  new {
+    id = "spec.prelude"
+    name = "prelude_shares_given_across_scenarios"
+    description = "Spec.pkl's top-level `prelude: Listing<SpecStep>` is prepended to every scenario's executed steps. Empty `given/when/then/cleanup` still auto-pends — shared setup doesn't count as having a body."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "pkl/Spec.pkl"
+  }
+  new {
+    id = "spec.cli-modes"
+    name = "pkt_spec_modes_cover_review_and_ci"
+    description = "`pkt spec` default renders SPEC.md; `--check / --coverage / --graph / --decisions / --goals / --next / --orphans` cover the review + CI surface. Filters: `--goal` / `--severity` / `--discover`."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.cross-reference"; "spec.goals" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "cmd/pkt/main.go:cmdSpec"
+  }
+  new {
+    id = "spec.implemented-by"
+    name = "framework_internal_specs_carry_implementation_pointer"
+    description = "`Scenario.implementedBy = \"code\"` (or \"doc\") with `implementedAt = \"path:symbol\"` lets a Scenario claim implementation without a Pkl Test. `--check --strict` verifies the file part exists."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.cross-reference" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:scenarioIsImplemented"
+  }
+
+  // ── goal.parallel-execution ──────────────────────────────────────
+
+  new {
+    id = "parallel.parallel-steps"
+    name = "parallelSteps_run_concurrently"
+    description = "Test.parallelSteps schedules every step concurrently (vs Steps' sequential order); first failure cancels in-flight peers."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.parallel-execution" }
+  }
+  new {
+    id = "parallel.background"
+    name = "background_with_readyProbe"
+    description = "Background processes start before the test body, poll readyProbe until pass, are killed at test exit (pass or fail)."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.parallel-execution" }
+  }
+  new {
+    id = "parallel.dynamic-port"
+    name = "background_portEnv_for_dynamic_ports"
+    description = "Background.portEnv asks the OS for a free TCP port and injects it into the test env so cmd / readyProbe / steps all see the same port."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "parallel.background" }
+    contributes { "goal.parallel-execution" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/executor.go:getFreePort"
+  }
+
+  // ── goal.history-aware ───────────────────────────────────────────
+
+  new {
+    id = "history.timings-jsonl"
+    name = "timings_jsonl_records_per_test_durations"
+    description = ".pkthunder/timings.jsonl records {ts, test, duration_ms, outcome, env, kind} per test, env-bucketed via PKT_TIMING_ENV."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.history-aware" }
+  }
+  new {
+    id = "history.shard-lpt"
+    name = "shard_K_of_N_via_LPT"
+    description = "`pkt exec --shard=K/N` splits the test set into N bins using Longest-Processing-Time bin-packing on the median of recent 5 history records. Tie-breaking is deterministic so the same input produces the same assignment across machines."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "history.timings-jsonl" }
+    contributes { "goal.history-aware"; "goal.parallel-execution" }
+  }
+  new {
+    id = "history.total-timeout"
+    name = "total_timeout_aborts_cleanly"
+    description = "`--total-timeout=DUR` wraps the run in context.WithTimeout; on expire, in-flight test errors with reason \"aborted by total-timeout\", remaining tests report Outcome=Skipped. Tally.IsGreen returns false."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.history-aware" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/executor.go:Run"
+  }
+  new {
+    id = "history.rerun-failed"
+    name = "rerun_failed_replays_history"
+    description = "`--rerun-failed` filters to tests whose most recent timings.jsonl record is fail / error / timeout / skip. Composes with --shard and --only/--tag."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "history.timings-jsonl" }
+    contributes { "goal.history-aware" }
+    implementedBy = "code"
+    implementedAt = "cmd/pkt/rerun.go:pickRerunFailed"
+  }
+  new {
+    id = "history.timings-cli"
+    name = "pkt_timings_inspection_subcommand"
+    description = "`pkt timings -f Test.pkl [--failing|--shard=K/N|--env NAME]` reports per-test runs/median/p90/latest/kind without running anything. `--shard=K/N` previews the assignment byte-for-byte."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "history.timings-jsonl"; "history.shard-lpt" }
+    contributes { "goal.history-aware" }
+    implementedBy = "code"
+    implementedAt = "cmd/pkt/timings_cmd.go"
+  }
+
+  // ── goal.property-based ──────────────────────────────────────────
+
+  new {
+    id = "pbt.iterations"
+    name = "test_iterations_seed_based"
+    description = "Test.iterations = N runs the body N times with seed-deterministic generation; the same seed reproduces the same trace."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.property-based" }
+  }
+  new {
+    id = "pbt.inputs"
+    name = "polymorphic_input_schema"
+    description = "Test.inputs uses an abstract `Input` class with concrete subclasses (IntInput, ...). Each iteration projects fresh values via the seed stream."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "pbt.iterations" }
+    contributes { "goal.property-based" }
+  }
+  new {
+    id = "pbt.shrinking"
+    name = "input_space_shrinking_on_failure"
+    description = "On a failing iteration, the runner shrinks each input toward its lower bound / half / minus one, taking the smallest failing case as the report."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "pbt.inputs" }
+    contributes { "goal.property-based" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/inputs.go"
+  }
+
+  // ── goal.differential ────────────────────────────────────────────
+
+  new {
+    id = "diff.reference-snapshot"
+    name = "reference_snapshot_files_committed"
+    description = ".pkthunder/snapshots/<name>.bytes is written on first run and committed; subsequent runs match against it. Mismatch writes a `.actual` sibling for diffing."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.differential" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/executor.go:checkSnapshot"
+  }
+  new {
+    id = "diff.inline-snapshot"
+    name = "inline_snapshot_rewrite"
+    description = "inlineStdout / inlineStderr fields in the Pkl source are populated by `--update-inline-snapshots`. The schema file itself is the snapshot."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.differential" }
+    implementedBy = "code"
+    implementedAt = "internal/inline"
+  }
+  new {
+    id = "diff.cross-language"
+    name = "differential_via_specRef_to_reference"
+    description = "ReferenceSnapshot.generator declares a Test that produces the canonical bytes; ports of the same spec assert byte-identical output."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.differential" }
+  }
+
+  // ── goal.ai-assertions ───────────────────────────────────────────
+
+  new {
+    id = "ai.expect-ai"
+    name = "expectAi_natural_language_assertion"
+    description = "Step.expectAi { prompt, cmd, snapshotName } delegates a fuzzy claim to an external judge command; verdict is cached by sha256(prompt + body)."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.ai-assertions" }
+    implementedBy = "code"
+    implementedAt = "internal/executor/executor.go"
+  }
+  new {
+    id = "ai.prefer-deterministic"
+    name = "prefer_deterministic_over_ai"
+    description = "When a step has both deterministic assertions and expectAi, the AI judge is skipped if the deterministic checks pass — \"AI as scaffold, not destination.\" Implementation pending."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "review"
+    dependsOn { "ai.expect-ai" }
+    contributes { "goal.ai-assertions" }
+    openQuestions {
+      "should the skip be opt-in (preferDeterministic = true) or default?"
+      "what counts as 'deterministic assertions present' — any non-AI expect or only ones that actually fired?"
+    }
+    decisions {
+      new Decision {
+        date = "2026-05-12"
+        author = "mizchi"
+        summary = "queue this for the next iteration"
+        rationale = "User flow is: write expectAi as placeholder while design is fuzzy → graduate to deterministic asserts when impl is concrete. The runner should make that graduation automatic, not require deleting the AI line."
+      }
+    }
+  }
+}
