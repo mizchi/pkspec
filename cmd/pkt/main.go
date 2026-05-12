@@ -92,7 +92,10 @@ commands:
   spec [--tag X]... <path>... render a Markdown SPEC.md from one or more
                               Test.pkl modules (filesystem-hierarchical;
                               groups by source directory; --output to
-                              write to a file instead of stdout)
+                              write to a file instead of stdout).
+                              --check cross-references Scenario.id with
+                              Test.specRef and exits non-zero on any
+                              declared spec without an implementing test.
   timings -f Test.pkl [opts]  inspect .pkthunder/timings.jsonl —
                               per-test median / p90 / latest outcome.
                               --env / --failing / --shard=K/N (preview)
@@ -332,6 +335,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(io.Discard)
 	output := fs.String("output", "", "write the SPEC to this path (default: stdout)")
 	root := fs.String("root", "", "make source paths relative to this directory (default: current dir)")
+	check := fs.Bool("check", false, "instead of rendering, exit non-zero when any declared spec id has no implementing test (cross-references Scenario.id / Test.specRef)")
 	var tags multiString
 	fs.Var(&tags, "tag", "only include tests whose `tags` Listing contains this exact value (repeatable; OR)")
 	if err := fs.Parse(args); err != nil {
@@ -369,6 +373,25 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		rootDir = abs
+	}
+
+	if *check {
+		issues := spec.CheckUnimplemented(plans)
+		unimplemented := make([]spec.SpecIssue, 0, len(issues))
+		for _, iss := range issues {
+			if len(iss.Implemented) == 0 && len(iss.DeclaredIn) > 0 {
+				unimplemented = append(unimplemented, iss)
+			}
+		}
+		if len(unimplemented) == 0 {
+			fmt.Fprintf(stdout, "pkt: all %d declared spec(s) have at least one implementing test\n", len(issues))
+			return nil
+		}
+		fmt.Fprintf(stderr, "pkt: %d unimplemented spec(s):\n", len(unimplemented))
+		for _, iss := range unimplemented {
+			fmt.Fprintf(stderr, "  %s (declared in: %s)\n", iss.SpecID, strings.Join(iss.DeclaredIn, ", "))
+		}
+		return fmt.Errorf("%d unimplemented spec(s)", len(unimplemented))
 	}
 
 	entries := spec.Collect(plans, []string(tags))

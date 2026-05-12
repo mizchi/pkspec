@@ -126,6 +126,9 @@ func writeTest(b *strings.Builder, e Entry) {
 		prefix = "- [x] **"
 	}
 	fmt.Fprintf(b, "%s%s%s", prefix, e.Name, suffix)
+	if len(e.Test.SpecRef) > 0 {
+		fmt.Fprintf(b, " — verifies: %s", strings.Join(e.Test.SpecRef, ", "))
+	}
 	if len(e.Test.Tags) > 0 {
 		fmt.Fprintf(b, " — tags: %s", strings.Join(e.Test.Tags, ", "))
 	}
@@ -141,6 +144,57 @@ func writeTest(b *strings.Builder, e Entry) {
 		fmt.Fprintf(b, "  - %s\n", ex)
 	}
 	b.WriteString("\n")
+}
+
+// SpecIssue captures one spec id's status across a set of plans:
+// who declares it (pending tests carrying it in `specRef`) and
+// whether any active test implements it.
+type SpecIssue struct {
+	SpecID      string
+	DeclaredIn  []string // test names whose owning Test is pending
+	Implemented []string // test names whose owning Test is active
+}
+
+// CheckUnimplemented walks every test in every plan and returns a
+// per-spec-id summary. A spec is "unimplemented" when at least one
+// pending test declares it but no active test references it; that
+// is the condition `pkt spec --check` reports.
+func CheckUnimplemented(plans []*config.Plan) []SpecIssue {
+	decl := map[string][]string{}
+	impl := map[string][]string{}
+	for _, p := range plans {
+		for name, t := range p.Tests {
+			pending := isPending(t)
+			for _, id := range t.SpecRef {
+				if pending {
+					decl[id] = append(decl[id], name)
+				} else {
+					impl[id] = append(impl[id], name)
+				}
+			}
+		}
+	}
+
+	ids := map[string]struct{}{}
+	for id := range decl {
+		ids[id] = struct{}{}
+	}
+	for id := range impl {
+		ids[id] = struct{}{}
+	}
+
+	out := make([]SpecIssue, 0, len(ids))
+	for id := range ids {
+		sort.Strings(decl[id])
+		sort.Strings(impl[id])
+		out = append(out, SpecIssue{
+			SpecID:      id,
+			DeclaredIn:  decl[id],
+			Implemented: impl[id],
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SpecID < out[j].SpecID })
+	return out
 }
 
 // expectations returns short, human-readable labels for the

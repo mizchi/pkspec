@@ -182,6 +182,7 @@ type Background struct {
 type Test struct {
 	Description     *string           `pkl:"description"`
 	Tags            []string          `pkl:"tags"`
+	SpecRef         []string          `pkl:"specRef"`
 	Shell            string            `pkl:"shell"`
 	Env              map[string]string `pkl:"env"`
 	Workdir          *string           `pkl:"workdir"`

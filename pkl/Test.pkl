@@ -531,6 +531,20 @@ class Test {
   /// `inlineStdout` / `expect*` fields, the body is filled in later.
   tags: Listing<String> = new {}
 
+  /// Identifiers of spec entries this test verifies. Each id refers
+  /// to a `Scenario.id` declared in `Spec.pkl` (typically across a
+  /// boundary — the spec lives in one module, the implementing test
+  /// in another). `pkt spec` cross-links id → verifying tests in the
+  /// generated SPEC.md, and `pkt spec --check` reports declared
+  /// specs that no active test references.
+  ///
+  /// Auto-populated by `Spec.pkl` when a Scenario carries an `id`:
+  /// the resulting Test inherits `specRef = { id }`.
+  ///
+  /// Element regex `^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$` — same character
+  /// set as test names so cross-references stay typo-resistant.
+  specRef: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+
   shell: String = "bash"
   env: Mapping<String, String> = new {}
   workdir: String? = null
@@ -833,6 +847,7 @@ class RenderedSnapshot {
 class RenderedTest {
   description: String?
   tags: Listing<String>
+  specRef: Listing<String>
   shell: String
   env: Mapping<String, String>
   workdir: String?
@@ -1002,6 +1017,7 @@ local function renderBackground(b: Background): RenderedBackground = new {
 local function renderTest(t: Test): RenderedTest = new {
   description = t.description
   tags = t.tags
+  specRef = t.specRef
   shell = t.shell
   env = t.env
   workdir = t.workdir

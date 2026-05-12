@@ -1,0 +1,21 @@
+amends "../../pkl/Test.pkl"
+
+// Implementing tests for the specs in Spec.pkl. `specRef` is the
+// cross-reference; pkt spec uses it to mark which specs already
+// have an active implementation.
+tests {
+  new {
+    name = "signup_happy_path"
+    specRef { "SIGNUP-001" }
+    cmd = "echo 201"
+    inlineStdout = "201\n"
+  }
+  new {
+    name = "signup_duplicate"
+    specRef { "SIGNUP-002" }
+    cmd = "echo 409"
+    inlineStdout = "409\n"
+  }
+  // SIGNUP-003 deliberately has no implementing test —
+  // `pkt spec --check` should surface it as unimplemented.
+}

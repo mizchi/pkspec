@@ -40,6 +40,18 @@ class Scenario {
   name: String(matches(Regex(#"^[a-zA-Z0-9_][a-zA-Z0-9_:.\-/ ]*$"#)))
   description: String? = null
 
+  /// Stable identifier for this scenario across the project — the
+  /// anchor that `Test.specRef` points at and that `pkt spec` uses
+  /// as the section heading. Convention: short domain prefix +
+  /// number, e.g. "LOGIN-001", "BILLING-042". When set, the
+  /// rendered Test inherits `specRef = { id }` so the scenario
+  /// counts as its own implementation marker until a sibling test
+  /// in `Test.pkl` overrides it.
+  ///
+  /// Element regex `^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$` — same as
+  /// `Test.specRef` elements.
+  id: String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))? = null
+
   /// Free-form classification tags propagated to the rendered Test.
   /// Same semantics as `Test.tags` — see `docs/notes/spec.md`. A
   /// Scenario tagged "spec" with all four step lists empty becomes
@@ -129,6 +141,9 @@ local function scenarioToTest(s: Scenario): base.Test = new {
   name = s.name
   description = s.description
   tags = s.tags
+  specRef = new Listing<String> {
+    when (s.id != null) { s.id }
+  }
   shell = s.shell
   env = s.env
   workdir = s.workdir

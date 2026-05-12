@@ -113,6 +113,10 @@ type Result struct {
 	// PassedAttempts is how many of those passed.
 	Attempts       int
 	PassedAttempts int
+
+	// SpecRef carries `Test.specRef` through to the reporter so the
+	// per-test status line can show which spec ids the test verifies.
+	SpecRef []string
 }
 
 // Options configures an Executor.
@@ -387,6 +391,7 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 					Name:    remaining,
 					Outcome: OutcomeSkipped,
 					Reasons: []string{fmt.Sprintf("not executed: %v", ctxErr)},
+					SpecRef: plan.Tests[remaining].SpecRef,
 				}
 				results = append(results, res)
 				tally.Skipped++
@@ -401,6 +406,7 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 				Name:    name,
 				Outcome: OutcomeErrored,
 				Reasons: []string{beforeAllErr.Error()},
+				SpecRef: plan.Tests[name].SpecRef,
 			}
 			results = append(results, res)
 			tally.Errored++
@@ -417,7 +423,11 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 		// tag is the opt-in that says "the expectation is the doc;
 		// the body comes later."
 		if isTestPending(plan.Tests[name]) {
-			res := Result{Name: name, Outcome: OutcomePending}
+			res := Result{
+				Name:    name,
+				Outcome: OutcomePending,
+				SpecRef: plan.Tests[name].SpecRef,
+			}
 			results = append(results, res)
 			tally.Pending++
 			formatResult(e.opts.Stderr, res)
@@ -452,6 +462,7 @@ func (e *Executor) Run(ctx context.Context, plan *config.Plan) ([]Result, Tally,
 		} else {
 			res = e.runOne(ctx, name, plan.Tests[name], plan.Defaults, testState)
 		}
+		res.SpecRef = plan.Tests[name].SpecRef
 
 		// If the run-level ctx fired mid-test, the per-test timeout
 		// path reports its own wording ("timed out after Ns") but the
@@ -592,8 +603,12 @@ func formatResult(w io.Writer, res Result) {
 	if res.Attempts > 1 {
 		suffix = fmt.Sprintf(" [%d/%d attempts passed]", res.PassedAttempts, res.Attempts)
 	}
-	fmt.Fprintf(w, "[pkt] %s: %s%s (%s)\n",
-		res.Name, res.Outcome, suffix, res.Duration.Round(time.Millisecond))
+	specSuffix := ""
+	if len(res.SpecRef) > 0 {
+		specSuffix = " (verifies " + strings.Join(res.SpecRef, ", ") + ")"
+	}
+	fmt.Fprintf(w, "[pkt] %s: %s%s%s (%s)\n",
+		res.Name, res.Outcome, suffix, specSuffix, res.Duration.Round(time.Millisecond))
 	for _, sr := range res.Steps {
 		if sr.Outcome == OutcomeSkipped {
 			fmt.Fprintf(w, "      step %q: skipped\n", sr.Name)

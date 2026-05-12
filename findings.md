@@ -5,6 +5,77 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 31 — Spec IDs (`Scenario.id` + `Test.specRef` + `pkt spec --check`)
+
+README claimed it ("coming next"). Implemented to back the claim.
+
+### Schema
+
+- `Spec.pkl#Scenario.id: String?` — optional stable identifier,
+  regex `^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$` (same alphabet as test
+  names so cross-references are typo-resistant).
+- `Test.pkl#Test.specRef: Listing<String>` — ids this test
+  verifies. Element regex matches `Scenario.id`.
+- `scenarioToTest` auto-populates `specRef = { id }` so the
+  pending Test that Spec.pkl generates already carries the id —
+  the declaration and the cross-reference are the same object
+  until a sibling Test in Test.pkl overrides it.
+
+### Runner
+
+- `Result` carries `SpecRef`; populated in the Run loop's per-test
+  branches (ctx-skipped / beforeAllErr / pending / runOne path).
+- `formatResult` appends `(verifies SIGNUP-001, AUDIT-007)`
+  between the outcome and the duration when SpecRef is non-empty.
+
+### `pkt spec`
+
+- SPEC.md per-test bullet now shows `— verifies: <ids>` between
+  the test name and the tags.
+- `pkt spec --check` cross-references declared (pending+specRef)
+  vs implemented (active+specRef), reports specs in the first
+  set but not the second, exits 1. Built around a new
+  `spec.CheckUnimplemented(plans) []SpecIssue` API.
+
+### Example
+
+`examples/spec-id/` ships the canonical pattern: Spec.pkl
+declares SIGNUP-001/002/003, Test.pkl implements 001 and 002,
+003 is left unimplemented so `--check` surfaces it. End-to-end
+smoke confirmed:
+
+```
+$ pkt spec --check Spec.pkl Test.pkl
+pkt: 1 unimplemented spec(s):
+  SIGNUP-003 (declared in: rejects invalid email)
+exit=1
+```
+
+### Backward compatibility
+
+Existing modules without `specRef` continue to work — the
+default is an empty Listing, the runner skips the
+"verifies" suffix when SpecRef is empty, and `Render` skips
+the verifies clause when there's nothing to print. Smoke on
+`examples/spec-pending/` (no specRef) produced unchanged
+output.
+
+### Footprint
+
+- `pkl/Test.pkl` + `pkl/Spec.pkl` — schema additions + auto-wire
+- `internal/config/config.go` — `Test.SpecRef []string`
+- `internal/executor/executor.go` — `Result.SpecRef`, populate
+  in Run loop's 5 construction sites, formatResult suffix
+- `internal/spec/spec.go` — `writeTest` verifies clause +
+  `CheckUnimplemented` + `SpecIssue`
+- `cmd/pkt/main.go` — `--check` flag + handler, usage update
+- `examples/spec-id/` — Spec.pkl + Test.pkl + README.md
+- `docs/notes/spec-id.md` — semantics + conventions + limits
+
+Total ~140 LOC + docs.
+
+---
+
 ## Phase 30.2 — `pkt timings` inspection subcommand
 
 Phase 30.1 dogfooding kept reaching for the same three `jq` queries
