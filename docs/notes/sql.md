@@ -84,6 +84,34 @@ shipping `tests/test.db` works without absolute paths.
 `sqlite::memory:` is per-Step ephemeral: each Step gets a fresh
 DB. To chain seed + assert across two Steps, write to disk.
 
+## Parameterised queries (`args`)
+
+Use `?` placeholders for value-shaped positions and bind via
+`args`:
+
+```pkl
+sql = new SqlSpec {
+  dsn = "sqlite:test.db"
+  query = "SELECT * FROM users WHERE email = ? AND role = ?"
+  args { "$TARGET_EMAIL"; "admin" }
+  expectRowCount = 1
+}
+```
+
+`args` is a positional list. String entries get `$VAR`
+substitution against the merged env (so captures from earlier
+steps interpolate). Non-strings (Int, Boolean, null) pass through
+to the driver as-is — type fidelity is preserved.
+
+**Why use placeholders.** `$VAR` substitution in the query text
+is string concatenation; an interpolated value like
+`'; DROP TABLE users; --` lands in the query verbatim and
+introduces SQL injection. Placeholders are driver-bound: the
+value never enters the SQL parser. **Use placeholders for any
+value-shaped position**; reserve `$VAR` in the query text for
+identifier positions (table names, column names) that can't be
+parameterised.
+
 ## Operational notes
 
 - **DML works the same shape.** The runner picks Query vs. Exec

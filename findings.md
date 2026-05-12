@@ -5,6 +5,91 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 22.4 — Spec.pkl tagStep updated for all kinds
+
+- **Drift caught at the BDD layer.** `pkl/Spec.pkl` predates the
+  Phase 18+ kind expansions; `tagStep` (the Spec → Test renderer)
+  only forwarded `cmd` / `http` and their expectations. New body
+  slots (`playwright`, `playwrightTest`, `sql`, `cassette`) were
+  silently dropped if an author wrote them inside a `SpecStep`.
+- **Fix.** Added forwarding for `playwright`, `playwrightTest`,
+  `sql`, and `cassette` in `tagStep`. Also reorganised the field
+  list into 4 sections (body slots / shell-specific / http-
+  specific / common) so the next time a kind lands the place to
+  edit is obvious.
+- **Smoke.** A BDD scenario with `given` doing 2 sql steps (create
+  + seed), `when` doing 1 playwright step, `then` doing 1 sql
+  step. Total 4 mixed-kind steps in one `user_can_view_admin_dashboard`
+  scenario, all passed in 550ms. BDD layer now covers the same
+  kind surface as raw Test.pkl.
+- **Lesson.** When a new kind is added, the schema's renderer
+  layer (Spec.pkl's tagStep) is a downstream consumer that the
+  Test-level discipline doesn't enforce. Worth documenting as
+  "kinds added to Test.pkl Step also need a tagStep entry in
+  Spec.pkl" — or generating tagStep from a metaprogrammed list
+  later if drift recurs.
+
+---
+
+## Phase 22.3 — sql parameterised query (`args`)
+
+- **Why `?` placeholders, not just `$VAR`.** `$VAR` is string
+  substitution; an email like `'; DROP TABLE users; --` lands in
+  the query verbatim and a careless author has SQL injection.
+  `?` placeholders are driver-bound — the value never enters
+  the parser, regardless of content.
+- **Schema: `args: Listing<Any>`.** Positional, ordered. String
+  entries run through `$VAR` substitution first (so `args { "$ID" }`
+  binds the captured `ID` from a prior step). Non-strings
+  (numbers, bools, nil) pass through to the driver as-is, so
+  type fidelity is preserved.
+- **Smoke: 5-step Test with injection probe.** Setup → insert 2
+  rows with bound args → SELECT with `$VAR`-bound email →
+  attempt SQL injection via bound arg (`"'; DROP TABLE users; --"`)
+  → verify table still has 2 rows. All passed in 2ms; the
+  injection arg matched 0 rows (literal compare) and the table
+  was intact.
+- **Authoring guidance** in `sql.md`: "use placeholders for any
+  value-shaped position; reserve `$VAR` in the query text for
+  identifier-shaped positions (table names, column names) that
+  can't be parameterised."
+
+---
+
+## Phase 22.2 — Crashed browser cleanup observation (no code changes)
+
+- **Question.** When pkt cancels a playwright Step via
+  `Step.timeoutSec` and `exec.CommandContext` SIGKILLs the node
+  harness, the harness's `finally { await browser.close() }` does
+  NOT run (SIGKILL bypasses JS). Does that leak orphan chromium
+  processes?
+- **Observed.** No. `ps -ax | grep -iE 'chromium|playwright'`
+  returns 0 entries immediately after pkt exits, and 0 after
+  a 3s settle. Verified twice with a fresh fixture.
+- **Why it works without pkt doing anything.** playwright's Node
+  binding manages the chromium child via an internal IPC pipe
+  (not the JS finally chain). When the node process dies — for
+  any reason, including SIGKILL — the pipe EOFs from chromium's
+  side, and chromium has a built-in handler that exits when its
+  controlling pipe closes. The cleanup chain is: Go context
+  cancel → SIGKILL node → pipe close → chromium self-exit. No
+  pkt-side process group / setpgid / kill -PG needed.
+- **Caveat.** This is a property of the playwright library, not
+  a guarantee pkthunder enforces. If a future kind spawns a
+  child process that doesn't have an equivalent self-cleanup
+  mechanism (raw curl, custom Node script that forks without
+  exit-on-parent-death), we'd need explicit process group
+  handling. Logged in findings; no preemptive code change.
+- **Side note.** Go's `exec.CommandContext` default cancel
+  behaviour sends SIGKILL (not SIGTERM). For a graceful path
+  one would set `Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }`
+  and `WaitDelay = N` for the SIGKILL grace. pkthunder doesn't
+  need this today because the harness has no graceful-shutdown
+  story; it's all-or-nothing. Note for future kinds that *do*
+  want graceful (long-lived gRPC server steps, etc.).
+
+---
+
 ## Phase 22.1 — validateStepKind helper + sql DML support
 
 - **Two cleanups in one commit.** (1) The phase 22 review noted

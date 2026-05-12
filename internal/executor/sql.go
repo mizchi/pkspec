@@ -57,6 +57,7 @@ func (e *Executor) runSqlStep(ctx context.Context, step *config.Step, t *config.
 		}
 	}
 	queryExpanded := expandEnv(sp.Query, envMap)
+	args := expandSqlArgs(sp.Args, envMap)
 
 	timeout := time.Duration(step.TimeoutSec) * time.Second
 	procCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -75,7 +76,7 @@ func (e *Executor) runSqlStep(ctx context.Context, step *config.Step, t *config.
 	var rowCount int
 
 	if isReadQuery(queryExpanded) {
-		rows, queryErr := db.QueryContext(procCtx, queryExpanded)
+		rows, queryErr := db.QueryContext(procCtx, queryExpanded, args...)
 		sr.Duration = time.Since(start)
 		if queryErr != nil {
 			sr.Outcome = OutcomeErrored
@@ -95,7 +96,7 @@ func (e *Executor) runSqlStep(ctx context.Context, step *config.Step, t *config.
 		// The row JSON is an empty array — expectRowsJsonPath against
 		// a DML is nonsensical and reports "no match" rather than
 		// crashing.
-		res, execErr := db.ExecContext(procCtx, queryExpanded)
+		res, execErr := db.ExecContext(procCtx, queryExpanded, args...)
 		sr.Duration = time.Since(start)
 		if execErr != nil {
 			sr.Outcome = OutcomeErrored
@@ -137,6 +138,27 @@ func (e *Executor) runSqlStep(ctx context.Context, step *config.Step, t *config.
 
 	sr.Outcome = OutcomePassed
 	return sr
+}
+
+// expandSqlArgs forwards the args slice verbatim, except String
+// entries get `$VAR` substitution against the merged env. Non-
+// string entries (numbers, bools, nil) pass through untouched so
+// the driver sees the right Go type. The `?` placeholder
+// substitution is the driver's job; we only handle the
+// env-expansion contract pkthunder uses elsewhere.
+func expandSqlArgs(args []any, env map[string]string) []any {
+	if len(args) == 0 {
+		return nil
+	}
+	out := make([]any, len(args))
+	for i, a := range args {
+		if s, ok := a.(string); ok {
+			out[i] = expandEnv(s, env)
+		} else {
+			out[i] = a
+		}
+	}
+	return out
 }
 
 // isReadQuery does a cheap prefix check to decide whether the query

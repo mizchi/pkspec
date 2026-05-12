@@ -82,6 +82,7 @@ type PlaywrightTestSpec struct {
 type SqlSpec struct {
 	DSN                string         `pkl:"dsn"`
 	Query              string         `pkl:"query"`
+	Args               []any          `pkl:"args"`
 	ExpectRowCount     *int           `pkl:"expectRowCount"`
 	ExpectRowsJsonPath map[string]any `pkl:"expectRowsJsonPath"`
 }

@@ -84,28 +84,36 @@ scenarios: Listing<Scenario> = new {}
 
 local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.Step = new {
   name = "\(prefix) \(s.description)"
+  // body slots — every kind the runner knows about
   cmd = s.impl.cmd
+  http = s.impl.http
+  playwright = s.impl.playwright
+  playwrightTest = s.impl.playwrightTest
+  sql = s.impl.sql
+  // shell-specific
   shell = s.impl.shell
   stdin = s.impl.stdin
-  http = s.impl.http
-  env = s.impl.env
-  workdir = s.impl.workdir
-  timeoutSec = s.impl.timeoutSec
   expectExitCode = s.impl.expectExitCode
   expectStdout = s.impl.expectStdout
   expectStderr = s.impl.expectStderr
   inlineStdout = s.impl.inlineStdout
+  captureStdout = s.impl.captureStdout
+  captureExitCode = s.impl.captureExitCode
+  // http-specific
   expectStatus = s.impl.expectStatus
   expectStatusBetween = s.impl.expectStatusBetween
   expectBodyEquals = s.impl.expectBodyEquals
   expectBodyContains = s.impl.expectBodyContains
   expectHeaderEquals = s.impl.expectHeaderEquals
   expectBodyJsonPath = s.impl.expectBodyJsonPath
-  captureStdout = s.impl.captureStdout
-  captureExitCode = s.impl.captureExitCode
   captureBody = s.impl.captureBody
   captureStatus = s.impl.captureStatus
   captureBodyJsonPath = s.impl.captureBodyJsonPath
+  cassette = s.impl.cassette
+  // common
+  env = s.impl.env
+  workdir = s.impl.workdir
+  timeoutSec = s.impl.timeoutSec
   eventually = s.impl.eventually
   expectAi = s.impl.expectAi
   always = runAlways

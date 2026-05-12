@@ -352,9 +352,26 @@ class SqlSpec {
 
   /// SQL to execute. Both SELECT (the rows are read out + asserted
   /// on) and DDL/DML (the rows-affected count is reported as the
-  /// "row count") are accepted; the runner detects which by
-  /// looking at whether `Query` returns columns.
+  /// "row count") are accepted; the runner picks the database/sql
+  /// path based on the query prefix.
+  ///
+  /// Use `?` placeholders for values that should be bound rather
+  /// than concatenated (see `args` below). `$VAR` substitution
+  /// still applies to the query text, but **prefer placeholders
+  /// for any value-shaped position** — strings get quoted, types
+  /// are preserved, and SQL injection is structurally impossible.
   query: String(length > 0)
+
+  /// Positional arguments bound to `?` placeholders in `query`.
+  /// Each entry is forwarded to the driver as-is, except for
+  /// String entries — those run through `$VAR` substitution
+  /// against the merged env first. The driver handles quoting and
+  /// type coercion; authors do not need to escape.
+  ///
+  /// Example:
+  ///   query = "SELECT * FROM users WHERE email = ? AND role = ?"
+  ///   args { "$USER_EMAIL"; "admin" }
+  args: Listing<Any> = new {}
 
   /// Assert on the number of rows returned (SELECT) or affected
   /// (INSERT / UPDATE / DELETE). Null = no rowcount assertion.
@@ -596,6 +613,7 @@ class RenderedPlaywrightTestSpec {
 class RenderedSqlSpec {
   dsn: String
   query: String
+  args: Listing<Any>
   expectRowCount: Int?
   expectRowsJsonPath: Mapping<String, Any>
 }
@@ -755,6 +773,7 @@ local function renderPlaywrightTest(p: PlaywrightTestSpec): RenderedPlaywrightTe
 local function renderSql(s: SqlSpec): RenderedSqlSpec = new {
   dsn = s.dsn
   query = s.query
+  args = s.args
   expectRowCount = s.expectRowCount
   expectRowsJsonPath = s.expectRowsJsonPath
 }
