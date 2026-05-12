@@ -64,12 +64,32 @@ type ScreenshotSnapshot struct {
 	ThresholdPct float64 `pkl:"thresholdPct"`
 }
 
-// IntInput mirrors `pkthunder.Test#RenderedIntInput` — a typed
-// generator + shrink spec for a single integer input.
-type IntInput struct {
-	Lo int `pkl:"lo"`
-	Hi int `pkl:"hi"`
+// Input is the polymorphic interface backing
+// `pkthunder.Test#RenderedInput` and its concrete subclasses.
+// The `kind` discriminator lives in the data (as a Pkl field
+// fixed by each subclass), not just in the Go type — so
+// reporters / JUnit dumps / JSON exports can carry it as a
+// first-class value.
+type Input interface {
+	InputKind() string
 }
+
+// Kind constants. Pkl-side `kind = "..."` and Go-side string
+// constants share a single source of truth here.
+const (
+	KindInt = "int"
+)
+
+// IntInput mirrors `pkthunder.Test#RenderedIntInput`. Concrete
+// implementation of Input.
+type IntInput struct {
+	Kind string `pkl:"kind"`
+	Lo   int    `pkl:"lo"`
+	Hi   int    `pkl:"hi"`
+}
+
+// InputKind satisfies the Input interface.
+func (i *IntInput) InputKind() string { return KindInt }
 
 // PlaywrightTestSpec mirrors `pkthunder.Test#RenderedPlaywrightTestSpec`.
 // The runner shells out to `npx playwright test` and aggregates the
@@ -171,7 +191,7 @@ type Test struct {
 	IterationSeed   int                  `pkl:"iterationSeed"`
 	Shrink          bool                 `pkl:"shrink"`
 	ShrinkAttempts  int                  `pkl:"shrinkAttempts"`
-	Inputs          map[string]*IntInput `pkl:"inputs"`
+	Inputs          map[string]Input     `pkl:"inputs"`
 
 	Cmd                  *string            `pkl:"cmd"`
 	Stdin                *string            `pkl:"stdin"`

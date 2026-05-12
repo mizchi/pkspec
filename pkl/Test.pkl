@@ -329,11 +329,25 @@ class PlaywrightTestSpec {
   shard: String? = null
 }
 
+/// Base class for typed input generators. Concrete subclasses
+/// (`IntInput`, future `StringInput` / `ListIntInput` / ...) carry
+/// a `kind` discriminator so the Go side can dispatch on the
+/// value's `kind` field instead of relying on pkl-go's
+/// class-name routing. This keeps decode behaviour explicit and
+/// reporter / JUnit dumps carry the kind as a first-class
+/// field.
+abstract class Input {
+  /// Set by each concrete subclass; users don't write this.
+  kind: String
+}
+
 /// Generator + shrink spec for a single integer input. The runner
 /// derives a value in `[lo, hi]` from the iteration's seed for
 /// each named input, injects it into the env, and on failure
 /// shrinks the value toward `lo` via halving + decrement probes.
-class IntInput {
+class IntInput extends Input {
+  kind = "int"
+
   /// Inclusive lower bound. Shrink targets this value as the
   /// "simplest" candidate.
   lo: Int
@@ -558,14 +572,15 @@ class Test {
   /// not just a smaller seed that happens to fail.
   ///
   /// MVP supports `IntInput` only. List / String / Map inputs
-  /// land in later phases.
+  /// land in later phases — adding them is "add a subclass of
+  /// `Input` with its own `kind`" + one decode case in Go.
   ///
   /// `inputs` is mutually informative with `iterations` —
   /// iterations > 1 + inputs non-empty enables the input-space
   /// property loop. `iterationSeed` still controls the starting
   /// seed; `shrink` / `shrinkAttempts` are reinterpreted as
   /// per-input shrink budget when inputs are present.
-  inputs: Mapping<String, IntInput> = new {}
+  inputs: Mapping<String, Input> = new {}
 
   // ── Body: pick exactly one ─────────────────────────────────────
   cmd: (String(length > 0))? = null
@@ -700,7 +715,12 @@ class RenderedScreenshotSnapshot {
   thresholdPct: Float
 }
 
-class RenderedIntInput {
+abstract class RenderedInput {
+  kind: String
+}
+
+class RenderedIntInput extends RenderedInput {
+  kind = "int"
   lo: Int
   hi: Int
 }
@@ -770,7 +790,7 @@ class RenderedTest {
   iterationSeed: Int
   shrink: Boolean
   shrinkAttempts: Int
-  inputs: Mapping<String, RenderedIntInput>
+  inputs: Mapping<String, RenderedInput>
 
   cmd: String?
   stdin: String?
@@ -936,7 +956,7 @@ local function renderTest(t: Test): RenderedTest = new {
   iterationSeed = t.iterationSeed
   shrink = t.shrink
   shrinkAttempts = t.shrinkAttempts
-  inputs = new Mapping<String, RenderedIntInput> {
+  inputs = new Mapping<String, RenderedInput> {
     for (k, v in t.inputs) {
       [k] = new RenderedIntInput {
         lo = v.lo

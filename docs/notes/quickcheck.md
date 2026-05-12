@@ -216,11 +216,33 @@ This is true input-space shrinking: the reported values are
 genuinely minimal-ish per-input, not just a smaller seed that
 happens to fail.
 
+### Adding a new input kind
+
+The schema is `Mapping<String, Input>` where `Input` is an
+abstract class with `kind: String` as discriminator. To add a
+new kind (`StringInput`, `ListIntInput`, ...):
+
+1. **Pkl side**: add `class StringInput extends Input { kind =
+   "string"; ... }` and a `RenderedStringInput extends
+   RenderedInput { kind = "string"; ... }`, plus the renderer
+   function.
+2. **Go side**: add a Go struct implementing the `Input`
+   interface (`InputKind() string`); add the `kind` const to
+   `config.go`'s table; add a `RegisterMapping` call for the
+   new Rendered class.
+3. **Runner**: add one `case` arm to `generateOneInput` and to
+   `shrinkOneCandidates` in `internal/executor/inputs.go`.
+
+The pkl-go side handles polymorphic decode automatically via
+the RegisterMapping registry — each Mapping entry's Pkl class
+name routes to the matching Go struct, which lands in the
+`map[string]config.Input` field as a concrete pointer for the
+type switch to dispatch on.
+
 ### Limitations of MVP
 
-- **Int only.** List / String / Map inputs are TODO. The schema
-  is `Mapping<String, IntInput>`, not a polymorphic generator
-  union (yet).
+- **Int only.** Adding more kinds is mechanical (see above);
+  the surface area is just unbuilt today.
 - **Per-input shrinking is greedy.** Each input shrinks toward
   `lo` independently. When the failure depends on a product /
   correlation between inputs, the shrunk values land on a local

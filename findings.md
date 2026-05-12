@@ -5,6 +5,106 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 25 — Input polymorphism story: pick C, manual unmarshal turned out unnecessary
+
+- **Method.** Phase 24 shipped `Test.inputs: Mapping<String, IntInput>` — Int only. To
+  add more kinds (String / List / Map), we ran the same
+  4-proposal bake-off methodology as phase 18:
+  - A: abstract class + concrete subclasses
+  - B: god struct with all fields nullable + `kind` discriminator
+  - C: A's authoring shape + explicit `kind` in data + manual unmarshal
+  - D: per-type Mappings (`intInputs / stringInputs / ...`),
+    no polymorphism — same shape phase 18 chose for Step body slots
+- **Three subagent personas split.** (1) new-user ergonomics →
+  C; (2) maintainer cost / phase-18 consistency → D (with
+  exit criterion to migrate to A at kind #6); (3) long-term
+  18-month framework view → C, citing cross-cutting features
+  (cross-input shrink, JUnit dumps, invariants) that all need
+  one unified iterable. 2 of 3 voted C.
+- **Decision: C.** The differentiating observation came from
+  the long-term review: **inputs are entries-in-a-collection,
+  not slots-on-a-class.** Phase 18 picked D for Step because
+  Step is a class with body slots; entries-in-a-collection
+  inverts the structural pressure. The proposal-D writeup
+  itself flagged this honestly ("Cross-cutting features that
+  operate on the set of all inputs need to merge the
+  Mappings"), and that's exactly the 18-month feature list.
+- **Schema shape.**
+  ```pkl
+  abstract class Input { kind: String }
+  class IntInput extends Input { kind = "int"; lo: Int; hi: Int }
+
+  abstract class RenderedInput { kind: String }
+  class RenderedIntInput extends RenderedInput { kind = "int"; lo: Int; hi: Int }
+
+  class Test { inputs: Mapping<String, Input> = new {} }
+  ```
+- **Go shape: `Input` interface + concrete pointers.**
+  ```go
+  type Input interface { InputKind() string }
+  const KindInt = "int"
+  type IntInput struct { Kind string; Lo, Hi int }
+  func (i *IntInput) InputKind() string { return KindInt }
+
+  type Test struct { Inputs map[string]Input `pkl:"inputs"` }
+  ```
+- **pkl-go did the polymorphic decode work.** The C proposal
+  said "~50 LOC of manual unmarshal." We didn't write that.
+  pkl-go's `RegisterMapping` registry routes Pkl class names
+  to Go types automatically; decoding a Mapping into a Go
+  `map[string]Input` (interface) lands each entry as the
+  concrete pointer (`*IntInput`) the type switch can
+  dispatch on. The fallback path (manual unmarshal via
+  `Pkl.Marshal` + `kind` discrimination) stays in the
+  toolkit if pkl-go ever changes this behaviour, but for now
+  it's an unused safety net.
+- **Runner: type switch at two sites.**
+  `generateOneInput(spec config.Input, seed uint32)` and
+  `shrinkOneCandidates(spec config.Input, val int)`. Both
+  are ~6 lines each, one `case *config.IntInput` arm. New
+  kinds add one arm each — the per-kind cost is genuinely
+  linear and small.
+- **Smoke: phase 24 fixture unchanged, output identical.**
+  `examples/quickcheck-input-space/` still works:
+  `addition_in_range` 30 iterations all pass (64ms); the
+  failing `multiplication_bounded` (when un-pended) still
+  shrinks `{A=10, B=17} → {A=7, B=15}` in 5 steps. Output
+  is bit-for-bit identical to phase 24 — confirms the C
+  refactor preserved behaviour.
+- **Maintainer's "kind drift" concern: handled by const
+  table.** `internal/config/config.go` has the single
+  source of truth:
+  ```go
+  const ( KindInt = "int" )
+  ```
+  And the Pkl side has `class IntInput extends Input { kind
+  = "int" }`. Drift is one-edit-away rather than spread
+  across multiple files. Future kinds add one const each.
+- **What's lost vs. D.** No structural Pkl validation that
+  prevents "this entry should have been an int." With D's
+  per-type Mapping, Pkl rejects `new StringInput {}` inside
+  `intInputs` at parse time. With C, an Input subclass that
+  doesn't match the runner's expectations errors at runtime
+  (`generateOneInput` default case → "unknown input kind").
+  Mitigation: each new subclass needs the matching `case`
+  arm in both Go switches; running once with the new spec
+  catches the omission immediately.
+- **What this validates.** A 4-proposal × 3-persona review
+  was the right shape even when the answer turned out to be
+  one of the "obvious" candidates (C). The subagents
+  surfaced an observation about the *structure of the
+  problem* (entries vs. slots) that I had restated but not
+  internalised. Phase 18 had picked D; phase 25 picked C;
+  both are correct for their respective shapes.
+- **Adoption cost: zero new fixtures rewritten.** The
+  authoring API didn't change: `new IntInput { lo = 0; hi
+  = 100 }` reads exactly the same. Only the Test field
+  type widened (`IntInput` → `Input`), which is a
+  super-type relation — every IntInput value is still
+  acceptable. No example needed updating.
+
+---
+
 ## Phase 24 — True input-space shrinking (Int MVP)
 
 - **Why phase 23.1 wasn't enough.** Seed-space shrinking
