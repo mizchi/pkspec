@@ -71,21 +71,45 @@ func (e *Executor) runSqlStep(ctx context.Context, step *config.Step, t *config.
 	}
 	defer db.Close()
 
-	rows, queryErr := db.QueryContext(procCtx, queryExpanded)
-	sr.Duration = time.Since(start)
+	var rowJSON []byte
+	var rowCount int
 
-	if queryErr != nil {
-		sr.Outcome = OutcomeErrored
-		sr.Reasons = []string{fmt.Sprintf("sql: query failed: %v", queryErr)}
-		return sr
-	}
-	defer rows.Close()
+	if isReadQuery(queryExpanded) {
+		rows, queryErr := db.QueryContext(procCtx, queryExpanded)
+		sr.Duration = time.Since(start)
+		if queryErr != nil {
+			sr.Outcome = OutcomeErrored
+			sr.Reasons = []string{fmt.Sprintf("sql: query failed: %v", queryErr)}
+			return sr
+		}
+		defer rows.Close()
 
-	rowJSON, rowCount, err := readRowsAsJSON(rows)
-	if err != nil {
-		sr.Outcome = OutcomeErrored
-		sr.Reasons = []string{fmt.Sprintf("sql: serialise rows: %v", err)}
-		return sr
+		rowJSON, rowCount, err = readRowsAsJSON(rows)
+		if err != nil {
+			sr.Outcome = OutcomeErrored
+			sr.Reasons = []string{fmt.Sprintf("sql: serialise rows: %v", err)}
+			return sr
+		}
+	} else {
+		// DML / DDL: Exec and treat RowsAffected as the row count.
+		// The row JSON is an empty array — expectRowsJsonPath against
+		// a DML is nonsensical and reports "no match" rather than
+		// crashing.
+		res, execErr := db.ExecContext(procCtx, queryExpanded)
+		sr.Duration = time.Since(start)
+		if execErr != nil {
+			sr.Outcome = OutcomeErrored
+			sr.Reasons = []string{fmt.Sprintf("sql: exec failed: %v", execErr)}
+			return sr
+		}
+		affected, raErr := res.RowsAffected()
+		if raErr != nil {
+			// Some drivers (or DDL like CREATE TABLE) don't report
+			// RowsAffected reliably; degrade to 0 instead of erroring.
+			affected = 0
+		}
+		rowCount = int(affected)
+		rowJSON = []byte("[]")
 	}
 	sr.Stdout = string(rowJSON)
 
@@ -113,6 +137,22 @@ func (e *Executor) runSqlStep(ctx context.Context, step *config.Step, t *config.
 
 	sr.Outcome = OutcomePassed
 	return sr
+}
+
+// isReadQuery does a cheap prefix check to decide whether the query
+// returns rows (Query) or affects them (Exec). `SELECT` and `WITH`
+// (CTE prefix) read; everything else (`INSERT` / `UPDATE` /
+// `DELETE` / `CREATE` / `DROP` / pragma / etc.) goes through Exec.
+// `INSERT ... RETURNING` reads back, but SQLite supports it only
+// since 3.35 — authors who need that path can prefix the query
+// with `WITH inserted AS (INSERT ... RETURNING *) SELECT * FROM
+// inserted` to land on the Query path.
+func isReadQuery(q string) bool {
+	trimmed := strings.TrimSpace(strings.ToLower(q))
+	return strings.HasPrefix(trimmed, "select") ||
+		strings.HasPrefix(trimmed, "with") ||
+		strings.HasPrefix(trimmed, "pragma") ||
+		strings.HasPrefix(trimmed, "values")
 }
 
 // parseSqlDSN splits `<scheme>:<remainder>` and translates to the

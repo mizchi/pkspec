@@ -870,70 +870,64 @@ func (e *Executor) runStepOnce(ctx context.Context, step *config.Step, t *config
 // tell "user wrote 0" from "default 0" for int fields like
 // ExpectExitCode, so those are skipped. The pointer / slice / map
 // fields below have a clear "set vs default" distinction.
+//
+// Each per-kind case composes from two helpers: hasShellFields and
+// hasHttpFields. Kinds whose body-level state lives entirely on
+// their own Spec (playwright, playwright-test, sql) forbid the union
+// of shell + http Step-level expectations. Shell and http forbid
+// each other's. Future kinds that follow the "Spec-encapsulated"
+// discipline only need to wire up the right case here — no
+// new field-list to enumerate.
 func validateStepKind(step *config.Step) string {
 	switch step.Kind {
 	case "shell":
-		if step.ExpectStatus != nil ||
-			len(step.ExpectStatusBetween) > 0 ||
-			step.ExpectBodyEquals != nil ||
-			step.ExpectBodyContains != nil ||
-			len(step.ExpectHeaderEquals) > 0 ||
-			len(step.ExpectBodyJsonPath) > 0 ||
-			step.CaptureBody != nil ||
-			step.CaptureStatus != nil ||
-			len(step.CaptureBodyJsonPath) > 0 ||
-			step.Cassette != nil {
+		if hasHttpFields(step) {
 			return "shell step has http-only expectation/capture set (expect{Status,Body,Header}*, captureBody*, cassette) — split into separate steps"
 		}
 	case "http":
-		if step.ExpectStdout != nil ||
-			step.ExpectStderr != nil ||
-			step.InlineStdout != nil ||
-			step.CaptureStdout != nil ||
-			step.CaptureExitCode != nil {
+		if hasShellFields(step) {
 			return "http step has shell-only expectation/capture set (expectStdout, expectStderr, inlineStdout, captureStdout, captureExitCode) — http steps assert on response body, not stdout"
 		}
 	case "playwright":
-		if step.ExpectStatus != nil ||
-			len(step.ExpectStatusBetween) > 0 ||
-			step.ExpectBodyEquals != nil ||
-			step.ExpectBodyContains != nil ||
-			len(step.ExpectHeaderEquals) > 0 ||
-			len(step.ExpectBodyJsonPath) > 0 ||
-			step.Cassette != nil ||
-			step.ExpectStdout != nil ||
-			step.ExpectStderr != nil ||
-			step.InlineStdout != nil {
-			return "playwright step uses its own expectations (expectScreenshot in the playwright spec) — http/shell expectations on the Step are not applied to a browser script"
+		if hasHttpFields(step) || hasShellFields(step) {
+			return "playwright step uses its own expectations (expectScreenshot / expectConsole in the playwright spec) — http/shell expectations on the Step are not applied to a browser script"
 		}
 	case "playwright-test":
-		if step.ExpectStatus != nil ||
-			len(step.ExpectStatusBetween) > 0 ||
-			step.ExpectBodyEquals != nil ||
-			step.ExpectBodyContains != nil ||
-			len(step.ExpectHeaderEquals) > 0 ||
-			len(step.ExpectBodyJsonPath) > 0 ||
-			step.Cassette != nil ||
-			step.ExpectStdout != nil ||
-			step.ExpectStderr != nil ||
-			step.InlineStdout != nil {
+		if hasHttpFields(step) || hasShellFields(step) {
 			return "playwrightTest step delegates assertions to @playwright/test — http/shell expectations on the Step are not applied to the suite"
 		}
 	case "sql":
-		if step.ExpectStatus != nil ||
-			len(step.ExpectStatusBetween) > 0 ||
-			step.ExpectBodyEquals != nil ||
-			step.ExpectBodyContains != nil ||
-			len(step.ExpectHeaderEquals) > 0 ||
-			len(step.ExpectBodyJsonPath) > 0 ||
-			step.Cassette != nil ||
-			step.ExpectStdout != nil ||
-			step.ExpectStderr != nil ||
-			step.InlineStdout != nil {
+		if hasHttpFields(step) || hasShellFields(step) {
 			return "sql step uses its own expectations (expectRowCount / expectRowsJsonPath on the sql spec) — http/shell expectations on the Step are not applied to a query"
 		}
 	}
 	return ""
+}
+
+// hasHttpFields reports whether the Step has any HTTP-only Step-level
+// expectation or capture set (i.e., any field that only makes sense
+// for `step.Http != nil`).
+func hasHttpFields(step *config.Step) bool {
+	return step.ExpectStatus != nil ||
+		len(step.ExpectStatusBetween) > 0 ||
+		step.ExpectBodyEquals != nil ||
+		step.ExpectBodyContains != nil ||
+		len(step.ExpectHeaderEquals) > 0 ||
+		len(step.ExpectBodyJsonPath) > 0 ||
+		step.CaptureBody != nil ||
+		step.CaptureStatus != nil ||
+		len(step.CaptureBodyJsonPath) > 0 ||
+		step.Cassette != nil
+}
+
+// hasShellFields reports whether the Step has any shell-only
+// Step-level expectation or capture set.
+func hasShellFields(step *config.Step) bool {
+	return step.ExpectStdout != nil ||
+		step.ExpectStderr != nil ||
+		step.InlineStdout != nil ||
+		step.CaptureStdout != nil ||
+		step.CaptureExitCode != nil
 }
 
 func stepDisplayName(step *config.Step) string {

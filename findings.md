@@ -5,6 +5,69 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 22.1 — validateStepKind helper + sql DML support
+
+- **Two cleanups in one commit.** (1) The phase 22 review noted
+  that `validateStepKind`'s sql case and playwright cases were
+  near-identical copy-paste (10 lines each enumerating the same
+  shell + http forbidden fields). (2) Phase 22 shipped SELECT
+  only; DML (INSERT / UPDATE / DELETE / DDL) needed a separate
+  code path.
+- **`validateStepKind` refactor: 60 lines → 38 lines.** Extracted
+  `hasShellFields(step)` and `hasHttpFields(step)` helpers; each
+  case now composes the right helper(s). Spec-encapsulated kinds
+  (playwright, playwright-test, sql) call both; shell/http call
+  each other's. Future kinds following the "kind-private to Spec"
+  discipline only wire up the right case; no new field-list to
+  enumerate. Resolves the subagent review's main duplication
+  concern.
+- **The matrix prediction was correct in shape, wrong in
+  magnitude.** Subagent projected 60 conditionals at 5 kinds,
+  84 at 6 kinds. Actual at 5 kinds with the helper: 5 cases × 1
+  helper call each = 5 conditionals (plus 17 field checks inside
+  the two helpers). 6th kind adds 1 case, no helper change.
+  The growth is now O(N) not O(N²). The original concern
+  (matrix blowup) is structurally retired without migrating
+  away from D.
+- **sql DML path: prefix-based dispatch.** `isReadQuery` checks
+  the trimmed lowercase query prefix (`SELECT` / `WITH` /
+  `PRAGMA` / `VALUES`) and routes to `QueryContext`; everything
+  else routes to `ExecContext` + `RowsAffected()`. The
+  prefix-only approach is good enough for typical fixtures and
+  avoids the complexity of full SQL parsing.
+- **`expectRowCount` is now kind-uniform across DML/SELECT.** Same
+  schema field, same Go-side compare; means "number of rows the
+  query produced or affected". This is the right shape — authors
+  write `expectRowCount = 1` for both "the SELECT returned 1
+  row" and "the UPDATE changed 1 row", and the kind-discrimination
+  happens inside the runner.
+- **`RETURNING` clauses.** SQLite 3.35+ supports `INSERT ...
+  RETURNING ...`. The prefix check sends those to Exec (no
+  rows read back). Documented workaround: `WITH inserted AS
+  (INSERT ... RETURNING *) SELECT * FROM inserted` — the `WITH`
+  prefix lands on the Query path. Not blocking; flagged in
+  sql.md for users who hit it.
+- **Sequenced DML smoke: 7 steps, 6ms total.** Create table →
+  Insert 2 → Verify (rowcount + jsonpath on both rows) →
+  Update WHERE id=1 → Verify the new value → Delete all
+  (rowcount = 2 affected) → Verify empty via `SELECT COUNT(*)
+  AS n` + `expectRowsJsonPath { ["0.n"] = 0 }`. All seven
+  passed in a single Test (sequential steps share the on-disk
+  SQLite file).
+- **Tests-run-in-alphabetical-order is a subtle interaction.**
+  Initial DML smoke had each operation as its own Test;
+  pkthunder ran them in name order (Phase 13), so `delete`
+  fired before `insert`. Not a bug — pkt's `steps` provides
+  the sequential primitive. Documented as the expected
+  authoring pattern: DML chains belong in `steps`, not split
+  across `tests`.
+- **No code changes outside the two cleanup areas.** validateStepKind
+  helpers in `executor.go`, DML branch in `sql.go`. No schema
+  changes; no new fields. The discipline from phase 18+22
+  continues to hold.
+
+---
+
 ## Phase 22 — 5th kind (`sql`) shipped under D; subagent prediction partially wrong
 
 - **Test of the phase 21 verdict.** Phase 21's subagent review

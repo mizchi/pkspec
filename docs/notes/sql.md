@@ -86,10 +86,15 @@ DB. To chain seed + assert across two Steps, write to disk.
 
 ## Operational notes
 
-- **No DML smoke yet**: the Phase 22 fixture exercises SELECT only.
-  INSERT / UPDATE / DELETE work mechanically (database/sql doesn't
-  care which) but assertion semantics for "rows affected" need
-  separate validation.
+- **DML works the same shape.** The runner picks Query vs. Exec
+  based on the query prefix (`SELECT` / `WITH` / `PRAGMA` /
+  `VALUES` → Query, everything else → Exec). `expectRowCount`
+  reads `RowsAffected()` for DML and `len(rows)` for SELECT —
+  same field, kind-uniform meaning. `INSERT ... RETURNING`
+  authors should wrap with `WITH inserted AS (...) SELECT *
+  FROM inserted` to land on the Query path. Sequenced
+  Create → Insert → Verify → Update → Verify → Delete → Verify
+  in a single 7-step Test is verified working (6ms total).
 - **`$VAR` expansion** applies to the `query` field via the same
   `expandEnv` helper shell steps use. Use this to interpolate
   IDs / emails from earlier captures; avoid it for untrusted
