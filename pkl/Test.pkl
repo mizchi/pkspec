@@ -476,7 +476,12 @@ class Background {
 
 /// A single test. Choose exactly one of `cmd`, `steps`, `parallelSteps`.
 class Test {
-  name: String(matches(Regex(#"^[a-zA-Z][a-zA-Z0-9_:.\-/ ]*$"#)))
+  /// Names may start with a letter, digit, or underscore (number
+  /// prefixes like `01_setup` are useful for sort-order control,
+  /// matching the convention hook keys use). The regex was widened
+  /// in phase 28 after dogfooding (phase 27) revealed digit-prefix
+  /// names were rejected.
+  name: String(matches(Regex(#"^[a-zA-Z0-9_][a-zA-Z0-9_:.\-/ ]*$"#)))
   description: String? = null
 
   /// Free-form classification tags. Used by `pkt exec --tag <name>` to

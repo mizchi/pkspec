@@ -37,7 +37,7 @@ class SpecStep {
 /// `then` if it's a smoke check, or `given` + `when` if there's
 /// nothing to assert beyond exit code.
 class Scenario {
-  name: String(matches(Regex(#"^[a-zA-Z][a-zA-Z0-9_:.\-/ ]*$"#)))
+  name: String(matches(Regex(#"^[a-zA-Z0-9_][a-zA-Z0-9_:.\-/ ]*$"#)))
   description: String? = null
 
   /// Free-form classification tags propagated to the rendered Test.

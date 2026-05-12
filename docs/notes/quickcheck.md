@@ -252,6 +252,83 @@ type switch to dispatch on.
   function of `(sub_seed, lo, hi)`. Stateful generators
   (sequence, weighted, alternating) need an extended schema.
 
+### Property body shapes: `cmd` vs `steps`
+
+`Test.iterations > 1` works with **either** body shape:
+
+- **`Test.cmd = "..."`**: the whole property iteration is one
+  shell command. Compact but a single line of bash; cleanup
+  must live inside the cmd (`set -e; ...; rm -f work.db` etc).
+- **`Test.steps { ... }`**: the property iteration runs the
+  step sequence. Cleanup goes in a final step with
+  `always = true`, which fires per iteration even if a prior
+  step failed. Mixing http / sql / shell across steps stays
+  legible.
+
+```pkl
+new Test {
+  name = "post_count_property"
+  iterations = 10
+  iterationSeed = 42
+  inputs {
+    ["N"] = new IntInput { lo = 1; hi = 5 }
+  }
+  steps {
+    new {
+      name = "reset"
+      sql = new SqlSpec {
+        dsn = "sqlite:prop.db"
+        query = "UPDATE counter SET n = 0 WHERE id = 1"
+      }
+    }
+    new {
+      name = "drive"
+      cmd = "for i in $(seq 1 $N); do curl -fs -X POST http://localhost:8080/count > /dev/null; done"
+    }
+    new {
+      name = "assert"
+      http = new HttpRequest { method = "GET"; url = "http://localhost:8080/count" }
+      expectBodyJsonPath { ["n"] = "$N" }
+    }
+    new {
+      name = "cleanup"
+      cmd = "rm -f prop.db"
+      always = true
+    }
+  }
+}
+```
+
+This shape is the recommended default for any property that
+isn't a one-line bash assertion. The `cleanup` step runs
+**per iteration**, so cross-iteration state hygiene happens
+without per-iteration hook plumbing.
+
+### Per-iteration reset (the standard pattern)
+
+When the system under test has state that persists across
+iterations (a DB row, a shared file, a counter on a long-lived
+server), each iteration needs to reset it to a known baseline
+before the body runs. There are no per-iteration hooks today
+— phase 23 deliberately scoped hooks to per-Test. The
+recommended pattern is to **make the reset the first step in
+the property body**:
+
+```pkl
+steps {
+  new { name = "reset"; sql = new SqlSpec { ... reset ... } }
+  new { name = "drive"; ... }
+  new { name = "assert"; ... }
+  new { name = "cleanup"; cmd = "..."; always = true }
+}
+```
+
+This keeps the reset inside the iteration loop (so every
+iteration sees a fresh baseline) without requiring new schema.
+If your fixtures hit this pattern often enough that the
+reset-step boilerplate hurts, raise an issue — that's the
+signal to add `Test.iterationBefore: String?` or similar.
+
 ### Choosing between modes
 
 | Mode | When | Failure output |

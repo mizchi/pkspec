@@ -18,6 +18,34 @@ tests {
     """
   }
 
+  // STEPS-MODE property: per-iteration setup + assertion + cleanup
+  // as separate steps. The `always = true` cleanup runs every
+  // iteration even when the assertion fails, so leftover state
+  // never accumulates.
+  new {
+    name = "01_steps_mode_demo"
+    iterations = 5
+    iterationSeed = 99
+    inputs {
+      ["X"] = new IntInput { lo = 0; hi = 10 }
+    }
+    steps {
+      new {
+        name = "setup"
+        cmd = "echo running iter=$PKT_ITERATION X=$X > probe.txt"
+      }
+      new {
+        name = "assert"
+        cmd = "grep -q \"X=$X\" probe.txt"
+      }
+      new {
+        name = "cleanup"
+        cmd = "rm -f probe.txt"
+        always = true
+      }
+    }
+  }
+
   // FAILING property (deliberate): a * b < 100.
   // Doesn't hold for large pairs; the shrinker narrows the
   // counterexample to the boundary.

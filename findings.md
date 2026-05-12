@@ -5,6 +5,70 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 28 — Dogfooding follow-up fixes (Friction #1, #2, #5)
+
+Three of the friction items from phase 27 addressed in one
+phase. Two of them turned out to be docs / authoring-pattern
+issues, not schema bugs.
+
+- **#1 Test.name regex widened (5 minutes, zero example
+  breaks).** Old: `^[a-zA-Z][a-zA-Z0-9_:.\-/ ]*$` (letter
+  required as first char). New: `^[a-zA-Z0-9_][a-zA-Z0-9_:.\-/ ]*$`
+  (letter, digit, or underscore). Hook keys already used the
+  same naming convention (`01_init`); the regression of
+  rejecting `01_post_count_property` in Test names was a
+  consistency miss. Same widening applied to `Spec.pkl`'s
+  Scenario.name. All existing fixtures stayed alphabet-led
+  so are unaffected; new fixtures get the ordering control
+  hook keys already had.
+- **#2 Property + steps composition: already works, was a
+  docs gap.** Phase 27 wrote `Test.iterations` + `Test.cmd`
+  exclusively because every quickcheck example showed `cmd`.
+  Smoke verified that `Test.iterations + Test.steps`
+  already works — the iteration loop calls `runAttempt`
+  which dispatches on Test.Mode() (cmd / steps /
+  parallelSteps), so any body shape works. The
+  `always = true` cleanup step fires per iteration. The
+  fix was:
+  - docs/notes/quickcheck.md: new "Property body shapes:
+    cmd vs steps" section + recommended pattern code block
+    (sql reset → drive → assert → cleanup)
+  - examples/quickcheck-input-space/Test.pkl: added
+    `01_steps_mode_demo` Test showing setup / assert /
+    cleanup as separate steps in property mode
+- **#5 Per-iteration reset pattern: documented as the
+  recommended workaround.** Phase 23 deliberately scoped
+  hooks to per-Test, not per-iteration. The dogfooding
+  reset was hand-rolled at the top of the cmd; with
+  steps-mode property, the same reset is just the first
+  step. Documented in docs/notes/quickcheck.md under
+  "Per-iteration reset (the standard pattern)". If
+  fixtures hit this pattern often enough that the reset-
+  step boilerplate hurts, that's the signal to add
+  `Test.iterationBefore: String?` — but the current
+  workaround works and adds zero schema.
+- **Verification.** Phase 27's same fixture rewritten in
+  steps-mode + `always = true` cleanup ran 5/5 iterations
+  in 50ms with no leftover files. The new example
+  `01_steps_mode_demo` (digit-prefix name proves #1) is
+  the canonical demo of all three fixes composing.
+- **What this validates.** Dogfooding-discovered friction
+  often turns out to be "the feature works but the docs
+  didn't say so." Three of the eight phase-27 friction
+  items were resolved by widening one regex + writing two
+  docs sections + adding one example. The four mid-
+  priority items (port allocation, workdir cleanup,
+  repeat-step, alphabetical test order) remain
+  documented-but-unfixed; their signal-to-noise still
+  doesn't justify schema growth.
+- **Methodology note.** Before committing a schema change,
+  smoke-test whether the friction is actually a schema bug.
+  Phase 27 assumed friction #2 needed schema work; smoke
+  showed it didn't. Saved ~50 LOC of speculative code +
+  the migration cost on every existing fixture.
+
+---
+
 ## Phase 27 — Dogfooding: mini counter API E2E across all kinds
 
 - **Goal.** Use pkthunder as a real user would, on a small but
