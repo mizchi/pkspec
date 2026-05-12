@@ -15,7 +15,7 @@
           version = "0.0.0";
           src = ./.;
 
-          vendorHash = "sha256-0LEwWuRj2Oc66rNZ+Psr11hsESue/YXU2veoaWQpKw4=";
+          vendorHash = "sha256-XE5jU3X1tDVPiPbq6/yHjDzlxKpi+U9LKEil7kk238I=";
 
           subPackages = [ "cmd/pkspec" ];
 
