@@ -152,6 +152,7 @@ type Step struct {
 	ExpectAi   *AiAssertion `pkl:"expectAi"`
 	Cassette   *string      `pkl:"cassette"`
 	Always     bool         `pkl:"always"`
+	Repeat     int          `pkl:"repeat"`
 }
 
 // ReferenceSnapshot mirrors `pkthunder.Test#RenderedSnapshot`.
@@ -174,17 +175,19 @@ type Background struct {
 	ReadyStdoutMatches *string           `pkl:"readyStdoutMatches"`
 	ReadyTimeoutSec    int               `pkl:"readyTimeoutSec"`
 	GraceTimeoutSec    int               `pkl:"graceTimeoutSec"`
+	PortEnv            *string           `pkl:"portEnv"`
 }
 
 // Test mirrors `pkthunder.Test#RenderedTest`.
 type Test struct {
 	Description     *string           `pkl:"description"`
 	Tags            []string          `pkl:"tags"`
-	Shell           string            `pkl:"shell"`
-	Env             map[string]string `pkl:"env"`
-	Workdir         *string           `pkl:"workdir"`
-	TimeoutSec      int               `pkl:"timeoutSec"`
-	Retries         int               `pkl:"retries"`
+	Shell            string            `pkl:"shell"`
+	Env              map[string]string `pkl:"env"`
+	Workdir          *string           `pkl:"workdir"`
+	EphemeralWorkdir bool              `pkl:"ephemeralWorkdir"`
+	TimeoutSec       int               `pkl:"timeoutSec"`
+	Retries          int               `pkl:"retries"`
 	FlakyAcceptable bool              `pkl:"flakyAcceptable"`
 	Pending         bool              `pkl:"pending"`
 	Iterations      int                  `pkl:"iterations"`

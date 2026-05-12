@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -592,6 +593,24 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 		}
 	}
 
+	// ephemeralWorkdir: create a fresh temp directory for the Test
+	// and override Test.Workdir to point at it. Removed when the
+	// Test returns (pass or fail), so side-effecting files (SQLite
+	// DBs, generated snapshots-in-progress) don't accumulate.
+	if t.EphemeralWorkdir {
+		tmpDir, err := os.MkdirTemp("", "pkthunder-test-*")
+		if err != nil {
+			return Result{
+				Name:     name,
+				Outcome:  OutcomeErrored,
+				Reasons:  []string{fmt.Sprintf("ephemeralWorkdir mkdtemp: %v", err)},
+				Duration: time.Since(start),
+			}
+		}
+		defer os.RemoveAll(tmpDir)
+		t.Workdir = &tmpDir
+	}
+
 	// Backgrounds live for the entire retry sequence — restarting them
 	// per-attempt would defeat the point (the dev server would never
 	// stay up). The deferred kill guarantees cleanup regardless of how
@@ -693,6 +712,20 @@ func (e *Executor) runIterated(ctx context.Context, name string, mode config.Mod
 	last.Outcome = OutcomePassed
 	last.Duration = time.Since(start)
 	return last
+}
+
+// getFreePort asks the OS for an ephemeral TCP port. The listener
+// is closed immediately; the caller spawns whatever wants to bind
+// to that port. There's a small TOCTOU window between close and
+// re-bind where another process could claim the port — acceptable
+// for test fixtures, problematic for production scheduling.
+func getFreePort() (int, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // xorshift32Step matches pkl/QuickCheck.pkl#step exactly so a seed
@@ -978,10 +1011,39 @@ func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Tes
 			Reasons: []string{reason},
 		}
 	}
-	if step.Eventually == nil {
-		return e.runStepOnce(ctx, step, t, defaults, state)
+
+	// `repeat`: run the step N times in sequence; first failure
+	// aborts. PKT_REPEAT carries the 0-based index. Captures
+	// reflect the last successful repetition.
+	reps := step.Repeat
+	if reps < 1 {
+		reps = 1
 	}
-	return e.runStepEventually(ctx, step, t, defaults, state)
+	var last StepResult
+	for i := 0; i < reps; i++ {
+		repState := state
+		if reps > 1 {
+			repState = make(map[string]string, len(state)+1)
+			for k, v := range state {
+				repState[k] = v
+			}
+			repState["PKT_REPEAT"] = strconv.Itoa(i)
+		}
+		if step.Eventually == nil {
+			last = e.runStepOnce(ctx, step, t, defaults, repState)
+		} else {
+			last = e.runStepEventually(ctx, step, t, defaults, repState)
+		}
+		if last.Outcome != OutcomePassed {
+			if reps > 1 {
+				last.Reasons = append([]string{
+					fmt.Sprintf("repeat %d/%d: failed", i+1, reps),
+				}, last.Reasons...)
+			}
+			return last
+		}
+	}
+	return last
 }
 
 // runStepOnce dispatches a single attempt of `step` based on its
@@ -1691,6 +1753,23 @@ type runningBg struct {
 func (e *Executor) startBackgrounds(ctx context.Context, t *config.Test, defaults *config.Defaults) ([]*runningBg, error) {
 	var bgs []*runningBg
 	for _, b := range t.Background {
+		// portEnv: allocate a free TCP port and inject it into the
+		// Test's env so the background cmd, the readyProbe, and any
+		// later steps see it under the named variable. The Test.Env
+		// mutation is intentional — pkthunder treats each Test as
+		// single-use within a Run, and the port assignment is part
+		// of that Test's lifecycle state.
+		if b.PortEnv != nil {
+			port, perr := getFreePort()
+			if perr != nil {
+				return bgs, fmt.Errorf("portEnv %q: allocate free port: %w", *b.PortEnv, perr)
+			}
+			if t.Env == nil {
+				t.Env = map[string]string{}
+			}
+			t.Env[*b.PortEnv] = strconv.Itoa(port)
+		}
+
 		// Backgrounds outlive the body's bodyCtx — they are explicitly
 		// torn down by killBackgrounds, not by ctx cancellation. Using a
 		// detached parent ensures the body's timeout doesn't accidentally
@@ -1725,14 +1804,14 @@ func (e *Executor) startBackgrounds(ctx context.Context, t *config.Test, default
 		go func(rb *runningBg) { rb.done <- cmd.Wait() }(rb)
 		bgs = append(bgs, rb)
 
-		if err := waitReady(ctx, b, rb); err != nil {
+		if err := waitReady(ctx, b, rb, t, defaults); err != nil {
 			return bgs, fmt.Errorf("background %s: %w", rb.name, err)
 		}
 	}
 	return bgs, nil
 }
 
-func waitReady(ctx context.Context, b *config.Background, rb *runningBg) error {
+func waitReady(ctx context.Context, b *config.Background, rb *runningBg, t *config.Test, defaults *config.Defaults) error {
 	if b.ReadyProbe == nil && b.ReadyStdoutMatches == nil {
 		// No explicit probe. Give the process a brief moment to settle so
 		// later steps don't race the first instruction.
@@ -1742,6 +1821,7 @@ func waitReady(ctx context.Context, b *config.Background, rb *runningBg) error {
 		}
 		return nil
 	}
+	probeEnv := mergeEnv(defaultsEnv(defaults), t.Env, b.Env)
 	deadline := time.Now().Add(time.Duration(b.ReadyTimeoutSec) * time.Second)
 	for time.Now().Before(deadline) {
 		select {
@@ -1756,7 +1836,9 @@ func waitReady(ctx context.Context, b *config.Background, rb *runningBg) error {
 		}
 		if b.ReadyProbe != nil {
 			probeCtx, probeCancel := context.WithTimeout(ctx, 2*time.Second)
-			err := exec.CommandContext(probeCtx, "bash", "-c", *b.ReadyProbe).Run()
+			probeCmd := exec.CommandContext(probeCtx, "bash", "-c", *b.ReadyProbe)
+			probeCmd.Env = probeEnv
+			err := probeCmd.Run()
 			probeCancel()
 			if err == nil {
 				return nil

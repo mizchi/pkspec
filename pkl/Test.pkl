@@ -182,6 +182,24 @@ class Step {
   /// When true, run this step even if a previous sequential step
   /// failed. Use for cleanup. Ignored inside `parallelSteps`.
   always: Boolean = false
+
+  /// Repeat the step N times in sequence, each repetition seeing
+  /// `$PKT_REPEAT` (0-based index) in its env. Useful for "POST
+  /// the same endpoint 5 times" / "warm up the cache 10 times"
+  /// patterns the Pkl-static schema can't express directly.
+  ///
+  /// Each repetition is fully re-executed (re-derives http body,
+  /// re-evaluates `$VAR`, etc.). Captures (`captureStdout` /
+  /// `captureBody` / ...) reflect the LAST repetition only —
+  /// intermediate repetitions are not surfaced. All repetitions
+  /// must pass for the step to be Passed; the first failing
+  /// repetition aborts and reports `repeat 3/5: <reason>` in the
+  /// step's Reasons.
+  ///
+  /// Ignored inside `parallelSteps` (repetition + parallel would
+  /// be confusing — fan out via separate parallel steps if both
+  /// are wanted).
+  repeat: Int(this > 0) = 1
 }
 
 /// External AI/LLM-backed assertion.
@@ -472,6 +490,22 @@ class Background {
 
   /// Seconds to wait between SIGTERM and SIGKILL on shutdown.
   graceTimeoutSec: Int(this > 0) = 5
+
+  /// When set, the runner asks the OS for a free TCP port before
+  /// spawning the background and injects it under this env-var
+  /// name. Use `$<portEnv>` inside `cmd` / `readyProbe` / step
+  /// URLs to reference it. Removes the need to hand-allocate
+  /// ports across Tests when several backgrounded servers run
+  /// in parallel.
+  ///
+  /// Example:
+  ///   portEnv = "APP_PORT"
+  ///   cmd = "python3 server.py $APP_PORT"
+  ///   readyProbe = "curl -fs http://127.0.0.1:$APP_PORT/health"
+  ///
+  /// The injected variable also lives in the Test body's env, so
+  /// steps see it under the same name.
+  portEnv: String? = null
 }
 
 /// A single test. Choose exactly one of `cmd`, `steps`, `parallelSteps`.
@@ -500,6 +534,19 @@ class Test {
   shell: String = "bash"
   env: Mapping<String, String> = new {}
   workdir: String? = null
+
+  /// When true, the runner creates a fresh temp directory for this
+  /// Test's body and uses it as the workdir (overriding `workdir`
+  /// if also set). The directory is removed when the Test exits
+  /// (pass or fail), so leftover files like SQLite `.db`s or
+  /// generated artifacts don't accumulate in the user's working
+  /// tree.
+  ///
+  /// Use this for property tests that produce side-effecting files
+  /// (DBs, snapshots-in-progress) where the test author would
+  /// otherwise need an `always = true` cleanup step at the end of
+  /// every Test.
+  ephemeralWorkdir: Boolean = false
 
   /// Wall-clock timeout for the entire test body (steps + cmd, NOT
   /// counting background lifetime).
@@ -762,6 +809,7 @@ class RenderedStep {
   expectAi: RenderedAiAssertion?
   cassette: String?
   always: Boolean
+  repeat: Int
 }
 
 class RenderedBackground {
@@ -774,6 +822,7 @@ class RenderedBackground {
   readyStdoutMatches: String?
   readyTimeoutSec: Int
   graceTimeoutSec: Int
+  portEnv: String?
 }
 
 class RenderedSnapshot {
@@ -787,6 +836,7 @@ class RenderedTest {
   shell: String
   env: Mapping<String, String>
   workdir: String?
+  ephemeralWorkdir: Boolean
   timeoutSec: Int
   retries: Int
   flakyAcceptable: Boolean
@@ -929,6 +979,7 @@ local function renderStep(s: Step): RenderedStep = new {
   }
   cassette = s.cassette
   always = s.always
+  repeat = s.repeat
 }
 
 local function renderBackground(b: Background): RenderedBackground = new {
@@ -941,6 +992,7 @@ local function renderBackground(b: Background): RenderedBackground = new {
   readyStdoutMatches = b.readyStdoutMatches
   readyTimeoutSec = b.readyTimeoutSec
   graceTimeoutSec = b.graceTimeoutSec
+  portEnv = b.portEnv
 }
 
 // `renderTest` and `renderSnapshot` recurse into each other when a
@@ -953,6 +1005,7 @@ local function renderTest(t: Test): RenderedTest = new {
   shell = t.shell
   env = t.env
   workdir = t.workdir
+  ephemeralWorkdir = t.ephemeralWorkdir
   timeoutSec = t.timeoutSec
   retries = t.retries
   flakyAcceptable = t.flakyAcceptable

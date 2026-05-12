@@ -5,6 +5,132 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 29 — Remaining dogfooding friction (#3, #4, #6, #7, #8)
+
+All 5 remaining phase-27 friction points addressed in one
+batch. Two are schema features (portEnv, ephemeralWorkdir),
+one is a step-level option (repeat), one is a docs note, one
+is a stderr filter.
+
+### #3 — `Background.portEnv` for dynamic ports
+
+```pkl
+background {
+  new {
+    portEnv = "APP_PORT"
+    cmd = "python3 server.py $APP_PORT"
+    readyProbe = "curl -fs http://127.0.0.1:$APP_PORT/"
+  }
+}
+```
+
+The runner asks the OS for an ephemeral TCP port before
+spawning the background, then injects it into `Test.Env` under
+the named variable. cmd / readyProbe / subsequent steps all
+see it via the normal env merge chain. Solves the "I manually
+assigned ports 19101 / 19102 / ..." friction surfaced in
+dogfooding.
+
+Implementation: `getFreePort()` does `net.Listen("tcp",
+"127.0.0.1:0")` + immediate `Close()`. TOCTOU window exists
+(another process could grab the port between close and
+re-bind) but is acceptable for test fixtures. Documented.
+
+### #4 — `Test.ephemeralWorkdir`
+
+```pkl
+new Test {
+  ephemeralWorkdir = true
+  steps {
+    new { cmd = "echo data > work.db" }
+    new { cmd = "rm -f probe.txt"; always = true }  // no longer required
+  }
+}
+```
+
+The runner calls `os.MkdirTemp` before the body, overrides
+`Test.Workdir` to point at the new dir, and `defer
+os.RemoveAll(tmpDir)` removes everything on Test exit
+(pass / fail / panic). Means `always = true` cleanup steps
+become optional for tests that touch the filesystem.
+
+**Authoring caveat**: when `ephemeralWorkdir = true` the body
+runs in `/var/folders/...`, so paths to external assets
+(scripts, fixture files outside the test dir) must be
+absolute. Documented in the test-ordering doc; smoke ran
+into this exact trap on the first attempt.
+
+### #6 — `Step.repeat: Int = 1`
+
+```pkl
+new Step {
+  cmd = "curl -fs http://localhost:8080/count"
+  repeat = 5
+}
+```
+
+Run the step N times in sequence; each iteration sees
+`$PKT_REPEAT` (0-based). First failure aborts with
+`repeat K/N: <reason>` prepended. Captures reflect the last
+successful iteration. Closes the "POST 5 times" friction
+where users wrote bash loops inside `cmd` to fake
+declarative repetition.
+
+Implementation: `runStep`'s for-loop dispatches each
+iteration through the existing runStepOnce / runStepEventually
+path. The state map gets a copy per iteration with
+`PKT_REPEAT` set; existing eventually + validation logic
+applies unchanged.
+
+### #7 — Test ordering doc
+
+`docs/notes/test-ordering.md` written. Documents the
+alphabetical-by-name semantics, the "use steps for sequence,
+sibling tests for independence" recommendation, the digit-
+prefix pattern enabled by phase 28's regex widening, and
+the relationship to parallelSteps for explicit independence.
+
+### #8 — Pkl stderr noise filter
+
+Pkl 0.31.1 / macOS 26 prints `unhandled Platform key
+FamilyDisplayName` to stderr on every `pkl eval`. The
+warning is harmless upstream, but appears at least 3 times
+per pkt invocation (once per `EvaluateOutputValue` /
+`EvaluateOutputBytes`), making scripted output noisy.
+
+`cmd/pkt/stderr_filter.go` installs a pipe-wrapped
+`os.Stderr` in main(). A goroutine reads each line and
+drops anything matching the configured noise substrings
+(currently just the FamilyDisplayName entry). Other stderr
+(`fmt.Fprintln(os.Stderr, "pkt:", err)` etc) flows
+unchanged through the same filter.
+
+Implementation: simple `bufio.Scanner` loop + substring
+match. Adding new noise patterns is a one-line addition to
+`pklNoiseSubstrings`.
+
+### Integration smoke
+
+One fixture exercises all 5 fixes together: ephemeralWorkdir
++ portEnv + repeat + digit-prefix name + filtered stderr.
+Two Tests, both passed in ~275ms total, no leftover files in
+the user's directory, no Pkl warnings in the output.
+
+### Friction → fix score (full dogfooding cycle)
+
+Phase 27 found 8 friction items. Phase 28 fixed 3 (1 + 2 +
+5). Phase 29 fixed 5 (3 + 4 + 6 + 7 + 8). All 8 resolved
+across two follow-up phases without breaking any existing
+example.
+
+Phase 27 was a 30-minute dogfooding session. Phase 28 + 29
+together fixed everything it surfaced in ~1.5 hours. The
+ratio of "find the friction" to "fix the friction" is good
+when the framework is structurally healthy — the surfacing is
+the expensive part.
+
+---
+
 ## Phase 28 — Dogfooding follow-up fixes (Friction #1, #2, #5)
 
 Three of the friction items from phase 27 addressed in one

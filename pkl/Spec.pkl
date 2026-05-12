@@ -117,6 +117,7 @@ local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.St
   eventually = s.impl.eventually
   expectAi = s.impl.expectAi
   always = runAlways
+  repeat = s.impl.repeat
 }
 
 local function tagSteps(prefix: String, items: Listing<SpecStep>, runAlways: Boolean): Listing<base.Step> =
