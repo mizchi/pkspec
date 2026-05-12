@@ -5,6 +5,135 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 36 — Authoring guide, lint, and templates
+
+mizchi: "使い方のガイドや lint の機構を作りたい。"
+
+The spec language has a runtime surface (`--check` / `--coverage`
+/ `--goals` / etc.) but no authoring help — new spec writers
+started from a blank file. Three additions close that gap.
+
+### `pkt spec --lint`
+
+Eleven convention rules, each named with a dot-path id mirroring
+scenario id naming. Levels: error / warn / info. Default exit
+code is 0 unless an error-level issue fires.
+
+  error:
+    lint.duplicate-id
+    lint.broken-ref.dependsOn
+    lint.broken-ref.supersedes
+    lint.broken-ref.parent
+    lint.broken-ref.replacedBy
+    lint.broken-ref.contributes
+
+  warn:
+    lint.missing-description           (approved with empty description)
+    lint.approved-with-open-questions
+    lint.critical-without-contributes
+    lint.future-decision-date
+
+  info:
+    lint.deprecated-without-replacedBy
+    lint.implementedAt-without-code-doc
+
+The error set catches structural breakage (typo in a graph edge,
+duplicate id). The warn set catches "ready to ship?" concerns
+(approved spec missing description, critical spec with no Goal
+anchor). Info is "you probably meant something else here."
+
+Each issue carries a Fix hint, single-line. Output is grep-able
+(`[error] lint.broken-ref.dependsOn — spec.foo: ...`) so CI
+parsing is trivial.
+
+### `pkt spec --template <kind>`
+
+Three skeletons printed to stdout, all heavily commented:
+
+  pkt spec --template scenario   single Scenario skeleton
+  pkt spec --template goal       single Goal skeleton
+  pkt spec --template module     full Spec.pkl with amends +
+                                 feature + goals + scenarios
+
+The module template includes the canonical comment block:
+
+  // pkt spec --check --discover
+  // pkt spec --next --discover
+  // pkt spec --lint --discover
+  // ...
+
+so new modules ship with the usage instructions visible at the
+top of the file.
+
+### `docs/notes/authoring-guide.md`
+
+10-step walkthrough: scaffold → first Goal → first Scenario →
+run analyses → implement and link → graph → decisions →
+lifecycle → framework-internal specs → CI wiring. Ends with a
+reference card listing every `pkt spec` flag.
+
+The goal was "empty directory → CI-gated spec module in 15
+minutes." Tested by writing the dogfood `specs/pkthunder.pkl`
+from this guide — it tracks.
+
+### Self-referential dogfood update
+
+Added three new scenarios to `specs/pkthunder.pkl`:
+
+  tooling.lint              → internal/spec/lint.go:Lint
+  tooling.template          → cmd/pkt/spec_templates.go
+  tooling.authoring-guide   → docs/notes/authoring-guide.md (doc)
+
+All three approved and implemented; coverage went from 37/43
+(86%) in phase 35 to 41/47 (87%) — three new specs declared, all
+three immediately implemented.
+
+`pkt spec --lint --discover` on the dogfood reports "clean (0
+issues)" — every cross-reference resolves, every approved entry
+has a description, no critical spec is unanchored, no future
+dates, no orphan implementedAt pointers.
+
+### What the dogfood lint caught while writing
+
+- One `contributes` reference to `goal.ci-trustworthy` that I
+  had typoed `goal.ci-trustyworthy` in an early draft —
+  `lint.broken-ref.contributes` caught it before I committed.
+- A scenario where I set `implementedBy = "code"` but forgot
+  `implementedAt`; — well, this didn't trigger an existing rule
+  (we have the inverse rule for "test" with implementedAt). New
+  rule candidate for the next cycle: `lint.code-doc-without-
+  implementedAt` (error level).
+
+### Implementation footprint
+
+- `internal/spec/lint.go`           ~230 LOC — Lint() + 11 rules +
+                                    FormatLint + LintExitCode
+- `cmd/pkt/main.go`                 --lint / --template flag
+                                    dispatch + countLintErrors
+- `cmd/pkt/spec_templates.go`       ~110 LOC — specTemplate() with
+                                    three string constants
+- `specs/pkthunder.pkl`             3 new tooling.* scenarios
+- `docs/notes/authoring-guide.md`   ~280 lines — full walkthrough
+- `README.md`                       CLI block: 3 new entries
+                                    (--lint / --template / --strict)
+- `findings.md`                     this entry
+
+Total ~340 LOC implementation + 280 lines of guide.
+
+### Deferred (still)
+
+- `lint.code-doc-without-implementedAt` — the obvious symmetric
+  rule, discovered in writing this guide. Add in the next pass.
+- Lint rule selection / disable — currently every rule runs. A
+  `--lint-disable lint.X,lint.Y` flag would help when a project
+  has legitimate exceptions.
+- `--template` for `Decision`, `Test.specRef` — niche; the
+  scenario / goal / module templates cover the bulk.
+- Subagent re-evaluation: doing it again every phase becomes
+  noise. Schedule once per major iteration instead.
+
+---
+
 ## Phase 35 — ID naming + strict implementedAt verification
 
 mizchi: "これを改善する。 また、 IDは連番ではなく、 可読性が

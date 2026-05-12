@@ -309,6 +309,39 @@ scenarios {
     implementedBy = "code"
     implementedAt = "internal/spec/spec.go:scenarioIsImplemented"
   }
+  new {
+    id = "tooling.lint"
+    name = "lint_catches_structural_authoring_mistakes"
+    description = "`pkt spec --lint` reports broken cross-references (dependsOn / supersedes / parent / replacedBy / contributes), missing descriptions on approved entries, critical specs with no Goal anchor, deprecated specs without replacedBy, future-dated decisions, and a few similar invariants. Error-level issues fail the command; warn / info are informational."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/lint.go:Lint"
+  }
+  new {
+    id = "tooling.template"
+    name = "template_skeleton_for_new_authoring"
+    description = "`pkt spec --template scenario|goal|module` prints a heavily-commented Pkl skeleton so authors don't start from a blank file. The module template includes the canonical amends + feature + goals + scenarios layout with placeholder ids."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "cmd/pkt/spec_templates.go"
+  }
+  new {
+    id = "tooling.authoring-guide"
+    name = "step_by_step_authoring_walkthrough_exists"
+    description = "A start-here doc walks new authors from empty directory to running `--check --lint --strict --discover` in roughly 15 minutes. Covers the Goal / Scenario / Test mental model, the dot-path id convention, lifecycle, graph edges, decision logs, framework-internal specs, and the CI single-line invocation."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/notes/authoring-guide.md"
+  }
 
   // ── goal.parallel-execution ──────────────────────────────────────
 

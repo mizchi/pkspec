@@ -347,11 +347,23 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	goalFilter := fs.String("goal", "", "limit every mode to scenarios that contribute to this Goal id")
 	severityFilter := fs.String("severity", "", "limit every mode to this severity (critical/major/minor)")
 	discover := fs.Bool("discover", false, "auto-discover Spec.pkl / Test.pkl / *.test.pkl files under the current directory (in addition to any positional args)")
+	lint := fs.Bool("lint", false, "instead of rendering, run convention lint over every Scenario / Goal / Decision — broken refs, missing descriptions, etc.")
+	template := fs.String("template", "", "instead of rendering, print a Pkl skeleton for one of: scenario, goal, module")
 	var tags multiString
 	fs.Var(&tags, "tag", "only include tests whose `tags` Listing contains this exact value (repeatable; OR)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	// --template takes no plan input; print and exit before file loading.
+	if *template != "" {
+		body, err := specTemplate(*template)
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(stdout, body)
+		return err
+	}
+
 	positional := fs.Args()
 	if *discover {
 		found, err := discoverSpecFiles(".")
@@ -400,6 +412,17 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		plans = spec.FilterPlansForSpec(plans, *goalFilter, *severityFilter)
 	}
 
+	if *lint {
+		issues := spec.Lint(plans)
+		_, err := io.WriteString(stdout, spec.FormatLint(issues))
+		if err != nil {
+			return err
+		}
+		if spec.LintExitCode(issues) != 0 {
+			return fmt.Errorf("%d lint error(s)", countLintErrors(issues))
+		}
+		return nil
+	}
 	if *orphans {
 		_, err := io.WriteString(stdout, spec.FormatOrphans(spec.Orphans(plans)))
 		return err
