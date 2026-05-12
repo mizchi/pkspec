@@ -369,6 +369,26 @@ pkspec timings -f Test.pkl --shard=K/N     preview which tests would land in sha
 explicit environment so CI history doesn't poison local-machine
 shard balancing (or vice-versa).
 
+## Development
+
+Project maintenance tasks are defined in `Taskfile.pkl` and run with
+[pkfire](https://github.com/mizchi/pkfire):
+
+```sh
+pkf list
+pkf run test
+pkf run build
+pkf run init-smoke
+pkf run release-check
+```
+
+`nix develop` includes `pkf`, `go`, `pkl`, and `gopls`. To create and
+push a release tag after `release-check` passes:
+
+```sh
+pkf run tag --version=0.1.3
+```
+
 ## Status
 
 Active development, frequent API churn. `v0.1.x` is the first

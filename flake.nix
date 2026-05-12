@@ -4,9 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    pkfire.url = "github:mizchi/pkfire/v0.6.0";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, pkfire }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
@@ -58,11 +59,13 @@
 
         # `nix develop` for working on pkspec itself.
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
+          packages = [
+            pkfire.packages.${system}.default
+          ] ++ (with pkgs; [
             go
             pkl
             gopls
-          ];
+          ]);
         };
       });
 }

@@ -255,6 +255,36 @@ func CheckUnimplemented(plans []*config.Plan) []SpecIssue {
 	return checkLegacy(plans)
 }
 
+// DeclaredSpecCount returns the number of unique active spec ids in
+// the input set. For Spec.pkl plans this follows --check semantics:
+// draft and deprecated scenarios are ignored. For legacy Test.pkl-only
+// inputs, pending tests carrying specRef are the declaration source.
+func DeclaredSpecCount(plans []*config.Plan) int {
+	ids := map[string]struct{}{}
+	if hasScenarios(plans) {
+		for _, p := range plans {
+			for _, sc := range p.Scenarios {
+				if sc.ID == nil || sc.Deprecated || sc.ReviewStatus == "draft" {
+					continue
+				}
+				ids[*sc.ID] = struct{}{}
+			}
+		}
+		return len(ids)
+	}
+	for _, p := range plans {
+		for _, t := range p.Tests {
+			if !isPending(t) {
+				continue
+			}
+			for _, id := range t.SpecRef {
+				ids[id] = struct{}{}
+			}
+		}
+	}
+	return len(ids)
+}
+
 func hasScenarios(plans []*config.Plan) bool {
 	for _, p := range plans {
 		if len(p.Scenarios) > 0 {
@@ -294,9 +324,9 @@ func checkFromScenarios(plans []*config.Plan) []SpecIssue {
 // considered verified. Three paths:
 //   - "test"  (default): an active Test.pkl carries the id in specRef
 //   - "code"             implementedAt is non-null (the impl lives in
-//                        framework / language source, not a Pkl test)
+//     framework / language source, not a Pkl test)
 //   - "doc"              implementedAt is non-null (the guarantee is a
-//                        reviewed doc, not a runnable assertion)
+//     reviewed doc, not a runnable assertion)
 func scenarioIsImplemented(sc *config.Scenario, impls map[string][]string) bool {
 	switch sc.ImplementedBy {
 	case "code", "doc":

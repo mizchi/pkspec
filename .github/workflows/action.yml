@@ -11,6 +11,7 @@ on:
       - "harness/**"
       - "internal/**"
       - "pkl/**"
+      - "Taskfile.pkl"
       - "*.go"
       - ".github/workflows/action.yml"
   pull_request:
@@ -22,6 +23,7 @@ on:
       - "harness/**"
       - "internal/**"
       - "pkl/**"
+      - "Taskfile.pkl"
       - "*.go"
       - ".github/workflows/action.yml"
   workflow_dispatch:

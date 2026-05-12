@@ -14,10 +14,10 @@ func TestCollectFiltersByTag(t *testing.T) {
 	plan := &config.Plan{
 		SourcePath: "/repo/tests/Test.pkl",
 		Tests: map[string]*config.Test{
-			"login":     {Tags: []string{"spec"}, Cmd: &cmd},
-			"ping":      {Tags: []string{"unit"}, Cmd: &cmd},
-			"old_regr":  {Tags: []string{"regression"}, Cmd: &cmd},
-			"untagged":  {Cmd: &cmd},
+			"login":    {Tags: []string{"spec"}, Cmd: &cmd},
+			"ping":     {Tags: []string{"unit"}, Cmd: &cmd},
+			"old_regr": {Tags: []string{"regression"}, Cmd: &cmd},
+			"untagged": {Cmd: &cmd},
 		},
 	}
 
@@ -107,5 +107,45 @@ func TestRenderGroupsByDirectory(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered SPEC missing %q\n---\n%s", want, out)
 		}
+	}
+}
+
+func TestDeclaredSpecCountFromScenariosSkipsDraftAndDeprecated(t *testing.T) {
+	activeID := "spec.active"
+	implementedID := "spec.implemented"
+	draftID := "spec.draft"
+	oldID := "spec.old"
+	cmd := "true"
+	plan := &config.Plan{
+		Tests: map[string]*config.Test{
+			"impl": {Cmd: &cmd, SpecRef: []string{implementedID}},
+		},
+		Scenarios: map[string]*config.Scenario{
+			"active": {
+				Name:         "active",
+				ID:           &activeID,
+				ReviewStatus: "approved",
+			},
+			"implemented": {
+				Name:         "implemented",
+				ID:           &implementedID,
+				ReviewStatus: "approved",
+			},
+			"draft": {
+				Name:         "draft",
+				ID:           &draftID,
+				ReviewStatus: "draft",
+			},
+			"old": {
+				Name:         "old",
+				ID:           &oldID,
+				ReviewStatus: "approved",
+				Deprecated:   true,
+			},
+		},
+	}
+
+	if got := DeclaredSpecCount([]*config.Plan{plan}); got != 2 {
+		t.Fatalf("DeclaredSpecCount() = %d, want 2", got)
 	}
 }

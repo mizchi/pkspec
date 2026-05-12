@@ -1,0 +1,169 @@
+amends "package://pkg.pkl-lang.org/github.com/mizchi/pkfire/pkfire@0.6.0#/Taskfile.pkl"
+
+local releaseVersion = "0.1.3"
+
+local goSources: Listing<String> = new {
+  "*.go"
+  "cmd/**/*.go"
+  "harness/**/*.go"
+  "internal/**/*.go"
+  "go.mod"
+  "go.sum"
+}
+
+local schemaSources: Listing<String> = new {
+  "pkl/**/*.pkl"
+  "pkl/**/*.pcf"
+}
+
+local examplesAndFixtures: Listing<String> = new {
+  "examples/**"
+  "experiments/**"
+}
+
+local ciSources: Listing<String> = new {
+  ...goSources
+  ...schemaSources
+  "action.yml"
+  ".github/workflows/**"
+  "flake.nix"
+  "flake.lock"
+}
+
+local default: Task = new {
+  name = "default"
+  description = "List available tasks"
+  cmd = "pkf list"
+  cache = false
+}
+
+local test: Task = new {
+  name = "test"
+  description = "Run Go tests"
+  cmd = "go test ./..."
+  inputs {
+    ...goSources
+    ...schemaSources
+    ...examplesAndFixtures
+  }
+}
+
+local build: Task = new {
+  name = "build"
+  description = "Build the pkspec binary"
+  cmd = "go build -trimpath -ldflags \"-s -w -X main.version=\(releaseVersion)\" -o ./bin/pkspec ./cmd/pkspec"
+  inputs {
+    ...goSources
+    ...schemaSources
+  }
+  outputs { "bin/pkspec" }
+}
+
+local smoke: Task = new {
+  name = "smoke"
+  description = "Smoke-test the locally built binary"
+  cmd = """
+    set -euo pipefail
+    ./bin/pkspec version
+    ./bin/pkspec help >/dev/null
+    """
+  cache = false
+  inputs { "bin/pkspec" }
+  deps { build }
+}
+
+local initSmoke: Task = new {
+  name = "init-smoke"
+  description = "Verify generated schemas can run a minimal test"
+  cmd = #"""
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    ./bin/pkspec init --dir "$tmp/pkspec"
+    cat > "$tmp/Test.pkl" <<'PKL'
+    amends "./pkspec/Test.pkl"
+
+    tests {
+      new {
+        name = "smoke"
+        cmd = "true"
+      }
+    }
+    PKL
+    ./bin/pkspec exec -f "$tmp/Test.pkl"
+    """#
+  cache = false
+  inputs { "bin/pkspec" }
+  deps { build }
+}
+
+local actionLint: Task = new {
+  name = "action-lint"
+  description = "Lint GitHub Actions workflows"
+  cmd = "actionlint"
+  cache = false
+  inputs {
+    "action.yml"
+    ".github/workflows/**"
+  }
+}
+
+local nixCheck: Task = new {
+  name = "nix-check"
+  description = "Evaluate the Nix flake"
+  cmd = "nix flake check --print-build-logs"
+  cache = false
+  inputs = ciSources
+}
+
+local nixBuild: Task = new {
+  name = "nix-build"
+  description = "Build the Nix package"
+  cmd = "nix build .#default --print-build-logs"
+  cache = false
+  inputs = ciSources
+}
+
+local releaseCheck: Task = new {
+  name = "release-check"
+  description = "Full local release gate"
+  cmd = "echo release-check ok"
+  cache = false
+  deps { test; smoke; initSmoke; actionLint; nixCheck; nixBuild }
+}
+
+local tag: Task = new {
+  name = "tag"
+  description = "Run release-check, create and push a v<version> tag"
+  cmd = """
+    set -euo pipefail
+    git diff --exit-code
+    git diff --cached --exit-code
+    git tag -a "v$VERSION" -m "Release v$VERSION"
+    git push origin main
+    git push origin "v$VERSION"
+    """
+  cache = false
+  deps { releaseCheck }
+  params {
+    new {
+      name = "version"
+      type = "string"
+      default = releaseVersion
+      description = "release version without the leading v"
+    }
+  }
+}
+
+tasks {
+  default
+  test
+  build
+  smoke
+  initSmoke
+  actionLint
+  nixCheck
+  nixBuild
+  releaseCheck
+  tag
+}

@@ -493,7 +493,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		}
 
 		if len(unimplemented) == 0 && len(strictIssues) == 0 {
-			fmt.Fprintf(stdout, "pkspec: all %d declared spec(s) have at least one implementing test\n", len(issues))
+			fmt.Fprintf(stdout, "pkspec: all %d declared spec(s) have an implementation\n", spec.DeclaredSpecCount(plans))
 			if *strict {
 				fmt.Fprintf(stdout, "pkspec: --strict: every implementedAt path resolves on disk\n")
 			}

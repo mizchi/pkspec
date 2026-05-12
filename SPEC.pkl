@@ -11,8 +11,14 @@
 ///     reviewed doc; `implementedBy + implementedAt` are the
 ///     pointer. `--check` accepts them without a Pkl Test.
 ///
-/// `pkspec spec --check --discover` is the canonical invocation:
-/// the root SPEC.pkl plus auto-discovered examples.
+/// Canonical gate for pkspec itself:
+///
+///   pkspec spec --check --strict SPEC.pkl examples/*/Test.pkl
+///
+/// Do not use `--discover` as the pkspec-own-spec gate. It also
+/// sweeps example fixture specs such as `examples/spec-graph/Spec.pkl`
+/// and `examples/spec-id/Spec.pkl`, which intentionally contain
+/// unimplemented scenarios to demonstrate `--check` / `--next`.
 ///
 /// ── ID naming convention ────────────────────────────────────
 ///
