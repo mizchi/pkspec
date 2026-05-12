@@ -1,13 +1,13 @@
 # quickcheck-subprocess
 
 Property-based testing against a subprocess. `iterations = N` runs
-the body N times; each iteration sees a fresh `$PKT_SEED` derived
+the body N times; each iteration sees a fresh `$PKSPEC_SEED` derived
 from `iterationSeed` via xorshift32 (the same algorithm
 `pkl/QuickCheck.pkl` uses). The subprocess derives its own input
 from the seed.
 
 ```sh
-pkt exec -f examples/quickcheck-subprocess/Test.pkl
+pkspec exec -f examples/quickcheck-subprocess/Test.pkl
 ```
 
 Expected: 1 passed (`addition_is_associative` runs 50 iterations,
@@ -19,13 +19,13 @@ all pass), 1 pending (`property_that_does_not_hold` is gated by
 Flip `pending = false` on the second test and re-run:
 
 ```sh
-pkt exec -f examples/quickcheck-subprocess/Test.pkl
+pkspec exec -f examples/quickcheck-subprocess/Test.pkl
 ```
 
 You'll see:
 
 ```
-[pkt] property_that_does_not_hold: failed (5ms)
+[pkspec] property_that_does_not_hold: failed (5ms)
       step ...: errored
         property failed at iteration 1/50 (seed=3336926330); pin `iterationSeed = 3336926330` to reproduce
         ...the script's own error output...
@@ -46,7 +46,7 @@ loop now starts from the bug.
   enough. `flakyAcceptable = true` even reports flakes as
   green.
 
-The two are mutually exclusive in spirit; pkt's implementation
+The two are mutually exclusive in spirit; pkspec's implementation
 ignores `retries` when `iterations > 1`.
 
 ## Shrink (opt-in)
@@ -55,7 +55,7 @@ The third Test (`shrinkable_modulo_property`, `pending = true` by
 default) demonstrates `shrink = true`. Flip pending off and run:
 
 ```sh
-pkt exec -f examples/quickcheck-subprocess/Test.pkl --only shrinkable
+pkspec exec -f examples/quickcheck-subprocess/Test.pkl --only shrinkable
 ```
 
 You'll see the seed narrow from 999,999 down to ~62,490 (the
@@ -81,5 +81,5 @@ doesn't (hashed-seed derivations get no benefit).
 
 See `docs/notes/quickcheck.md` for the full design, the Pkl-
 internal alternative (`pkl/QuickCheck.pkl` + `pkl test`), and
-the seed-stream contract that lets pkt's reported seed be
+the seed-stream contract that lets pkspec's reported seed be
 re-investigated inside `pkl test`.

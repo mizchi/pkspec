@@ -5,7 +5,7 @@ them in order. Same fixture exercises both, so the duration
 difference is visible at the report layer.
 
 ```sh
-pkt exec -f examples/parallel-steps/Test.pkl
+pkspec exec -f examples/parallel-steps/Test.pkl
 ```
 
 Expected:

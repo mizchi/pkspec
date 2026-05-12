@@ -22,7 +22,7 @@ var pklNoiseSubstrings = []string{
 // the original stderr. Returns a closer that flushes the pipe
 // and restores the original handle.
 //
-// Scope: applied at pkt main() entry, in effect for the whole
+// Scope: applied at pkspec main() entry, in effect for the whole
 // invocation. The original os.Stderr is captured before
 // replacement; the filter goroutine reads from the pipe and
 // writes the kept lines back to it.

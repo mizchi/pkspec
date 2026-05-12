@@ -1,11 +1,11 @@
 # quickcheck-input-space
 
-True input-space property-based testing: pkt knows the input type
+True input-space property-based testing: pkspec knows the input type
 (`IntInput { lo, hi }`), injects typed values into the env, and
 shrinks each input independently on failure.
 
 ```sh
-pkt exec -f examples/quickcheck-input-space/Test.pkl
+pkspec exec -f examples/quickcheck-input-space/Test.pkl
 ```
 
 Expected:
@@ -19,14 +19,14 @@ Edit `Test.pkl` and change the second test's `pending` to false:
 
 ```sh
 sed -i.bak 's/pending = true/pending = false/' examples/quickcheck-input-space/Test.pkl
-pkt exec -f examples/quickcheck-input-space/Test.pkl --only multiplication
+pkspec exec -f examples/quickcheck-input-space/Test.pkl --only multiplication
 mv examples/quickcheck-input-space/Test.pkl.bak examples/quickcheck-input-space/Test.pkl
 ```
 
 Output:
 
 ```
-[pkt] multiplication_bounded: failed (52ms)
+[pkspec] multiplication_bounded: failed (52ms)
       property failed at iteration 0/30 (seed=1234567) with inputs {A=7, B=15}
 shrink: {A=10, B=17} → {A=7, B=15} (5 steps)
 shrink: A 10 → 9 still fails
@@ -52,9 +52,9 @@ counterexamples exist (`{A=5, B=20}` = 100), but the greedy
 per-input shrinker stops once each input independently can't
 shrink further without flipping to pass.
 
-## When to use `inputs` vs raw `$PKT_SEED`
+## When to use `inputs` vs raw `$PKSPEC_SEED`
 
-| | `inputs { ... }` | raw `$PKT_SEED` |
+| | `inputs { ... }` | raw `$PKSPEC_SEED` |
 | --- | --- | --- |
 | Input type known? | yes (today: Int) | author derives in body |
 | Failure surfaces values? | yes (`A=7, B=15`) | only the seed |
@@ -63,8 +63,8 @@ shrink further without flipping to pass.
 | Today's input types | Int only | any (author choice) |
 
 Use `inputs` when the property has explicit named integer
-parameters. Use raw `$PKT_SEED` when the input is complex
-(structured, derived from external state, or types pkt doesn't
+parameters. Use raw `$PKSPEC_SEED` when the input is complex
+(structured, derived from external state, or types pkspec doesn't
 yet support — strings, lists, maps).
 
 ## Limitations

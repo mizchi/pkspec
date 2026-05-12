@@ -5,7 +5,7 @@
 `captureStdout` into an env var that downstream code sees.
 
 ```sh
-pkt exec -f examples/hooks-lifecycle/Test.pkl
+pkspec exec -f examples/hooks-lifecycle/Test.pkl
 ```
 
 Execution order:

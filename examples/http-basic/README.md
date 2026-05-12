@@ -6,7 +6,7 @@ status + body shape via `expectBodyJsonPath`. The path syntax is
 gjson — `items.0.name`, `items.#` (array length), `items.#(role==admin)`.
 
 ```sh
-pkt exec -f examples/http-basic/Test.pkl
+pkspec exec -f examples/http-basic/Test.pkl
 ```
 
 Expected: passed in ~50ms. The server is killed automatically

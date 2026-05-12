@@ -586,7 +586,7 @@ func (e *Executor) runHook(ctx context.Context, displayName string, h *config.Ho
 	}
 
 	if sr.Outcome != OutcomePassed {
-		fmt.Fprintf(e.opts.Stderr, "[pkt] %s: %s (%s)\n",
+		fmt.Fprintf(e.opts.Stderr, "[pkspec] %s: %s (%s)\n",
 			displayName, sr.Outcome, sr.Duration.Round(time.Millisecond))
 		for _, r := range sr.Reasons {
 			fmt.Fprintf(e.opts.Stderr, "      %s\n", r)
@@ -607,7 +607,7 @@ func formatResult(w io.Writer, res Result) {
 	if len(res.SpecRef) > 0 {
 		specSuffix = " (verifies " + strings.Join(res.SpecRef, ", ") + ")"
 	}
-	fmt.Fprintf(w, "[pkt] %s: %s%s%s (%s)\n",
+	fmt.Fprintf(w, "[pkspec] %s: %s%s%s (%s)\n",
 		res.Name, res.Outcome, suffix, specSuffix, res.Duration.Round(time.Millisecond))
 	for _, sr := range res.Steps {
 		if sr.Outcome == OutcomeSkipped {
@@ -691,7 +691,7 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 	// With Test.inputs non-empty, the property loop switches to
 	// input-space mode: typed values are generated per-iteration
 	// and shrunk independently on failure. Otherwise the older
-	// seed-only path (PKT_SEED env injection + seed-space shrink)
+	// seed-only path (PKSPEC_SEED env injection + seed-space shrink)
 	// is used.
 	if t.Iterations > 1 {
 		if len(t.Inputs) > 0 {
@@ -721,7 +721,7 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 }
 
 // runIterated executes the body Test.Iterations times, advancing a
-// xorshift32 seed each iteration. PKT_SEED and PKT_ITERATION are
+// xorshift32 seed each iteration. PKSPEC_SEED and PKSPEC_ITERATION are
 // injected into the extraEnv so the subprocess can derive its own
 // input. The first failing iteration is reported with its seed in
 // the Reasons; passing iterations are silent. Retries are
@@ -736,8 +736,8 @@ func (e *Executor) runIterated(ctx context.Context, name string, mode config.Mod
 		for k, v := range extraEnv {
 			iterEnv[k] = v
 		}
-		iterEnv["PKT_ITERATION"] = strconv.Itoa(i)
-		iterEnv["PKT_SEED"] = strconv.FormatUint(uint64(seed), 10)
+		iterEnv["PKSPEC_ITERATION"] = strconv.Itoa(i)
+		iterEnv["PKSPEC_SEED"] = strconv.FormatUint(uint64(seed), 10)
 
 		last = e.runAttempt(ctx, name, mode, t, defaults, iterEnv)
 		if last.Outcome != OutcomePassed {
@@ -801,10 +801,10 @@ func xorshift32Step(s uint32) uint32 {
 // when no candidate from the probe set fails, stop and return
 // the smallest seed observed.
 //
-// This is seed-space shrinking, not input-space shrinking. pkt
-// has no view of how the body derives its input from `$PKT_SEED`,
+// This is seed-space shrinking, not input-space shrinking. pkspec
+// has no view of how the body derives its input from `$PKSPEC_SEED`,
 // so "smaller seed" only loosely correlates with "smaller input".
-// Works well for `PKT_SEED % N` style derivations; fails to
+// Works well for `PKSPEC_SEED % N` style derivations; fails to
 // shrink anything when the body hashes the seed first.
 func (e *Executor) shrinkSeed(ctx context.Context, name string, mode config.Mode, t *config.Test, defaults *config.Defaults, extraEnv map[string]string, failSeed uint32, budget int) (uint32, string) {
 	var trace []string
@@ -835,8 +835,8 @@ func (e *Executor) shrinkSeed(ctx context.Context, name string, mode config.Mode
 			for k, v := range extraEnv {
 				env[k] = v
 			}
-			env["PKT_ITERATION"] = "-1"
-			env["PKT_SEED"] = strconv.FormatUint(uint64(candidate), 10)
+			env["PKSPEC_ITERATION"] = "-1"
+			env["PKSPEC_SEED"] = strconv.FormatUint(uint64(candidate), 10)
 
 			res := e.runAttempt(ctx, name, mode, t, defaults, env)
 			if res.Outcome != OutcomePassed {
@@ -1081,7 +1081,7 @@ func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Tes
 	}
 
 	// `repeat`: run the step N times in sequence; first failure
-	// aborts. PKT_REPEAT carries the 0-based index. Captures
+	// aborts. PKSPEC_REPEAT carries the 0-based index. Captures
 	// reflect the last successful repetition.
 	reps := step.Repeat
 	if reps < 1 {
@@ -1095,7 +1095,7 @@ func (e *Executor) runStep(ctx context.Context, step *config.Step, t *config.Tes
 			for k, v := range state {
 				repState[k] = v
 			}
-			repState["PKT_REPEAT"] = strconv.Itoa(i)
+			repState["PKSPEC_REPEAT"] = strconv.Itoa(i)
 		}
 		if step.Eventually == nil {
 			last = e.runStepOnce(ctx, step, t, defaults, repState)
@@ -1573,7 +1573,7 @@ func (e *Executor) httpDispatch(
 			UpdatedAt:   time.Now().UTC().Format(time.RFC3339),
 		}
 		if werr := writeHttpCassette(e.cassettePath(cassetteName), cas); werr != nil {
-			fmt.Fprintf(e.opts.Stderr, "[pkt] warning: write cassette %s: %v\n", cassetteName, werr)
+			fmt.Fprintf(e.opts.Stderr, "[pkspec] warning: write cassette %s: %v\n", cassetteName, werr)
 		}
 	}
 
@@ -2079,7 +2079,7 @@ func (e *Executor) checkInline(blockName, fieldName string, expected *string, ac
 		if err := e.rewriteInline(blockName, fieldName, actual); err != nil {
 			return fmt.Sprintf("%s update failed: %v", fieldName, err)
 		}
-		fmt.Fprintf(e.opts.Stderr, "[pkt] %s for %q updated (%d bytes)\n",
+		fmt.Fprintf(e.opts.Stderr, "[pkspec] %s for %q updated (%d bytes)\n",
 			fieldName, blockName, len(actual))
 		return ""
 	}
@@ -2140,7 +2140,7 @@ func (e *Executor) aiSnapshotPath(name string) string {
 // miss. The judge contract is:
 //
 //   - body on stdin
-//   - prompt via $PKT_AI_PROMPT
+//   - prompt via $PKSPEC_AI_PROMPT
 //   - exit 0 = pass, non-zero = fail
 //   - stdout = explanation
 //
@@ -2193,7 +2193,7 @@ func (e *Executor) evaluateAi(ctx context.Context, a *config.AiAssertion, body [
 		if cached, ok := readAiSnapshot(path); ok && cached.Hash == digest {
 			if cached.Cmd != "" && cached.Cmd != a.Cmd {
 				fmt.Fprintf(e.opts.Stderr,
-					"[pkt] warning: ai snapshot %q reuses verdict from a different judge (cached cmd %q, current cmd %q); run --refresh-ai to re-evaluate\n",
+					"[pkspec] warning: ai snapshot %q reuses verdict from a different judge (cached cmd %q, current cmd %q); run --refresh-ai to re-evaluate\n",
 					a.SnapshotName, cached.Cmd, a.Cmd)
 			}
 			return cached.Verdict == "pass", cached.Explanation, true, nil
@@ -2202,7 +2202,7 @@ func (e *Executor) evaluateAi(ctx context.Context, a *config.AiAssertion, body [
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "bash", "-c", a.Cmd)
-	cmd.Env = append(os.Environ(), "PKT_AI_PROMPT="+a.Prompt)
+	cmd.Env = append(os.Environ(), "PKSPEC_AI_PROMPT="+a.Prompt)
 	cmd.Stdin = bytes.NewReader(body)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -2242,7 +2242,7 @@ func (e *Executor) evaluateAi(ctx context.Context, a *config.AiAssertion, body [
 		UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := writeAiSnapshot(path, snap); err != nil {
-		fmt.Fprintf(e.opts.Stderr, "[pkt] warning: write ai snapshot %s: %v\n", a.SnapshotName, err)
+		fmt.Fprintf(e.opts.Stderr, "[pkspec] warning: write ai snapshot %s: %v\n", a.SnapshotName, err)
 	}
 	return pass, explanation, false, nil
 }

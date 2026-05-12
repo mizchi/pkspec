@@ -193,7 +193,7 @@ class Step {
   always: Boolean = false
 
   /// Repeat the step N times in sequence, each repetition seeing
-  /// `$PKT_REPEAT` (0-based index) in its env. Useful for "POST
+  /// `$PKSPEC_REPEAT` (0-based index) in its env. Useful for "POST
   /// the same endpoint 5 times" / "warm up the cache 10 times"
   /// patterns the Pkl-static schema can't express directly.
   ///
@@ -215,7 +215,7 @@ class Step {
 ///
 /// Authoring contract: the judge is any executable that receives the
 /// step's response body on stdin, the prompt via the env var
-/// `PKT_AI_PROMPT`, and signals its verdict by exit code (0 = pass,
+/// `PKSPEC_AI_PROMPT`, and signals its verdict by exit code (0 = pass,
 /// non-zero = fail). Stdout is captured as the explanation surfaced
 /// in the report.
 ///
@@ -228,7 +228,7 @@ class AiAssertion {
   prompt: String(length > 0)
 
   /// Shell command that judges the body. Receives the body on stdin
-  /// and the prompt via `$PKT_AI_PROMPT`. Exit 0 = pass, non-0 =
+  /// and the prompt via `$PKSPEC_AI_PROMPT`. Exit 0 = pass, non-0 =
   /// fail. Stdout is captured as the explanation.
   cmd: String(length > 0)
 
@@ -352,7 +352,7 @@ class PlaywrightTestSpec {
   configPath: String? = null
 
   /// Optional `--grep <pattern>` filter applied at playwright-test
-  /// level (not pkt's `--only`). Use this when the suite has more
+  /// level (not pkspec's `--only`). Use this when the suite has more
   /// tests than you want this Step to run.
   grep: String? = null
 
@@ -405,7 +405,7 @@ class IntInput extends Input {
 /// DSN scheme today: `sqlite:./path/to.db` (relative to the Step
 /// workdir) or `sqlite::memory:` for an ephemeral in-process DB.
 /// Postgres / MySQL DSNs will be added as drivers are linked into
-/// the pkt binary; for now SQLite is enough for the canonical
+/// the pkspec binary; for now SQLite is enough for the canonical
 /// "did the row land?" assertion.
 ///
 /// All Step-level expectations (rowcount, jsonpath against the
@@ -469,7 +469,7 @@ class ScreenshotSnapshot {
 /// Without a `generator`: on first encounter the consumer's own
 /// captured output becomes the snapshot, the test fails so the user
 /// reviews and commits, and subsequent runs do a byte-exact compare.
-/// `pkt exec --refresh-snapshots` rewrites every snapshot.
+/// `pkspec exec --refresh-snapshots` rewrites every snapshot.
 ///
 /// With a `generator`: the runner instead executes the generator's
 /// shell command (typically a reference implementation) and uses
@@ -542,8 +542,8 @@ class Test {
   name: String(matches(Regex(#"^[a-zA-Z0-9_][a-zA-Z0-9_:.\-/ ]*$"#)))
   description: String? = null
 
-  /// Free-form classification tags. Used by `pkt exec --tag <name>` to
-  /// filter the run set and by `pkt spec` to group tests in the
+  /// Free-form classification tags. Used by `pkspec exec --tag <name>` to
+  /// filter the run set and by `pkspec spec` to group tests in the
   /// generated SPEC. Conventional values: "spec" (high-level behaviour
   /// to verify against the implementation), "unit" (small deterministic
   /// check), "regression" (pinned around a fixed bug). Authors may
@@ -558,8 +558,8 @@ class Test {
   /// Identifiers of spec entries this test verifies. Each id refers
   /// to a `Scenario.id` declared in `Spec.pkl` (typically across a
   /// boundary — the spec lives in one module, the implementing test
-  /// in another). `pkt spec` cross-links id → verifying tests in the
-  /// generated SPEC.md, and `pkt spec --check` reports declared
+  /// in another). `pkspec spec` cross-links id → verifying tests in the
+  /// generated SPEC.md, and `pkspec spec --check` reports declared
   /// specs that no active test references.
   ///
   /// Auto-populated by `Spec.pkl` when a Scenario carries an `id`:
@@ -609,7 +609,7 @@ class Test {
 
   /// Property-based: run the body `iterations` times. Each iteration
   /// gets a fresh seed (xorshift32 stepped from `iterationSeed`)
-  /// injected as `$PKT_SEED`, plus `$PKT_ITERATION` (0-based). The
+  /// injected as `$PKSPEC_SEED`, plus `$PKSPEC_ITERATION` (0-based). The
   /// subprocess derives its own input from these values. Every
   /// iteration must pass; the first failing iteration's seed is
   /// surfaced in the result so the operator can pin
@@ -623,7 +623,7 @@ class Test {
   /// Seed for the iteration sequence. The seed at iteration index
   /// `i` is `QuickCheck.seedAt(iterationSeed, i)`; the Go executor
   /// reproduces the exact xorshift32 stream that
-  /// `pkl/QuickCheck.pkl` generates, so a failure reported by pkt
+  /// `pkl/QuickCheck.pkl` generates, so a failure reported by pkspec
   /// can be re-investigated inside `pkl test` with the same seed.
   iterationSeed: Int = 1
 
@@ -633,10 +633,10 @@ class Test {
   /// ... bounded by `shrinkAttempts`) and reports the smallest
   /// seed that still fails.
   ///
-  /// **This is not true input shrinking.** pkt does not know how
-  /// the body derives input from `$PKT_SEED`; it can only try
+  /// **This is not true input shrinking.** pkspec does not know how
+  /// the body derives input from `$PKSPEC_SEED`; it can only try
   /// numerically smaller seeds. The shrink is useful when the
-  /// derivation is monotonic-ish (`PKT_SEED % N`, integer
+  /// derivation is monotonic-ish (`PKSPEC_SEED % N`, integer
   /// division) and worthless when the derivation hashes the seed
   /// or maps it non-monotonically. Treat the shrunk seed as a
   /// hint, not a proof of minimality.
@@ -649,7 +649,7 @@ class Test {
   shrinkAttempts: Int(this >= 0) = 32
 
   /// Typed input-space generators. When non-empty, the runner
-  /// switches from raw `$PKT_SEED` injection to per-input
+  /// switches from raw `$PKSPEC_SEED` injection to per-input
   /// generation: each entry's value is derived from the iteration
   /// seed (using a per-input sub-seed via `QuickCheck.seedAt`) and
   /// injected into the env under the entry's name.
@@ -916,7 +916,7 @@ class RenderedHook {
 
 /// One entry in a Scenario's append-only decision log. The
 /// runner never modifies these — the Go side reads them, the
-/// `pkt spec --decisions` command formats them. See
+/// `pkspec spec --decisions` command formats them. See
 /// `docs/notes/spec-graph.md` for the convention.
 class RenderedDecision {
   date: String
@@ -926,7 +926,7 @@ class RenderedDecision {
 }
 
 /// A Scenario rendered for the Go runner. Carries every
-/// metadata field needed by `pkt spec --check / --coverage /
+/// metadata field needed by `pkspec spec --check / --coverage /
 /// --graph / --decisions / --goals / --next`. Test-execution
 /// semantics live on `RenderedTest`; `RenderedScenario` is the
 /// spec-side counterpart and is only consulted by spec tooling.
@@ -944,7 +944,7 @@ class RenderedScenario {
   /// "I assume X works."
   parent: String?
   /// `contributes` lists `Goal.id` values this Scenario advances.
-  /// `pkt spec --next` aggregates open contributions to suggest
+  /// `pkspec spec --next` aggregates open contributions to suggest
   /// which spec to implement next.
   contributes: Listing<String>
   reviewStatus: String        // "draft" | "review" | "approved"
@@ -955,7 +955,7 @@ class RenderedScenario {
   /// How the scenario is verified — "test" (a Test.pkl with
   /// matching specRef), "code" (framework-internal Go behaviour
   /// pointed at by `implementedAt`), or "doc" (prose guarantee
-  /// pointed at by `implementedAt`). `pkt spec --check` accepts
+  /// pointed at by `implementedAt`). `pkspec spec --check` accepts
   /// `code` / `doc` entries whose `implementedAt` is non-null.
   implementedBy: String       // "test" | "code" | "doc"
   /// Free-form pointer to the implementing artefact —
@@ -970,7 +970,7 @@ class RenderedScenario {
 /// A Goal rendered for the Go runner. Goals carry no test
 /// implementation themselves — they are user-facing value
 /// statements that Scenarios contribute toward via
-/// `Scenario.contributes`. `pkt spec --next` ranks unimplemented
+/// `Scenario.contributes`. `pkspec spec --next` ranks unimplemented
 /// scenarios by their parent Goal's priority.
 class RenderedGoal {
   id: String

@@ -6,7 +6,7 @@ String entries in `args`, so captures from earlier steps flow
 through naturally.
 
 ```sh
-pkt exec -f examples/sql-parameterised/Test.pkl
+pkspec exec -f examples/sql-parameterised/Test.pkl
 ```
 
 Expected: passed in ~10ms.

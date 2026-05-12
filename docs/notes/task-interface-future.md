@@ -153,7 +153,7 @@ new Test {
 }
 ```
 
-`pkt spec` lists this with an `[x]` checkbox (body is present);
-`pkt exec` reports it as errored with the "not yet implemented"
+`pkspec spec` lists this with an `[x]` checkbox (body is present);
+`pkspec exec` reports it as errored with the "not yet implemented"
 reason. When the runner lands, the same fixture passes without
 schema changes.

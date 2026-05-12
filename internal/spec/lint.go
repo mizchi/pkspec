@@ -270,7 +270,7 @@ func FormatLint(issues []LintIssue) string {
 	return string(b)
 }
 
-// LintExitCode returns a recommended exit code for a `pkt spec --lint`
+// LintExitCode returns a recommended exit code for a `pkspec spec --lint`
 // invocation: 1 if any error-level issues exist, 0 otherwise. Warn /
 // info are not failure-worthy by default.
 func LintExitCode(issues []LintIssue) int {

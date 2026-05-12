@@ -1,7 +1,7 @@
 amends "../../pkl/Test.pkl"
 
 // Implementing tests for the specs in Spec.pkl. `specRef` is the
-// cross-reference; pkt spec uses it to mark which specs already
+// cross-reference; pkspec spec uses it to mark which specs already
 // have an active implementation.
 tests {
   new {
@@ -17,5 +17,5 @@ tests {
     inlineStdout = "409\n"
   }
   // SIGNUP-003 deliberately has no implementing test —
-  // `pkt spec --check` should surface it as unimplemented.
+  // `pkspec spec --check` should surface it as unimplemented.
 }

@@ -50,5 +50,5 @@ jobs:
 
       - name: Smoke test
         run: |
-          ./result/bin/pkt version
-          ./result/bin/pkt help
+          ./result/bin/pkspec version
+          ./result/bin/pkspec help

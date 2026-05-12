@@ -1,6 +1,6 @@
 # Test execution order
 
-`pkt exec` runs Tests in **alphabetical order by `Test.name`**,
+`pkspec exec` runs Tests in **alphabetical order by `Test.name`**,
 not in declaration order. Mirrors `go test`, `pytest` (with
 sorted collection), and `pkl test` facts.
 
@@ -85,8 +85,8 @@ new Test {
 - `--only <substring>` — filters which Tests run, not their order.
 - `--tag <name>` — same.
 
-## What `pkt spec` does
+## What `pkspec spec` does
 
-`pkt spec` lists Tests in the same order (`sort.Strings`) as
+`pkspec spec` lists Tests in the same order (`sort.Strings`) as
 the runner. The order reads the same in the live run and the
 generated SPEC.md.

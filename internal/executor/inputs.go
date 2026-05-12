@@ -113,16 +113,16 @@ func deriveInt(seed uint32, lo, hi int) int {
 	return lo + int(uint64(seed)%uint64(span))
 }
 
-// composeInputEnv copies extraEnv, then layers PKT_SEED /
-// PKT_ITERATION plus one entry per input (verbatim names, since
+// composeInputEnv copies extraEnv, then layers PKSPEC_SEED /
+// PKSPEC_ITERATION plus one entry per input (verbatim names, since
 // the user already controls casing in their Pkl).
 func composeInputEnv(extra map[string]string, values map[string]int, iter int, seed uint32) map[string]string {
 	out := make(map[string]string, len(extra)+len(values)+2)
 	for k, v := range extra {
 		out[k] = v
 	}
-	out["PKT_ITERATION"] = strconv.Itoa(iter)
-	out["PKT_SEED"] = strconv.FormatUint(uint64(seed), 10)
+	out["PKSPEC_ITERATION"] = strconv.Itoa(iter)
+	out["PKSPEC_SEED"] = strconv.FormatUint(uint64(seed), 10)
 	for k, v := range values {
 		out[k] = strconv.Itoa(v)
 	}

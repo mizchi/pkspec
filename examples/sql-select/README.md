@@ -6,7 +6,7 @@ in-memory SQLite DB seeded inline (CTE) so the example needs no
 external `.db` file.
 
 ```sh
-pkt exec -f examples/sql-select/Test.pkl
+pkspec exec -f examples/sql-select/Test.pkl
 ```
 
 Expected: passed in ~1ms.

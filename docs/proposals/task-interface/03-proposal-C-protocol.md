@@ -242,8 +242,8 @@ shape), (b) each runner's "config keys" doc, (c) each sugar module
 shape, so this is closer to a rename than a redesign.
 
 **Operational note.** External runners that ship as Go packages need
-to be linked into the user's `pkt` binary. Either: (a) users build
-their own pkt with runners they need, or (b) pkt grows a plugin
+to be linked into the user's `pkspec` binary. Either: (a) users build
+their own pkspec with runners they need, or (b) pkspec grows a plugin
 mechanism (Go plugin, hashicorp/go-plugin via subprocess). Plugins
-are out of scope here; the assumption is "you build your own pkt for
+are out of scope here; the assumption is "you build your own pkspec for
 your project" or "you contribute the runner upstream."

@@ -33,10 +33,10 @@ tests {
 ```
 
 ```sh
-pkt exec -f Test.pkl --shard=2/4         # 4-way history-balanced split
-pkt exec -f Test.pkl --rerun-failed      # only previously failed tests
-pkt timings -f Test.pkl --shard=2/4      # preview the shard without running
-pkt spec tests/**/*.pkl                  # render SPEC.md from Scenario tags
+pkspec exec -f Test.pkl --shard=2/4         # 4-way history-balanced split
+pkspec exec -f Test.pkl --rerun-failed      # only previously failed tests
+pkspec timings -f Test.pkl --shard=2/4      # preview the shard without running
+pkspec spec tests/**/*.pkl                  # render SPEC.md from Scenario tags
 ```
 
 ## Why Pkl
@@ -50,12 +50,12 @@ schema:
   across scenarios, parameterize it via Pkl `import`, generate it
   from a property-based input.
 - **Language-independent**: the schema lives in `pkl/`, the runner
-  in Go (`cmd/pkt/`). A new test kind is a new Pkl class plus a
+  in Go (`cmd/pkspec/`). A new test kind is a new Pkl class plus a
   new Go executor — the authoring surface and the runtime stay
   decoupled.
 - **Reusable with `pkl test`**: pkspec rendered output is a Pkl
   module; Pkl's own facts / examples / snapshot machinery still
-  applies, and `pkt run` wraps `pkl test` so its unreliable exit
+  applies, and `pkspec run` wraps `pkl test` so its unreliable exit
   code becomes CI-trustworthy.
 
 ## Generalized retry, sharding, and timing
@@ -66,12 +66,12 @@ The features `playwright test` ships as built-ins (`--retries`,
 | feature                  | flag / schema                                  |
 | ------------------------ | ---------------------------------------------- |
 | per-attempt retry        | `Test.retries`, `Test.flakyAcceptable`         |
-| cross-run shard split    | `pkt exec --shard=K/N` (LPT bin-packing)       |
-| rerun last fail set      | `pkt exec --rerun-failed`                      |
-| global wall-clock cap    | `pkt exec --total-timeout=5m`                  |
+| cross-run shard split    | `pkspec exec --shard=K/N` (LPT bin-packing)       |
+| rerun last fail set      | `pkspec exec --rerun-failed`                      |
+| global wall-clock cap    | `pkspec exec --total-timeout=5m`                  |
 | per-test wall-clock cap  | `Test.timeoutSec`                              |
 | polling / eventually     | `Step.eventually = new { intervalMs; timeoutSec }` |
-| inspection / preview     | `pkt timings -f Test.pkl --shard=K/N`          |
+| inspection / preview     | `pkspec timings -f Test.pkl --shard=K/N`          |
 
 Sharding uses an append-only `.pkspec/timings.jsonl` history,
 median of the most recent 5 runs per test, Longest-Processing-Time
@@ -115,7 +115,7 @@ invocations with explicit expectations.
 **`Spec.pkl` (mid)** — BDD-style Given / When / Then scenarios that
 desugar to Tests. A scenario tagged `spec` with an empty body is
 auto-pending — the description is the spec, the body lands later
-without renaming the test. `pkt spec` renders Markdown SPEC.md from
+without renaming the test. `pkspec spec` renders Markdown SPEC.md from
 the scenarios.
 
 **`expectAi` (orthogonal)** — fuzzy natural-language assertions on
@@ -140,7 +140,7 @@ append-only decision log, and a list of open questions. Goals are
 sibling user-value statements with no test of their own; scenarios
 point at them via `contributes`. `Test.pkl` implements scenarios
 via `specRef`. The runner prints `(verifies AUTH-001)` on each
-test line; `pkt spec` grows six read-only modes:
+test line; `pkspec spec` grows six read-only modes:
 
 - `--check` — CI gate: exit 1 on any non-draft non-deprecated spec
   without an implementing test
@@ -244,7 +244,7 @@ nix run github:mizchi/pkspec -- exec -f path/to/Test.pkl
 nix profile install github:mizchi/pkspec
 ```
 
-The flake builds the `pkt` binary and wraps it so the bundled Pkl
+The flake builds the `pkspec` binary and wraps it so the bundled Pkl
 CLI is on `PATH` automatically. The Nix workflow on every push to
 `main` and every PR builds the flake on `aarch64-darwin` and
 `x86_64-linux`; the badge above tracks its status.
@@ -268,7 +268,7 @@ In a home-manager flake:
 ### Go
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/pkt@latest
+go install github.com/mizchi/pkspec/cmd/pkspec@latest
 ```
 
 You also need the [Pkl CLI](https://pkl-lang.org/main/current/pkl-cli/)
@@ -277,40 +277,40 @@ on `PATH` — that's exactly the friction Nix removes.
 ## CLI
 
 ```
-pkt exec -f Test.pkl                    run all tests in a module
-pkt exec -f Test.pkl --tag spec         filter by Test.tags (repeatable, OR)
-pkt exec -f Test.pkl --only login       filter by name substring (repeatable, OR)
-pkt exec -f Test.pkl --shard=K/N        run only the K-th shard of N (LPT)
-pkt exec -f Test.pkl --rerun-failed     only tests whose latest record is non-pass
-pkt exec -f Test.pkl --total-timeout=5m abort run after wall-clock cap
-pkt exec -f Test.pkl --junit-reports DIR write JUnit XML
+pkspec exec -f Test.pkl                    run all tests in a module
+pkspec exec -f Test.pkl --tag spec         filter by Test.tags (repeatable, OR)
+pkspec exec -f Test.pkl --only login       filter by name substring (repeatable, OR)
+pkspec exec -f Test.pkl --shard=K/N        run only the K-th shard of N (LPT)
+pkspec exec -f Test.pkl --rerun-failed     only tests whose latest record is non-pass
+pkspec exec -f Test.pkl --total-timeout=5m abort run after wall-clock cap
+pkspec exec -f Test.pkl --junit-reports DIR write JUnit XML
 
-pkt run [pkl test args...]              wrap `pkl test` with a trustworthy exit code
+pkspec run [pkl test args...]              wrap `pkl test` with a trustworthy exit code
 
-pkt spec tests/**/*.pkl                 render Markdown SPEC.md from Scenario tags
-pkt spec tests/**/*.pkl --output SPEC.md
-pkt spec tests/**/*.pkl --tag spec
-pkt spec --check Spec.pkl Test.pkl      CI gate: declared specs vs implementing tests
-pkt spec --coverage Spec.pkl Test.pkl   coverage report by severity / review-status
-pkt spec --graph Spec.pkl Test.pkl      graphviz dot of dependsOn / supersedes / replacedBy
-pkt spec --decisions Spec.pkl Test.pkl  newest-first Markdown decision log
-pkt spec --goals Spec.pkl Test.pkl      user-facing Goals + their contributing-spec coverage
-pkt spec --next Spec.pkl Test.pkl       unimplemented specs ranked by Goal priority + severity
-pkt spec --orphans Test.pkl...          active tests with no specRef (spec-link backlog)
-pkt spec --lint Spec.pkl...             convention checks: broken refs, missing descriptions, ...
-pkt spec --lint --lint-disable lint.X   suppress one or more rule ids (comma-separated)
-pkt spec --template scenario|goal|module  print a Pkl skeleton (no input files needed)
-pkt spec --discover                     auto-walk for Spec.pkl / Test.pkl / specs/*.pkl
-pkt spec --check --strict               verify implementedAt paths exist on disk
-pkt spec --check --goal goal.X          filter every mode to one Goal
-pkt spec --check --severity critical    filter every mode to one severity
+pkspec spec tests/**/*.pkl                 render Markdown SPEC.md from Scenario tags
+pkspec spec tests/**/*.pkl --output SPEC.md
+pkspec spec tests/**/*.pkl --tag spec
+pkspec spec --check Spec.pkl Test.pkl      CI gate: declared specs vs implementing tests
+pkspec spec --coverage Spec.pkl Test.pkl   coverage report by severity / review-status
+pkspec spec --graph Spec.pkl Test.pkl      graphviz dot of dependsOn / supersedes / replacedBy
+pkspec spec --decisions Spec.pkl Test.pkl  newest-first Markdown decision log
+pkspec spec --goals Spec.pkl Test.pkl      user-facing Goals + their contributing-spec coverage
+pkspec spec --next Spec.pkl Test.pkl       unimplemented specs ranked by Goal priority + severity
+pkspec spec --orphans Test.pkl...          active tests with no specRef (spec-link backlog)
+pkspec spec --lint Spec.pkl...             convention checks: broken refs, missing descriptions, ...
+pkspec spec --lint --lint-disable lint.X   suppress one or more rule ids (comma-separated)
+pkspec spec --template scenario|goal|module  print a Pkl skeleton (no input files needed)
+pkspec spec --discover                     auto-walk for Spec.pkl / Test.pkl / specs/*.pkl
+pkspec spec --check --strict               verify implementedAt paths exist on disk
+pkspec spec --check --goal goal.X          filter every mode to one Goal
+pkspec spec --check --severity critical    filter every mode to one severity
 
-pkt timings -f Test.pkl                 per-test runs / median / p90 / latest / kind
-pkt timings -f Test.pkl --failing       only tests whose latest record is non-pass
-pkt timings -f Test.pkl --shard=K/N     preview which tests would land in shard K/N
+pkspec timings -f Test.pkl                 per-test runs / median / p90 / latest / kind
+pkspec timings -f Test.pkl --failing       only tests whose latest record is non-pass
+pkspec timings -f Test.pkl --shard=K/N     preview which tests would land in shard K/N
 ```
 
-`PKT_TIMING_ENV=ci-linux pkt exec ...` tags timing records with an
+`PKSPEC_TIMING_ENV=ci-linux pkspec exec ...` tags timing records with an
 explicit environment so CI history doesn't poison local-machine
 shard balancing (or vice-versa).
 

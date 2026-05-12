@@ -322,7 +322,7 @@ func WriteAtomic(path string, data []byte) error {
 // `path + ".pkspec-lock"`, reads the file, applies `mutate`,
 // writes the result via WriteAtomic, releases the lock.
 //
-// Two concurrent `pkt exec --update-inline-snapshots` invocations
+// Two concurrent `pkspec exec --update-inline-snapshots` invocations
 // against the same module — one running `parallel-steps` and the
 // other a sibling test set — would otherwise race on the read /
 // mutate / write triple and clobber each other. Wrapping the

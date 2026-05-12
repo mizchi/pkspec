@@ -5,7 +5,7 @@ assertion. The `cmd` runs, its stdout is matched literally against
 `inlineStdout`.
 
 ```sh
-pkt exec -f examples/shell-smoke/Test.pkl
+pkspec exec -f examples/shell-smoke/Test.pkl
 ```
 
 Expected: passed in ~5ms.

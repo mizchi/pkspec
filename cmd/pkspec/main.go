@@ -1,10 +1,10 @@
-// Command pkt is the pkspec test runner.
+// Command pkspec is the spec & test runner CLI.
 //
 // Two execution paths share the binary:
 //
-//   - `pkt run`  — wraps `pkl test --junit-reports` so assertion failures
+//   - `pkspec run`  — wraps `pkl test --junit-reports` so assertion failures
 //     produce a non-zero exit code (Phase 1).
-//   - `pkt exec` — loads a Test.pkl module via pkl-go, runs each declared
+//   - `pkspec exec` — loads a Test.pkl module via pkl-go, runs each declared
 //     `Test` instance as a subprocess, and asserts on exit code + literal
 //     stdout/stderr (Phase 2). Retries / flaky / snapshots come later.
 package main
@@ -36,7 +36,7 @@ func main() {
 	restore := installPklStderrFilter()
 	defer restore()
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintln(os.Stderr, "pkt:", err)
+		fmt.Fprintln(os.Stderr, "pkspec:", err)
 		restore()
 		os.Exit(1)
 	}
@@ -74,10 +74,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprint(w, `pkt — pkspec test runner
+	fmt.Fprint(w, `pkspec — language-agnostic Pkl-based spec & test runner
 
 usage:
-  pkt <command> [args]
+  pkspec <command> [args]
 
 commands:
   run [--allow-cmd] [pkl-test args...]
@@ -100,10 +100,10 @@ commands:
   timings -f Test.pkl [opts]  inspect .pkspec/timings.jsonl —
                               per-test median / p90 / latest outcome.
                               --env / --failing / --shard=K/N (preview)
-  version                     print pkt version
+  version                     print pkspec version
   help                        show this message
 
-`+"`pkt run`"+` forwards every argument it does not recognize to `+"`pkl test`"+`,
+`+"`pkspec run`"+` forwards every argument it does not recognize to `+"`pkl test`"+`,
 including module paths, --junit-aggregate-reports, --overwrite, etc.
 `)
 }
@@ -157,7 +157,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 
 	tally := junit.Summarize(suites)
 	if tally.HardFailures > 0 {
-		fmt.Fprintf(stderr, "pkt: %d hard failure(s) across %d suite(s)\n",
+		fmt.Fprintf(stderr, "pkspec: %d hard failure(s) across %d suite(s)\n",
 			tally.HardFailures, tally.Suites)
 		return fmt.Errorf("test failures detected")
 	}
@@ -165,7 +165,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 	// Snapshot writes are not failures, but they are not nothing — surface
 	// them as a notice so a CI run that fresh-writes snapshots is visible.
 	if tally.SnapshotWrites > 0 {
-		fmt.Fprintf(stderr, "pkt: %d example snapshot(s) freshly written; commit %s\n",
+		fmt.Fprintf(stderr, "pkspec: %d example snapshot(s) freshly written; commit %s\n",
 			tally.SnapshotWrites, snapshotHint(suites))
 		return fmt.Errorf("freshly written snapshots — review and rerun")
 	}
@@ -180,7 +180,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 }
 
 func cmdExec(args []string, stdout, stderr io.Writer) error {
-	fs := flag.NewFlagSet("pkt exec", flag.ContinueOnError)
+	fs := flag.NewFlagSet("pkspec exec", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	file := fs.String("f", "Test.pkl", "path to the Test.pkl module")
 	fs.StringVar(file, "file", "Test.pkl", "path to the Test.pkl module")
@@ -240,7 +240,7 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 		if *rerunFailed {
 			candidates = pickRerunFailed(candidates, timingsPath, envTag())
 			if len(candidates) == 0 {
-				fmt.Fprintln(stderr, "pkt: --rerun-failed: no failed tests in history (matching --only/--tag and env)")
+				fmt.Fprintln(stderr, "pkspec: --rerun-failed: no failed tests in history (matching --only/--tag and env)")
 				return nil
 			}
 		}
@@ -255,7 +255,7 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 			shardSkipped = before - len(candidates)
 		}
 		if len(candidates) == 0 {
-			fmt.Fprintln(stderr, "pkt: filter combination matched no tests")
+			fmt.Fprintln(stderr, "pkspec: filter combination matched no tests")
 			return nil
 		}
 		plan = filterPlan(plan, candidates)
@@ -279,11 +279,11 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	// so the operator sees "what is about to run" instead of having to
 	// wait for the summary.
 	if *shardSpec != "" {
-		fmt.Fprintf(stderr, "pkt: shard %d/%d: running %d of %d tests\n",
+		fmt.Fprintf(stderr, "pkspec: shard %d/%d: running %d of %d tests\n",
 			shardK, shardN, len(plan.Tests), len(plan.Tests)+shardSkipped)
 	}
 	if *rerunFailed {
-		fmt.Fprintf(stderr, "pkt: --rerun-failed: %d tests selected from history\n",
+		fmt.Fprintf(stderr, "pkspec: --rerun-failed: %d tests selected from history\n",
 			len(plan.Tests))
 	}
 
@@ -299,7 +299,7 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 			path = defaultTimingsPath(abs)
 		}
 		if werr := recordTimings(path, plan, results); werr != nil {
-			fmt.Fprintf(stderr, "pkt: warning: record timings: %v\n", werr)
+			fmt.Fprintf(stderr, "pkspec: warning: record timings: %v\n", werr)
 		}
 	}
 
@@ -307,15 +307,15 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 		junitPath := filepath.Join(*junitDir,
 			strings.TrimSuffix(filepath.Base(abs), filepath.Ext(abs))+".xml")
 		if werr := junit.WriteSuite(junitPath, buildSuite(abs, results, tally)); werr != nil {
-			fmt.Fprintf(stderr, "pkt: warning: write junit report: %v\n", werr)
+			fmt.Fprintf(stderr, "pkspec: warning: write junit report: %v\n", werr)
 		}
 	}
 
 	fmt.Fprintf(stderr,
-		"pkt: %d passed, %d flaky, %d pending, %d failed, %d errored, %d skipped (of %d)\n",
+		"pkspec: %d passed, %d flaky, %d pending, %d failed, %d errored, %d skipped (of %d)\n",
 		tally.Passed, tally.Flaky, tally.Pending, tally.Failed, tally.Errored, tally.Skipped, tally.Total())
 	if tally.Skipped > 0 {
-		fmt.Fprintf(stderr, "pkt: [timeout] %d tests not executed\n", tally.Skipped)
+		fmt.Fprintf(stderr, "pkspec: [timeout] %d tests not executed\n", tally.Skipped)
 	}
 
 	if !tally.IsGreen() {
@@ -327,12 +327,12 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 
 // cmdSpec renders one or more Test.pkl modules to a Markdown SPEC.
 // Multiple positional args are accepted so a single command can index
-// an entire `tests/` tree (`pkt spec tests/**/*.pkl`). Sections are
+// an entire `tests/` tree (`pkspec spec tests/**/*.pkl`). Sections are
 // grouped by source directory relative to --root (default: cwd) so
 // rearranging the file layout updates the document without code
 // changes.
 func cmdSpec(args []string, stdout, stderr io.Writer) error {
-	fs := flag.NewFlagSet("pkt spec", flag.ContinueOnError)
+	fs := flag.NewFlagSet("pkspec spec", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	output := fs.String("output", "", "write the SPEC to this path (default: stdout)")
 	root := fs.String("root", "", "make source paths relative to this directory (default: current dir)")
@@ -488,14 +488,14 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		}
 
 		if len(unimplemented) == 0 && len(strictIssues) == 0 {
-			fmt.Fprintf(stdout, "pkt: all %d declared spec(s) have at least one implementing test\n", len(issues))
+			fmt.Fprintf(stdout, "pkspec: all %d declared spec(s) have at least one implementing test\n", len(issues))
 			if *strict {
-				fmt.Fprintf(stdout, "pkt: --strict: every implementedAt path resolves on disk\n")
+				fmt.Fprintf(stdout, "pkspec: --strict: every implementedAt path resolves on disk\n")
 			}
 			return nil
 		}
 		if len(unimplemented) > 0 {
-			fmt.Fprintf(stderr, "pkt: %d unimplemented spec(s):\n", len(unimplemented))
+			fmt.Fprintf(stderr, "pkspec: %d unimplemented spec(s):\n", len(unimplemented))
 			for _, iss := range unimplemented {
 				goalSuffix := ""
 				if contribs := contributesFor(plans, iss.SpecID); len(contribs) > 0 {
@@ -506,7 +506,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 			}
 		}
 		if len(strictIssues) > 0 {
-			fmt.Fprintf(stderr, "pkt: --strict: %d implementedAt path(s) missing:\n", len(strictIssues))
+			fmt.Fprintf(stderr, "pkspec: --strict: %d implementedAt path(s) missing:\n", len(strictIssues))
 			for _, iss := range strictIssues {
 				fmt.Fprintf(stderr, "  %s → %s (%s)\n", iss.SpecID, iss.Path, iss.Reason)
 			}
@@ -531,7 +531,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	if err := os.Rename(tmp, *output); err != nil {
 		return err
 	}
-	fmt.Fprintf(stderr, "pkt: wrote %s (%d entries)\n", *output, len(entries))
+	fmt.Fprintf(stderr, "pkspec: wrote %s (%d entries)\n", *output, len(entries))
 	return nil
 }
 
@@ -605,7 +605,7 @@ func joinReasonsWithSteps(r executor.Result) string {
 	return b.String()
 }
 
-// cmdReaderHelper is the worker mode of pkspec. When `pkt run --allow-cmd`
+// cmdReaderHelper is the worker mode of pkspec. When `pkspec run --allow-cmd`
 // invokes `pkl test`, pkl spawns this very binary again with `--reader-helper`
 // as its first argument. Pkl and the helper then exchange msgpack messages
 // over stdin/stdout; the helper services every `read("cmd:...")` by running
@@ -713,7 +713,7 @@ func findRepoRoot() string {
 }
 
 // discoverSpecFiles walks `root` and returns every Spec.pkl /
-// Test.pkl path plus a root-level SPEC.pkl, so `pkt spec --discover`
+// Test.pkl path plus a root-level SPEC.pkl, so `pkspec spec --discover`
 // can pick up an entire repo without the operator listing each file.
 // Hidden dirs (`.git`, `.pkspec`, ...) and `node_modules` are skipped.
 func discoverSpecFiles(root string) ([]string, error) {
@@ -757,7 +757,7 @@ func discoverSpecFiles(root string) ([]string, error) {
 }
 
 // contributesFor scans every plan for a Scenario with the given id and
-// returns its `contributes` list (Goal ids). Surfaced in `pkt spec
+// returns its `contributes` list (Goal ids). Surfaced in `pkspec spec
 // --check` so each reported unimplemented entry says which Goal it
 // would advance.
 func contributesFor(plans []*config.Plan, id string) []string {

@@ -1,6 +1,6 @@
 /// pkspec's own spec — dogfooded.
 ///
-/// Lives at the repo root as `SPEC.pkl` — `pkt spec --check`
+/// Lives at the repo root as `SPEC.pkl` — `pkspec spec --check`
 /// with no path argument discovers it via the convention.
 ///
 /// Every scenario is `tags { "spec" }` with no body, so the runner
@@ -11,7 +11,7 @@
 ///     reviewed doc; `implementedBy + implementedAt` are the
 ///     pointer. `--check` accepts them without a Pkl Test.
 ///
-/// `pkt spec --check --discover` is the canonical invocation:
+/// `pkspec spec --check --discover` is the canonical invocation:
 /// the root SPEC.pkl plus auto-discovered examples.
 ///
 /// ── ID naming convention ────────────────────────────────────
@@ -21,7 +21,7 @@
 /// `history` / `pbt` / `diff` / `ai` for scenarios; `goal` for
 /// Goals) to a specific aspect. Two or three levels is typical:
 ///
-///   runner.exit-code.pkt-run
+///   runner.exit-code.pkspec-run
 ///   kind.http
 ///   spec.cross-reference
 ///   goal.ci-trustworthy
@@ -109,15 +109,15 @@ scenarios {
   // ── goal.ci-trustworthy ──────────────────────────────────────────
 
   new {
-    id = "runner.exit-code.pkt-run"
+    id = "runner.exit-code.pkspec-run"
     name = "pkt_run_returns_nonzero_on_assertion_failure"
-    description = "`pkt run` wraps `pkl test` and forces a non-zero exit code when any test fails or any example writes a fresh snapshot — closing pkl test's silent-zero gap."
+    description = "`pkspec run` wraps `pkl test` and forces a non-zero exit code when any test fails or any example writes a fresh snapshot — closing pkl test's silent-zero gap."
     tags { "spec" }
     severity = "critical"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy" }
     implementedBy = "code"
-    implementedAt = "cmd/pkt/main.go:cmdRun"
+    implementedAt = "cmd/pkspec/main.go:cmdRun"
   }
   new {
     id = "runner.exec.assert-streams"
@@ -245,7 +245,7 @@ scenarios {
   new {
     id = "spec.knowledge-graph"
     name = "knowledge_graph_edges"
-    description = "dependsOn (precondition), supersedes (replaces a retired spec), parent (sub-spec refinement). `pkt spec --graph` emits a graphviz `dot` document."
+    description = "dependsOn (precondition), supersedes (replaces a retired spec), parent (sub-spec refinement). `pkspec spec --graph` emits a graphviz `dot` document."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -257,7 +257,7 @@ scenarios {
   new {
     id = "spec.decision-log"
     name = "decision_log_is_append_only"
-    description = "Each Scenario.decisions entry records date + author + summary + rationale. Append-only by convention; `pkt spec --decisions` flattens newest-first."
+    description = "Each Scenario.decisions entry records date + author + summary + rationale. Append-only by convention; `pkspec spec --decisions` flattens newest-first."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
@@ -268,7 +268,7 @@ scenarios {
   new {
     id = "spec.goals"
     name = "goal_concept_with_priority"
-    description = "Goals carry user-facing value statements with no test of their own. Scenarios point at Goals via `contributes`; `pkt spec --next` ranks unimplemented specs by best Goal priority then severity."
+    description = "Goals carry user-facing value statements with no test of their own. Scenarios point at Goals via `contributes`; `pkspec spec --next` ranks unimplemented specs by best Goal priority then severity."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -291,14 +291,14 @@ scenarios {
   new {
     id = "spec.cli-modes"
     name = "pkt_spec_modes_cover_review_and_ci"
-    description = "`pkt spec` default renders SPEC.md; `--check / --coverage / --graph / --decisions / --goals / --next / --orphans` cover the review + CI surface. Filters: `--goal` / `--severity` / `--discover`."
+    description = "`pkspec spec` default renders SPEC.md; `--check / --coverage / --graph / --decisions / --goals / --next / --orphans` cover the review + CI surface. Filters: `--goal` / `--severity` / `--discover`."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference"; "spec.goals" }
     contributes { "goal.spec-driven" }
     implementedBy = "code"
-    implementedAt = "cmd/pkt/main.go:cmdSpec"
+    implementedAt = "cmd/pkspec/main.go:cmdSpec"
   }
   new {
     id = "spec.implemented-by"
@@ -315,7 +315,7 @@ scenarios {
   new {
     id = "tooling.lint"
     name = "lint_catches_structural_authoring_mistakes"
-    description = "`pkt spec --lint` reports broken cross-references (dependsOn / supersedes / parent / replacedBy / contributes), missing descriptions on approved entries, critical specs with no Goal anchor, deprecated specs without replacedBy, future-dated decisions, and a few similar invariants. Error-level issues fail the command; warn / info are informational."
+    description = "`pkspec spec --lint` reports broken cross-references (dependsOn / supersedes / parent / replacedBy / contributes), missing descriptions on approved entries, critical specs with no Goal anchor, deprecated specs without replacedBy, future-dated decisions, and a few similar invariants. Error-level issues fail the command; warn / info are informational."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -326,13 +326,13 @@ scenarios {
   new {
     id = "tooling.template"
     name = "template_skeleton_for_new_authoring"
-    description = "`pkt spec --template scenario|goal|module` prints a heavily-commented Pkl skeleton so authors don't start from a blank file. The module template includes the canonical amends + feature + goals + scenarios layout with placeholder ids."
+    description = "`pkspec spec --template scenario|goal|module` prints a heavily-commented Pkl skeleton so authors don't start from a blank file. The module template includes the canonical amends + feature + goals + scenarios layout with placeholder ids."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementedBy = "code"
-    implementedAt = "cmd/pkt/spec_templates.go"
+    implementedAt = "cmd/pkspec/spec_templates.go"
   }
   new {
     id = "tooling.authoring-guide"
@@ -384,7 +384,7 @@ scenarios {
   new {
     id = "history.timings-jsonl"
     name = "timings_jsonl_records_per_test_durations"
-    description = ".pkspec/timings.jsonl records {ts, test, duration_ms, outcome, env, kind} per test, env-bucketed via PKT_TIMING_ENV."
+    description = ".pkspec/timings.jsonl records {ts, test, duration_ms, outcome, env, kind} per test, env-bucketed via PKSPEC_TIMING_ENV."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -393,7 +393,7 @@ scenarios {
   new {
     id = "history.shard-lpt"
     name = "shard_K_of_N_via_LPT"
-    description = "`pkt exec --shard=K/N` splits the test set into N bins using Longest-Processing-Time bin-packing on the median of recent 5 history records. Tie-breaking is deterministic so the same input produces the same assignment across machines."
+    description = "`pkspec exec --shard=K/N` splits the test set into N bins using Longest-Processing-Time bin-packing on the median of recent 5 history records. Tie-breaking is deterministic so the same input produces the same assignment across machines."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -421,19 +421,19 @@ scenarios {
     dependsOn { "history.timings-jsonl" }
     contributes { "goal.history-aware" }
     implementedBy = "code"
-    implementedAt = "cmd/pkt/rerun.go:pickRerunFailed"
+    implementedAt = "cmd/pkspec/rerun.go:pickRerunFailed"
   }
   new {
     id = "history.timings-cli"
     name = "pkt_timings_inspection_subcommand"
-    description = "`pkt timings -f Test.pkl [--failing|--shard=K/N|--env NAME]` reports per-test runs/median/p90/latest/kind without running anything. `--shard=K/N` previews the assignment byte-for-byte."
+    description = "`pkspec timings -f Test.pkl [--failing|--shard=K/N|--env NAME]` reports per-test runs/median/p90/latest/kind without running anything. `--shard=K/N` previews the assignment byte-for-byte."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "history.timings-jsonl"; "history.shard-lpt" }
     contributes { "goal.history-aware" }
     implementedBy = "code"
-    implementedAt = "cmd/pkt/timings_cmd.go"
+    implementedAt = "cmd/pkspec/timings_cmd.go"
   }
 
   // ── goal.property-based ──────────────────────────────────────────
@@ -521,7 +521,7 @@ scenarios {
   new {
     id = "diff.inline-concurrent-safety"
     name = "inline_rewriter_safe_under_concurrent_processes"
-    description = "`inline.RewriteUnderLock` acquires a POSIX flock on `<module>.pkspec-lock` for the read-mutate-write triple, so two `pkt exec --update-inline-snapshots` processes against the same module serialise instead of clobbering each other. The brace counter masks string interiors and `//` comments before scanning, so a literal `}` inside a Pkl string doesn't escape the enclosing object."
+    description = "`inline.RewriteUnderLock` acquires a POSIX flock on `<module>.pkspec-lock` for the read-mutate-write triple, so two `pkspec exec --update-inline-snapshots` processes against the same module serialise instead of clobbering each other. The brace counter masks string interiors and `//` comments before scanning, so a literal `}` inside a Pkl string doesn't escape the enclosing object."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"

@@ -6,8 +6,8 @@ discovered on one side can be re-investigated on the other.
 
 | Surface | What's tested | Runner | Generator |
 | --- | --- | --- | --- |
-| Pkl-internal | a Pkl function / algorithm | `pkt run` (= `pkl test`) | `QuickCheck.intCases` |
-| Subprocess | shell / http / playwright / sql | `pkt exec` | `Test.iterations` + `$PKT_SEED` |
+| Pkl-internal | a Pkl function / algorithm | `pkspec run` (= `pkl test`) | `QuickCheck.intCases` |
+| Subprocess | shell / http / playwright / sql | `pkspec exec` | `Test.iterations` + `$PKSPEC_SEED` |
 
 ## The seed stream
 
@@ -44,7 +44,7 @@ facts {
 }
 ```
 
-Run via `pkt run path/to/SortProperty.test.pkl`. The fact passes
+Run via `pkspec run path/to/SortProperty.test.pkl`. The fact passes
 or fails based on `r.passed`; `checkAll` surfaces the first
 counterexample's `seed` / `index` / `value` so a failing case
 can be reproduced.
@@ -56,7 +56,7 @@ Note: Pkl `function` calls are positional only — write
 ## Subprocess iteration
 
 Set `iterations > 1` on a Test; the executor runs the body N
-times with `$PKT_SEED` and `$PKT_ITERATION` injected. Every
+times with `$PKSPEC_SEED` and `$PKSPEC_ITERATION` injected. Every
 iteration must pass; the first failing iteration's seed is
 reported for reproduction.
 
@@ -67,9 +67,9 @@ new Test {
   iterationSeed = 20260512
   cmd = """
     set -e
-    a=$(( PKT_SEED % 1000 ))
-    b=$(( (PKT_SEED / 1000) % 1000 ))
-    c=$(( (PKT_SEED / 1000000) % 1000 ))
+    a=$(( PKSPEC_SEED % 1000 ))
+    b=$(( (PKSPEC_SEED / 1000) % 1000 ))
+    c=$(( (PKSPEC_SEED / 1000000) % 1000 ))
     [ $(( (a+b)+c )) -eq $(( a+(b+c) )) ]
   """
 }
@@ -78,7 +78,7 @@ new Test {
 On failure:
 
 ```
-[pkt] addition_is_associative: failed [3/4 attempts passed] (8ms)
+[pkspec] addition_is_associative: failed [3/4 attempts passed] (8ms)
       property failed at iteration 3/50 (seed=3901813017); pin `iterationSeed = 3901813017` to reproduce
       <subprocess error output>
 ```
@@ -107,7 +107,7 @@ new Test {
   shrink = true
   shrinkAttempts = 32
   cmd = """
-    val=$(( PKT_SEED % 100 ))
+    val=$(( PKSPEC_SEED % 100 ))
     [ $val -lt 50 ]
   """
 }
@@ -129,12 +129,12 @@ shrink: seed 62490 also fails
 
 ### Why "seed-space," not "input-space"
 
-pkt has no view of how the body derives input from `$PKT_SEED`,
+pkspec has no view of how the body derives input from `$PKSPEC_SEED`,
 so it can only try numerically smaller seeds and check whether
 the body still fails. This works well when the derivation is
-roughly monotonic in the seed (`PKT_SEED % N`, integer division,
-`PKT_SEED / K`), and worthlessly when the derivation hashes the
-seed first (`sha256(PKT_SEED)` → smaller seed produces an
+roughly monotonic in the seed (`PKSPEC_SEED % N`, integer division,
+`PKSPEC_SEED / K`), and worthlessly when the derivation hashes the
+seed first (`sha256(PKSPEC_SEED)` → smaller seed produces an
 entirely different hash, no correlation with failure).
 
 The reported "shrunk seed" is therefore a **hint, not a proof of
@@ -153,7 +153,7 @@ ignore the shrink output when it isn't.
 
 ### When to enable
 
-- **Yes**: integer / numeric property checks (`PKT_SEED % N`,
+- **Yes**: integer / numeric property checks (`PKSPEC_SEED % N`,
   range bounds, modulo arithmetic).
 - **Maybe**: list-length / size-of properties (the seed
   controls the size, derivation is monotonic in some axis).
@@ -172,7 +172,7 @@ patience budget.
 ## Input-space shrinking (typed inputs)
 
 When a Test declares `inputs: Mapping<String, IntInput>`, the
-runner switches from raw `$PKT_SEED` injection to typed-value
+runner switches from raw `$PKSPEC_SEED` injection to typed-value
 generation. Each named input gets a value in `[lo, hi]` derived
 from a per-input sub-seed (xorshift-stepped from the iteration
 seed), the value is injected as `$<name>` into the env, and the
@@ -334,7 +334,7 @@ signal to add `Test.iterationBefore: String?` or similar.
 | Mode | When | Failure output |
 | --- | --- | --- |
 | `inputs { ... }` (typed) | named Int parameters | `{A=7, B=15}` |
-| Raw `$PKT_SEED` | complex / non-Int inputs | only the seed |
+| Raw `$PKSPEC_SEED` | complex / non-Int inputs | only the seed |
 | `inputs` + `shrink` | typed + want minimal-ish input | shrunk values + trace |
 | `shrink` without `inputs` | want seed-space shrink (hint, not minimum) | shrunk seed + trace |
 
@@ -347,7 +347,7 @@ signal to add `Test.iterationBefore: String?` or similar.
 - **Custom generators**: only `intCases` is provided in
   `pkl/QuickCheck.pkl`. For
   strings / structs / lists, derive in the subprocess from
-  `$PKT_SEED` directly. Adding generator helpers in Pkl is
+  `$PKSPEC_SEED` directly. Adding generator helpers in Pkl is
   cheap when needed.
 - **Parallel iterations**: each Test runs its `iterations`
   sequentially. The subprocess is one body, not N parallel
@@ -381,4 +381,4 @@ signal to add `Test.iterationBefore: String?` or similar.
 The "hooks fire per Test, not per iteration" choice is
 deliberate: hooks are state-setup for the Test as a whole, not
 per random input. If your property check needs per-iteration
-setup, do it inside the body using `$PKT_SEED`.
+setup, do it inside the body using `$PKSPEC_SEED`.

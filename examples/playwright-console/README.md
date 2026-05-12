@@ -18,7 +18,7 @@ pnpm init
 pnpm add playwright
 pnpm exec playwright install chromium
 cd ../..
-pkt exec -f examples/playwright-console/Test.pkl
+pkspec exec -f examples/playwright-console/Test.pkl
 ```
 
 Common pattern: forbid `[error]` and `[pageerror]` to catch

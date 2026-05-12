@@ -9,7 +9,7 @@ import (
 // specTemplate returns a Pkl skeleton for one of the canonical
 // authoring shapes: a single Scenario, a single Goal, or a full
 // minimum Spec.pkl module. Each template is heavily commented so
-// `pkt spec --template module > specs/foo.pkl` produces a useful
+// `pkspec spec --template module > specs/foo.pkl` produces a useful
 // starting point, not a blank slate.
 func specTemplate(kind string) (string, error) {
 	switch kind {
@@ -95,11 +95,11 @@ new Goal {
 
 const moduleTemplate = `// pkspec Spec module — minimum starting structure.
 //
-//   pkt spec --check --discover            CI gate
-//   pkt spec --next --discover             "what to work on next"
-//   pkt spec --coverage --discover         per-severity / -status %
-//   pkt spec --lint --discover             convention checks
-//   pkt spec --orphans --discover          tests without specRef
+//   pkspec spec --check --discover            CI gate
+//   pkspec spec --next --discover             "what to work on next"
+//   pkspec spec --coverage --discover         per-severity / -status %
+//   pkspec spec --lint --discover             convention checks
+//   pkspec spec --orphans --discover          tests without specRef
 //
 // See docs/notes/authoring-guide.md for full walkthrough.
 

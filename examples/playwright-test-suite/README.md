@@ -10,7 +10,7 @@ pnpm init
 pnpm add -D @playwright/test
 pnpm exec playwright install chromium
 cd ../..
-pkt exec -f examples/playwright-test-suite/Test.pkl
+pkspec exec -f examples/playwright-test-suite/Test.pkl
 ```
 
 The fixture contains two Tests:

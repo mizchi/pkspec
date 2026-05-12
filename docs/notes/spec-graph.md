@@ -4,15 +4,15 @@ Phase 32 turns `Spec.pkl` into a small knowledge graph: every
 scenario is a node with edges (`dependsOn`, `supersedes`,
 `replacedBy`), a lifecycle (`reviewStatus` × `deprecated`), a
 severity classification, an append-only decision log, and a set of
-open questions. `pkt spec` grows four modes that read the graph
+open questions. `pkspec spec` grows four modes that read the graph
 without running anything:
 
 ```
-pkt spec MOD...                  default Markdown render
-pkt spec --coverage MOD...       declared vs implemented + breakdown
-pkt spec --graph MOD...          graphviz dot (pipe to `dot -Tsvg ...`)
-pkt spec --decisions MOD...      newest-first Markdown decision log
-pkt spec --check MOD...          CI gate: exits 1 on unimplemented
+pkspec spec MOD...                  default Markdown render
+pkspec spec --coverage MOD...       declared vs implemented + breakdown
+pkspec spec --graph MOD...          graphviz dot (pipe to `dot -Tsvg ...`)
+pkspec spec --decisions MOD...      newest-first Markdown decision log
+pkspec spec --check MOD...          CI gate: exits 1 on unimplemented
 ```
 
 ## Schema
@@ -77,10 +77,10 @@ prelude: Listing<SpecStep> = new {}
 ## Knowledge-graph edges
 
 - **`dependsOn`** — "if X breaks, Y also fails." Render
-  `pkt spec --graph | dot -Tsvg` to see the impact-analysis graph.
+  `pkspec spec --graph | dot -Tsvg` to see the impact-analysis graph.
 - **`supersedes`** — "this spec replaces these older ids." The
   older specs should be `deprecated = true` with `replacedBy`
-  pointing back. `pkt spec` cross-renders both directions.
+  pointing back. `pkspec spec` cross-renders both directions.
 - **`replacedBy`** — outgoing pointer from a deprecated spec.
   Readers follow it to the successor.
 
@@ -104,7 +104,7 @@ new Scenario {
 ## Decision log
 
 Append-only convention: don't edit past entries; add a new one.
-Each scenario carries its own decision list; `pkt spec --decisions`
+Each scenario carries its own decision list; `pkspec spec --decisions`
 flattens them across the project and sorts newest-first.
 
 ```pkl
@@ -168,9 +168,9 @@ implementation marker.
 Three gates worth running on every PR:
 
 ```yaml
-- run: pkt spec --check specs/**/*.pkl tests/**/*.pkl    # gate: no missing impls
-- run: pkt spec --coverage specs/**/*.pkl tests/**/*.pkl  # info: trend
-- run: pkt spec --output SPEC.md specs/**/*.pkl tests/**/*.pkl &&
+- run: pkspec spec --check specs/**/*.pkl tests/**/*.pkl    # gate: no missing impls
+- run: pkspec spec --coverage specs/**/*.pkl tests/**/*.pkl  # info: trend
+- run: pkspec spec --output SPEC.md specs/**/*.pkl tests/**/*.pkl &&
        git diff --exit-code SPEC.md                       # gate: SPEC stays in sync
 ```
 
@@ -211,7 +211,7 @@ new Scenario {
 ```
 
 The rendered SPEC.md shows `sub-spec of: AUTH-001` next to each
-child. `pkt spec --check` treats parent and child independently —
+child. `pkspec spec --check` treats parent and child independently —
 either could have its own implementing test.
 
 ### Goals — user-facing value statements
@@ -252,10 +252,10 @@ new Scenario {
 
 Two new spec modes use this edge:
 
-- **`pkt spec --goals`** lists Goals sorted by priority desc, with
+- **`pkspec spec --goals`** lists Goals sorted by priority desc, with
   each Goal's contributing-scenario coverage. Unimplemented
   scenarios appear first within each Goal.
-- **`pkt spec --next`** ranks unimplemented (non-draft,
+- **`pkspec spec --next`** ranks unimplemented (non-draft,
   non-deprecated) scenarios by their best Goal's priority, then by
   severity. The top entry is "what to work on next" — the spec
   that would advance the highest-value Goal.
@@ -284,7 +284,7 @@ Convention:
 <domain>.<feature>[.<aspect>]
 
   goal.ci-trustworthy
-  runner.exit-code.pkt-run
+  runner.exit-code.pkspec-run
   kind.http
   spec.cross-reference
   history.shard-lpt
@@ -313,10 +313,10 @@ authoring should prefer dot-paths.
 When a Scenario sets `implementedBy = "code"` and
 `implementedAt = "path/to/file.go:Symbol"`, the path part is
 referenced text only — rename the file and the spec quietly rots.
-`pkt spec --check --strict` adds a verification pass:
+`pkspec spec --check --strict` adds a verification pass:
 
 ```sh
-pkt spec --check --strict --discover
+pkspec spec --check --strict --discover
 ```
 
 For every Scenario whose `implementedAt` is set, the file portion
@@ -325,7 +325,7 @@ repo root (nearest `.git` or `go.mod` ancestor). Missing files
 become a failure:
 
 ```
-pkt: --strict: 1 implementedAt path(s) missing:
+pkspec: --strict: 1 implementedAt path(s) missing:
   spec.cross-reference → internal/spec/spec_old.go (file not found)
 ```
 
@@ -346,7 +346,7 @@ new Scenario {
   name = "pkt_run_returns_nonzero_on_assertion_failure"
   // ...
   implementedBy = "code"
-  implementedAt = "cmd/pkt/main.go:cmdRun"
+  implementedAt = "cmd/pkspec/main.go:cmdRun"
 }
 
 new Scenario {
@@ -375,7 +375,7 @@ accounted for.
 
 ## Filters: `--goal` and `--severity` (phase 34)
 
-Every `pkt spec` mode (`--check / --coverage / --graph / --decisions
+Every `pkspec spec` mode (`--check / --coverage / --graph / --decisions
 / --goals / --next / --orphans`) accepts:
 
 - `--goal GOAL-XYZ` — restrict to scenarios contributing to one Goal
@@ -392,7 +392,7 @@ sibling Test.pkl modules stay coherent under the filter.
 ## Orphan tests: `--orphans` (phase 34)
 
 ```sh
-pkt spec --orphans --discover
+pkspec spec --orphans --discover
 ```
 
 Lists active (non-pending) Tests whose `specRef` is empty. These
@@ -404,7 +404,7 @@ backlog.
 ## Auto-discovery: `--discover` (phase 34)
 
 ```sh
-pkt spec --check --discover
+pkspec spec --check --discover
 ```
 
 Walks the current directory and adds every `Spec.pkl` / `Test.pkl`

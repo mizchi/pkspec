@@ -9,7 +9,7 @@ Locked in by the experiments under `experiments/` and summarized in
 diffing, JUnit XML, parameterized tests via plain `for`. What it does
 **not** do is exit non-zero on assertion failure (probes 02 & 03).
 That alone disqualifies it as a CI-friendly entry point. pkspec's
-core job is to be the `pkt` command users invoke instead, with the
+core job is to be the `pkspec` command users invoke instead, with the
 rest of the value-add layered on top.
 
 ## Target use cases
@@ -90,7 +90,7 @@ local portTest = new Test {
 }
 ```
 
-The runner has a regenerate flag (`pkt run --refresh-snapshots`) that
+The runner has a regenerate flag (`pkspec run --refresh-snapshots`) that
 re-executes generators and overwrites the stored bytes — the
 equivalent of `pkl test --overwrite`, scoped to subprocess output.
 
@@ -100,7 +100,7 @@ equivalent of `pkl test --overwrite`, scoped to subprocess output.
 
 ```
 +----------+      spawn      +---------+
-|   pkt    | ──────────────► | pkl     |
+|   pkspec    | ──────────────► | pkl     |
 | (Go)     | ◄────────────── | (test)  |
 +----------+   JUnit XML     +---------+
      │
@@ -125,13 +125,13 @@ Cons:
 
 ```
 +----------+              +---------+
-|   pkt    | ──spawn────► | pkl     |
+|   pkspec    | ──spawn────► | pkl     |
 | (Go)     | ◄──msgpack── | (test)  |
 +----------+              +---------+
      │
      │  pkl evaluation invokes
      │  read("cmd:go test ./...")
-     │  → pkt executes subprocess
+     │  → pkspec executes subprocess
      │  → returns {stdout, stderr, exitCode}
 ```
 
@@ -225,8 +225,8 @@ output works on `expectExitCode == ` style checks too.
 
 Mirrors `pkl test` (probe 03) so users do not learn a second rule:
 
-- `pkt` with no args runs everything in `PklProject.tests`.
-- `pkt <module>.pkl` runs that one module.
+- `pkspec` with no args runs everything in `PklProject.tests`.
+- `pkspec <module>.pkl` runs that one module.
 - A `tests { ...import*("tests/**.pkl").keys }` PklProject snippet is
   the canonical "auto-pick-up everything under tests/".
 
@@ -253,10 +253,10 @@ Mirrors `pkl test` (probe 03) so users do not learn a second rule:
 Driven by which use case unlocks first; each step is independently
 usable.
 
-1. **Option A wrapper (`cmd/pkt/main.go`)**: shells out to
+1. **Option A wrapper (`cmd/pkspec/main.go`)**: shells out to
    `pkl test --junit-reports tmp/`, re-streams stdout, parses the XML,
    and exits non-zero on any `<failure>`. Closes the unreliable-exit-code
-   gap immediately, with no schema work yet. `pkt list` introspects
+   gap immediately, with no schema work yet. `pkspec list` introspects
    `PklProject.tests`.
 2. **`Test` schema + executor**: `pkl/Test.pkl` describes the basic
    fields (`cmd`, `stdin`, `env`, `timeoutSec`, `expectExitCode`,

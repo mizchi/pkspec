@@ -11,7 +11,7 @@ pnpm init
 pnpm add playwright
 pnpm exec playwright install chromium
 cd ../..
-pkt exec -f examples/playwright-page/Test.pkl
+pkspec exec -f examples/playwright-page/Test.pkl
 ```
 
 Expected: passed in ~300ms (browser launch dominates).

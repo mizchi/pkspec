@@ -11,19 +11,19 @@ tests that implement them (`Test.pkl#Test.specRef`). The setup:
 
 ```sh
 # Render the SPEC, see "verifies: SIGNUP-..." next to each test
-pkt spec examples/spec-id/Spec.pkl examples/spec-id/Test.pkl
+pkspec spec examples/spec-id/Spec.pkl examples/spec-id/Test.pkl
 
 # Run the tests, see "(verifies SIGNUP-XXX)" in each status line
-pkt exec -f examples/spec-id/Test.pkl
+pkspec exec -f examples/spec-id/Test.pkl
 
 # CI gate: exit non-zero on any spec without an implementer
-pkt spec --check examples/spec-id/Spec.pkl examples/spec-id/Test.pkl
+pkspec spec --check examples/spec-id/Spec.pkl examples/spec-id/Test.pkl
 ```
 
 `--check` on this example exits 1 and reports:
 
 ```
-pkt: 1 unimplemented spec(s):
+pkspec: 1 unimplemented spec(s):
   SIGNUP-003 (declared in: rejects invalid email)
 ```
 

@@ -7,16 +7,16 @@ is automatically pending — non-fatal in CI, written-down intent
 in the source.
 
 ```sh
-pkt exec -f examples/spec-pending/Test.pkl
+pkspec exec -f examples/spec-pending/Test.pkl
 ```
 
 Expected: 1 passed (`creates_user`), 2 pending
 (`rejects_duplicate_email`, `rejects_invalid_email`).
 
-`pkt spec` renders this as a Markdown SPEC.md:
+`pkspec spec` renders this as a Markdown SPEC.md:
 
 ```sh
-pkt spec examples/spec-pending/Test.pkl
+pkspec spec examples/spec-pending/Test.pkl
 ```
 
 The output groups by source directory and shows checkboxes:
@@ -35,8 +35,8 @@ The output groups by source directory and shows checkboxes:
 Filter by tag:
 
 ```sh
-pkt exec --tag spec examples/spec-pending/Test.pkl
-pkt exec --only creates --tag spec examples/spec-pending/Test.pkl
+pkspec exec --tag spec examples/spec-pending/Test.pkl
+pkspec exec --only creates --tag spec examples/spec-pending/Test.pkl
 ```
 
 The pending bucket is green for CI — `tests/spec/*` doesn't fail

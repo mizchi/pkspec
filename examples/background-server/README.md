@@ -11,7 +11,7 @@ Test body. The runner:
    still alive after `graceTimeoutSec`, sends SIGKILL.
 
 ```sh
-pkt exec -f examples/background-server/Test.pkl
+pkspec exec -f examples/background-server/Test.pkl
 ```
 
 Expected: passed in ~100ms (~10ms wait for the probe, ~10ms HTTP

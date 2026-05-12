@@ -5,7 +5,7 @@ Two-step sequential shell test demonstrating `captureStdout` and
 event ID, the second consumes it.
 
 ```sh
-pkt exec -f examples/shell-steps-capture/Test.pkl
+pkspec exec -f examples/shell-steps-capture/Test.pkl
 ```
 
 Expected on first run: the second step's `inlineStdout` is empty
@@ -13,7 +13,7 @@ Expected on first run: the second step's `inlineStdout` is empty
 `--update-inline-snapshots` to populate the captured value.
 
 ```sh
-pkt exec -f examples/shell-steps-capture/Test.pkl --update-inline-snapshots
+pkspec exec -f examples/shell-steps-capture/Test.pkl --update-inline-snapshots
 ```
 
 After that, the inline value is locked into the source

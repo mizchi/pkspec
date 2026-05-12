@@ -31,7 +31,7 @@ snapshot cache cannot accumulate verdicts on broken responses.
 The runner invokes `bash -c "<cmd>"` with:
 
 - response body on stdin
-- prompt in `$PKT_AI_PROMPT`
+- prompt in `$PKSPEC_AI_PROMPT`
 - `Workdir` as the cmd's working directory
 
 The judge reports its verdict by exit code:
@@ -50,7 +50,7 @@ A minimal Python judge skeleton:
 ```python
 import os, sys
 body = sys.stdin.read()
-prompt = os.environ["PKT_AI_PROMPT"]
+prompt = os.environ["PKSPEC_AI_PROMPT"]
 # call your LLM, parse the verdict ...
 if verdict_is_pass:
     print("the body satisfies the prompt because ...")
@@ -99,7 +99,7 @@ Partial writes never leave a corrupted snapshot behind.
 
 ## Refreshing the cache
 
-`pkt exec --refresh-ai` ignores existing snapshots, re-invokes every
+`pkspec exec --refresh-ai` ignores existing snapshots, re-invokes every
 judge, and rewrites every snapshot in one pass. Use it after:
 
 - upgrading the underlying model behind your judge,
@@ -118,7 +118,7 @@ returns a cached verdict produced by a different cmd from the one
 currently in the Pkl module, it emits:
 
 ```
-[pkt] warning: ai snapshot "<name>" reuses verdict from a different
+[pkspec] warning: ai snapshot "<name>" reuses verdict from a different
        judge (cached cmd "<old>", current cmd "<new>"); run --refresh-ai
        to re-evaluate
 ```
@@ -171,5 +171,5 @@ The read-judge-write sequence is wrapped in a per-snapshot
 share a snapshotName therefore serialise on the cache, never
 truncating each other's writes. Independent snapshots run fully
 concurrently. The lock is process-level (filesystem flock), so it
-also covers two `pkt exec` invocations against the same workdir.
+also covers two `pkspec exec` invocations against the same workdir.
 

@@ -12,7 +12,7 @@ test against it.
 
 ## Project setup
 
-The harness is a `.mjs` file embedded in the `pkt` binary; the
+The harness is a `.mjs` file embedded in the `pkspec` binary; the
 runner writes it to `<workdir>/.pkspec/playwright-harness-*.mjs`
 at execution time. Because Node's ESM resolver searches upward from
 the harness location, the user's `node_modules` must live at or
@@ -121,7 +121,7 @@ Five outcomes:
 | byte-exact (no pixelmatch), match | nothing | Passed |
 | byte-exact (no pixelmatch), mismatch | write `<name>.png.actual` | Failed with install hint |
 
-`pkt exec --refresh-snapshots` reuses the same flag that drives
+`pkspec exec --refresh-snapshots` reuses the same flag that drives
 `expectStdoutSnapshot` / `expectStderrSnapshot` refresh, and
 unconditionally overwrites the committed PNG.
 

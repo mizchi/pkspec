@@ -29,7 +29,7 @@ import (
 //
 // `--update-snapshots` is forwarded when the runner is invoked with
 // `--refresh-snapshots`, so `toHaveScreenshot()` snapshot files get
-// regenerated through the standard pkt refresh flag rather than a
+// regenerated through the standard pkspec refresh flag rather than a
 // separate playwright-only knob.
 func (e *Executor) runPlaywrightTestStep(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
 	name := stepDisplayName(step)

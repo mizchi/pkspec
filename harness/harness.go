@@ -1,4 +1,4 @@
-// Package harness exposes the embedded Node scripts that pkt's
+// Package harness exposes the embedded Node scripts that pkspec's
 // runners spawn. Each runner writes the relevant script to a tmp
 // file and execs `node` against it.
 package harness

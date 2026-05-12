@@ -37,12 +37,12 @@ new Test {
 When the implementation lands, fill in the body and the same Test
 flips from pending to active without renaming or moving.
 
-## `--tag` filter on `pkt exec`
+## `--tag` filter on `pkspec exec`
 
 ```
-pkt exec -f tests/Test.pkl --tag spec
-pkt exec -f tests/Test.pkl --tag unit --tag regression   # OR
-pkt exec -f tests/Test.pkl --tag spec --only login        # AND with --only
+pkspec exec -f tests/Test.pkl --tag spec
+pkspec exec -f tests/Test.pkl --tag unit --tag regression   # OR
+pkspec exec -f tests/Test.pkl --tag spec --only login        # AND with --only
 ```
 
 `--tag` is repeatable (OR within the filter); `--only` is repeatable
@@ -59,9 +59,9 @@ Typical workflows:
 - **Single area**: `--only billing --tag spec` — narrow to "what
   remains to spec out in the billing module."
 
-## `pkt spec` — generated SPEC.md
+## `pkspec spec` — generated SPEC.md
 
-`pkt spec [--tag X]... [--output path] [--root dir] <Test.pkl>...`
+`pkspec spec [--tag X]... [--output path] [--root dir] <Test.pkl>...`
 renders a static Markdown document grouped by source directory.
 Sections are `## <dir>/` then `### <module>` then `- [ ]` / `- [x]`
 bullets per test. The description is rendered as a blockquote

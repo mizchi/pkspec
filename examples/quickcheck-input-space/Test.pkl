@@ -33,7 +33,7 @@ tests {
     steps {
       new {
         name = "setup"
-        cmd = "echo running iter=$PKT_ITERATION X=$X > probe.txt"
+        cmd = "echo running iter=$PKSPEC_ITERATION X=$X > probe.txt"
       }
       new {
         name = "assert"

@@ -5,6 +5,66 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 40 — Binary rename: pkt → pkspec
+
+mizchi: "プロジェクトをrenameしたコマンド名を pkspec にする"
+
+Follow-up to Phase 39. Phase 39 renamed the library and module
+but left the binary as `pkt` (the muscle-memory-cost argument).
+mizchi overruled — the binary becomes `pkspec` for full symmetry.
+
+### Changes
+
+- `cmd/pkt/` → `cmd/pkspec/` (git mv, full rename detection)
+- `\bpkt\b` → `pkspec` perl word-boundary sweep across go / pkl
+  / md / nix / yml files (about 480 occurrences). Covers:
+  - usage strings (`pkspec run`, `pkspec exec`, ...)
+  - stderr prefix (`pkspec:` instead of `pkt:`)
+  - docstring examples
+  - Scenario id `runner.exit-code.pkt-run` → `runner.exit-code.pkspec-run`
+  - CI workflow `./result/bin/pkt` → `./result/bin/pkspec`
+- Env var sweep `PKT_*` → `PKSPEC_*`: PKSPEC_TIMING_ENV,
+  PKSPEC_SEED, PKSPEC_ITERATION, PKSPEC_REPEAT. **Breaking** —
+  any CI config or shell rc that exports `PKT_TIMING_ENV=ci`
+  needs renaming.
+- `.gitignore` `/pkt` (binary build artefact) → `/pkspec`
+- Usage banner cleaned up: was "pkspec — pkspec test runner"
+  (redundant after Phase 39 sed), now "pkspec — language-agnostic
+  Pkl-based spec & test runner"
+- `cmd/pkspec/main.go` docstring: "Command pkspec is the spec &
+  test runner CLI"
+
+### Edge cases handled
+
+- `pkt-run` (the dot-path aspect of `runner.exit-code.pkt-run`)
+  becomes `pkspec-run` via the same word-boundary regex. Reads as
+  "exit-code of the pkspec-run command" — verbose but
+  unambiguous. Kept rather than shortened to `runner.exit-code.run`
+  because the SPEC.pkl naming-convention header already showed
+  it this way.
+- `experiments/02-junit-out/02-failure-output.xml` was excluded
+  from the sweep — it embeds frozen absolute paths from when it
+  was first captured, regenerate on next experiment run.
+
+### Verified
+
+- `go build ./...` clean
+- `go test ./...` all 6 packages green
+- `pkspec spec --check --discover` from repo root finds SPEC.pkl
+  + examples/\*/Test.pkl, no path arg needed (Phase 39
+  convention still works)
+- `pkspec --help` banner reads cleanly
+
+### Still pending mizchi action (carried over from Phase 39)
+
+1. `gh repo rename mizchi/pkthunder pkspec`
+2. `mv ~/ghq/github.com/mizchi/pkthunder ~/ghq/github.com/mizchi/pkspec` + `git remote set-url origin`
+3. Regenerate `experiments/02-junit-out/02-failure-output.xml`
+4. **New** — update any shell rc / CI YAML that exports the old
+   env var names (`PKT_TIMING_ENV` etc.)
+
+---
+
 ## Phase 39 — Rename: pkthunder → pkspec, SPEC.pkl at repo root
 
 mizchi: "これは SPEC.pkl としてリポジトリルートに置くというルールにしよう。
@@ -19,10 +79,10 @@ that no longer matches.
 
 - Go module path: `github.com/mizchi/pkthunder` →
   `github.com/mizchi/pkspec`. All internal imports rewritten in
-  one pass. The binary stays as `pkt` (muscle-memory cost too high
+  one pass. The binary stays as `pkspec` (muscle-memory cost too high
   to change at the same time).
 - Dogfood spec: `specs/pkthunder.pkl` → `SPEC.pkl` at the repo
-  root. New convention: `pkt spec --check` with no path arg looks
+  root. New convention: `pkspec spec --check` with no path arg looks
   up `./SPEC.pkl`. `--discover` includes the root-level file.
 - Runtime directory: `.pkthunder/` → `.pkspec/` (timings.jsonl,
   snapshots/, screenshots/, http/, ai-snapshots/). Lock and tmp
@@ -36,7 +96,7 @@ that no longer matches.
 
 1. **GitHub repo rename** — `gh repo rename mizchi/pkthunder
    pkspec`. README links, flake URL, and `go install
-   github.com/mizchi/pkspec/cmd/pkt@latest` all assume this is
+   github.com/mizchi/pkspec/cmd/pkspec@latest` all assume this is
    done. Until then the URLs 404.
 2. **Local clone path** — `mv ~/ghq/github.com/mizchi/pkthunder
    ~/ghq/github.com/mizchi/pkspec` + `git remote set-url origin`.
@@ -45,10 +105,10 @@ that no longer matches.
    absolute `file:///.../pkthunder/...` paths from when it was
    first recorded; regenerate on next experiment run.
 
-### Why a binary called `pkt` from a project named `pkspec`
+### Why a binary called `pkspec` from a project named `pkspec`
 
-Plausible enough — `pkt` reads as "pk test". The user-facing
-verbs (`pkt run`, `pkt exec`, `pkt spec`, `pkt timings`) stay
+Plausible enough — `pkspec` reads as "pk test". The user-facing
+verbs (`pkspec run`, `pkspec exec`, `pkspec spec`, `pkspec timings`) stay
 intact. Renaming the binary would be a separate workflow change
 and the cost / benefit is wrong to bundle with the project rename.
 
@@ -66,7 +126,7 @@ forward, and the git history preserves what was actually shipped.
 
 `SPEC.pkl` now reads top-down: `feature = "pkspec —
 language-agnostic Pkl-based spec & test runner"`, `amends
-"pkl/Spec.pkl"`, 8 Goals, 35 Scenarios. `pkt spec --check
+"pkl/Spec.pkl"`, 8 Goals, 35 Scenarios. `pkspec spec --check
 --discover` from the repo root picks up SPEC.pkl plus
 `examples/*/Test.pkl` automatically — no path arg needed.
 
@@ -145,7 +205,7 @@ stretch.
 
 ### (c-1) Flock-protected RewriteUnderLock
 
-Two `pkt exec --update-inline-snapshots` processes against the
+Two `pkspec exec --update-inline-snapshots` processes against the
 same Pkl module would previously race on read / mutate / write.
 New helper:
 
@@ -273,7 +333,7 @@ post-collection so the exit code still reflects the post-disable
 view (an error rule that's disabled doesn't fail the run). Usage:
 
 ```sh
-pkt spec --lint --discover \
+pkspec spec --lint --discover \
   --lint-disable lint.deprecated-without-replacedBy,lint.missing-description
 ```
 
@@ -364,7 +424,7 @@ implemented across approved entries**.
 - `internal/executor/executor.go`  stepHasDeterministicAssertion +
                                    ExpectAi branch skip logic
 - `internal/spec/lint.go`  lint.code-doc-without-implementedAt rule
-- `cmd/pkt/main.go`        --lint-disable flag + filter logic
+- `cmd/pkspec/main.go`        --lint-disable flag + filter logic
 - `specs/pkspec.pkl`    ai.prefer-deterministic flipped to
                            approved+code+implementedAt
 - `docs/notes/ai-assertion.md`  preferDeterministic section
@@ -396,7 +456,7 @@ The spec language has a runtime surface (`--check` / `--coverage`
 / `--goals` / etc.) but no authoring help — new spec writers
 started from a blank file. Three additions close that gap.
 
-### `pkt spec --lint`
+### `pkspec spec --lint`
 
 Eleven convention rules, each named with a dot-path id mirroring
 scenario id naming. Levels: error / warn / info. Default exit
@@ -429,20 +489,20 @@ Each issue carries a Fix hint, single-line. Output is grep-able
 (`[error] lint.broken-ref.dependsOn — spec.foo: ...`) so CI
 parsing is trivial.
 
-### `pkt spec --template <kind>`
+### `pkspec spec --template <kind>`
 
 Three skeletons printed to stdout, all heavily commented:
 
-  pkt spec --template scenario   single Scenario skeleton
-  pkt spec --template goal       single Goal skeleton
-  pkt spec --template module     full Spec.pkl with amends +
+  pkspec spec --template scenario   single Scenario skeleton
+  pkspec spec --template goal       single Goal skeleton
+  pkspec spec --template module     full Spec.pkl with amends +
                                  feature + goals + scenarios
 
 The module template includes the canonical comment block:
 
-  // pkt spec --check --discover
-  // pkt spec --next --discover
-  // pkt spec --lint --discover
+  // pkspec spec --check --discover
+  // pkspec spec --next --discover
+  // pkspec spec --lint --discover
   // ...
 
 so new modules ship with the usage instructions visible at the
@@ -453,7 +513,7 @@ top of the file.
 10-step walkthrough: scaffold → first Goal → first Scenario →
 run analyses → implement and link → graph → decisions →
 lifecycle → framework-internal specs → CI wiring. Ends with a
-reference card listing every `pkt spec` flag.
+reference card listing every `pkspec spec` flag.
 
 The goal was "empty directory → CI-gated spec module in 15
 minutes." Tested by writing the dogfood `specs/pkspec.pkl`
@@ -464,14 +524,14 @@ from this guide — it tracks.
 Added three new scenarios to `specs/pkspec.pkl`:
 
   tooling.lint              → internal/spec/lint.go:Lint
-  tooling.template          → cmd/pkt/spec_templates.go
+  tooling.template          → cmd/pkspec/spec_templates.go
   tooling.authoring-guide   → docs/notes/authoring-guide.md (doc)
 
 All three approved and implemented; coverage went from 37/43
 (86%) in phase 35 to 41/47 (87%) — three new specs declared, all
 three immediately implemented.
 
-`pkt spec --lint --discover` on the dogfood reports "clean (0
+`pkspec spec --lint --discover` on the dogfood reports "clean (0
 issues)" — every cross-reference resolves, every approved entry
 has a description, no critical spec is unanchored, no future
 dates, no orphan implementedAt pointers.
@@ -491,9 +551,9 @@ dates, no orphan implementedAt pointers.
 
 - `internal/spec/lint.go`           ~230 LOC — Lint() + 11 rules +
                                     FormatLint + LintExitCode
-- `cmd/pkt/main.go`                 --lint / --template flag
+- `cmd/pkspec/main.go`                 --lint / --template flag
                                     dispatch + countLintErrors
-- `cmd/pkt/spec_templates.go`       ~110 LOC — specTemplate() with
+- `cmd/pkspec/spec_templates.go`       ~110 LOC — specTemplate() with
                                     three string constants
 - `specs/pkspec.pkl`             3 new tooling.* scenarios
 - `docs/notes/authoring-guide.md`   ~280 lines — full walkthrough
@@ -532,7 +592,7 @@ check. Both addressed here.
 All Scenario.id and Goal.id in `specs/pkspec.pkl` migrated:
 
 ```
-CORE-001  →  runner.exit-code.pkt-run
+CORE-001  →  runner.exit-code.pkspec-run
 CORE-003  →  runner.tally.is-green
 KIND-001  →  kind.shell
 KIND-002  →  kind.http
@@ -577,7 +637,7 @@ scenario's pointer rots silently. New mode adds a file-existence
 check:
 
 ```sh
-pkt spec --check --strict --discover
+pkspec spec --check --strict --discover
 ```
 
 Walks every Scenario with `implementedAt` set, strips any
@@ -587,7 +647,7 @@ Missing files become a separate failure list distinct from the
 unimplemented-spec list:
 
 ```
-pkt: --strict: 1 implementedAt path(s) missing:
+pkspec: --strict: 1 implementedAt path(s) missing:
   spec.cross-reference → internal/spec/spec_old.go (file not found)
 ```
 
@@ -624,7 +684,7 @@ subagent, spec file only) would show:
                                 detuned to remove "phase 35" literal
 - `examples/{11 files}/Test.pkl`  specRef updated to dot-path ids
 - `internal/spec/spec.go`        ImplIssue + VerifyImplementedAt
-- `cmd/pkt/main.go`              --strict flag + findRepoRoot +
+- `cmd/pkspec/main.go`              --strict flag + findRepoRoot +
                                 strict dispatch + import "os"
 - `docs/notes/spec-graph.md`     "ID naming convention" +
                                 "--check --strict" sections
@@ -673,7 +733,7 @@ unimplemented from `specs/pkspec.pkl`."
   by `CheckUnimplemented`, `Coverage`, `Goals`, `NextActions` — one
   rule, one place.
 
-**#3 — `pkt spec --orphans`**
+**#3 — `pkspec spec --orphans`**
   Lists active Tests with no `specRef`. Dogfood revealed 22 orphans
   in examples/ (hooks-lifecycle/beta, http-eventually/poll, etc.) —
   the natural backlog for "what should we link to specs next?"
@@ -687,12 +747,12 @@ unimplemented from `specs/pkspec.pkl`."
   drop every Test whose plan declares no scenarios — a real bug
   surfaced during the smoke).
 
-**#8 — `pkt spec --discover`**
+**#8 — `pkspec spec --discover`**
   Walks the current directory for `Spec.pkl` / `Test.pkl` (any
   subdir) and `*.pkl` directly under `specs/`. Skips
   `.git` / `.pkspec` / `node_modules` / `pkl/` (schema dir).
   Replaces the previous "list every file explicitly" pattern;
-  `pkt spec --check --discover` is now the canonical CI gate.
+  `pkspec spec --check --discover` is now the canonical CI gate.
 
 **#4 (already fixed in 33.1) — `--check` Goal suffix**
   Each unimplemented line now reads
@@ -701,7 +761,7 @@ unimplemented from `specs/pkspec.pkl`."
 
 ### Coverage after the fixes
 
-Re-running `pkt spec --coverage --discover` on the dogfood plus
+Re-running `pkspec spec --coverage --discover` on the dogfood plus
 all example modules:
 
 ```
@@ -754,7 +814,7 @@ AI-002 — exactly what the spec language now claims.
                               Coverage / NextActions / Goals updated +
                               Orphans / FormatOrphans +
                               FilterPlansForSpec (union-set fix)
-- `cmd/pkt/main.go`           --orphans / --goal / --severity /
+- `cmd/pkspec/main.go`           --orphans / --goal / --severity /
                               --discover flag dispatch +
                               discoverSpecFiles walker (skip pkl/,
                               hidden dirs, node_modules)
@@ -784,13 +844,13 @@ back at scenario ids.
 
 ### What worked
 
-- **`pkt spec --goals` shows priority-ordered coverage**. Reading
+- **`pkspec spec --goals` shows priority-ordered coverage**. Reading
   it makes pkspec's value claims concrete: "GOAL-LANG-INDEPENDENT
   is 5/6 (83%), only KIND-006 (kind pluggability) not demonstrated
   by an example." That's a real review signal, not folklore.
-- **`pkt spec --next` ranks `CORE-001` and `CORE-003` first**
+- **`pkspec spec --next` ranks `CORE-001` and `CORE-003` first**
   (critical + p=95). The output reads like a triage queue.
-- **Cross-module aggregation works**: `pkt spec ... specs/pkspec.pkl
+- **Cross-module aggregation works**: `pkspec spec ... specs/pkspec.pkl
   examples/*/Test.pkl` correctly merges declarations (from the
   spec file) with implementations (from each example), even though
   Plan.Goals and Plan.Scenarios come from different plans.
@@ -798,9 +858,9 @@ back at scenario ids.
 ### What surfaced — friction, in roughly decreasing severity
 
 1. **Framework-internal specs can't be implemented by example
-   Tests.** `CORE-001` (pkt run forces non-zero exit) is real
-   behaviour, but no example "tests" pkt run itself — examples
-   USE pkt, they don't VERIFY it. The dogfood reports 18 of 31
+   Tests.** `CORE-001` (pkspec run forces non-zero exit) is real
+   behaviour, but no example "tests" pkspec run itself — examples
+   USE pkspec, they don't VERIFY it. The dogfood reports 18 of 31
    scenarios as unimplemented; many of those are internal runner
    behaviour with no natural Test impl. The mental model breaks:
    not every spec has a "test that verifies it" — some have "code
@@ -824,21 +884,21 @@ back at scenario ids.
 3. **No `--orphans` mode** — there's no way to surface "tests
    without any specRef." For a project transitioning to spec-driven,
    that listing is exactly what you'd want as a backlog. Sketch:
-   `pkt spec --orphans Test.pkl...` enumerates active tests with
+   `pkspec spec --orphans Test.pkl...` enumerates active tests with
    empty specRef.
 
-4. **`pkt spec --check` didn't say which Goal was blocked.** Each
+4. **`pkspec spec --check` didn't say which Goal was blocked.** Each
    line just said `XXX-001 (declared in: scenario name)`. For 18
    unimplemented entries, the operator has to cross-reference back
    to the spec to see which Goal is most at risk. **Fixed in this
    turn**: each line now shows `→ GOAL-X, GOAL-Y` suffix.
 
-5. **No filter on `pkt spec` modes.** Want to see only critical
+5. **No filter on `pkspec spec` modes.** Want to see only critical
    unimplementeds? Only one Goal's coverage? Today you get the
    full set. `--goal=GOAL-X` / `--severity=critical` would help
    for large suites.
 
-6. **`pkt spec --next` lists internal-runner specs at the top.**
+6. **`pkspec spec --next` lists internal-runner specs at the top.**
    Because CORE-001 / CORE-003 have priority 95 (GOAL-CI-TRUSTWORTHY)
    and are unimplemented, they're #1 and #2 in --next. But they
    are implemented in Go; no one will write a Pkl test for them.
@@ -851,15 +911,15 @@ back at scenario ids.
    level (the Go side unions Goals across plans), but Goals are
    declared per Pkl module, so a Goal in `specs/runtime.pkl`
    isn't visible from `specs/auth.pkl` for in-Pkl tooling. For
-   now this is fine since `pkt spec` flag dispatch happens on the
+   now this is fine since `pkspec spec` flag dispatch happens on the
    Go side.
 
-8. **CLI file enumeration is verbose.** `pkt spec --check
+8. **CLI file enumeration is verbose.** `pkspec spec --check
    specs/pkspec.pkl examples/shell-smoke/Test.pkl
    examples/http-basic/Test.pkl ...` listing every file works but
    is awkward. Glob discovery (`examples/**/Test.pkl`) is at the
-   shell layer, not pkt, so quoting / shell-specifics leak in.
-   Sketch: `pkt spec --discover .` that walks the tree and accepts
+   shell layer, not pkspec, so quoting / shell-specifics leak in.
+   Sketch: `pkspec spec --discover .` that walks the tree and accepts
    every `*.pkl` whose path matches `(Spec|Test)\.pkl`.
 
 ### Coverage snapshot
@@ -886,7 +946,7 @@ it to read this very report); it just lacks "test" impls.
    background-server,sql-select,playwright-page,playwright-test-suite,
    spec-pending,quickcheck-input-space,shard-balanced}/Test.pkl` —
    added `specRef` to the main test in each
-- `cmd/pkt/main.go` — `--check` now appends `→ GOAL-X` per entry
+- `cmd/pkspec/main.go` — `--check` now appends `→ GOAL-X` per entry
   (friction #4 fix)
 - `findings.md` — this entry
 
@@ -913,7 +973,7 @@ Distinct from existing edges:
 Example: AUTH-001 (broad: "valid credentials log in") refined into
 AUTH-001a ("happy path body shape") and AUTH-001b ("Set-Cookie has
 HttpOnly+Secure"). The rendered SPEC.md shows `sub-spec of: ...`
-inline; `pkt spec --check` treats parent and child independently
+inline; `pkspec spec --check` treats parent and child independently
 (each can have its own implementing test).
 
 ### `Goal` — user-facing value statement
@@ -941,11 +1001,11 @@ A scenario can contribute to multiple Goals.
 
 ### Two new spec modes
 
-- **`pkt spec --goals`** — Goals listed by priority desc, each
+- **`pkspec spec --goals`** — Goals listed by priority desc, each
   with contributing-scenario coverage (`2 / 5 contributing specs
   implemented (40%)`). Unimplemented scenarios appear first within
   each Goal so reviewers see open work immediately.
-- **`pkt spec --next`** — unimplemented (non-draft, non-deprecated)
+- **`pkspec spec --next`** — unimplemented (non-draft, non-deprecated)
   scenarios ranked by their best Goal's priority (max across
   contributes[]), then by severity (critical > major > minor),
   then by id asc. The top entry is "the highest-leverage thing to
@@ -995,7 +1055,7 @@ their lifecycle made explicit. Documented in the example.
                                NextAction / NextActions / FormatNext +
                                severityRank + writeScenarioMeta updates
                                (parent + contributes lines)
-- `cmd/pkt/main.go`            --goals / --next flag dispatch
+- `cmd/pkspec/main.go`            --goals / --next flag dispatch
 - `examples/spec-graph/Spec.pkl`  3 Goals + AUTH-001a/b sub-specs
 - `examples/spec-id/Spec.pkl`     reviewStatus = "approved" patch
 - `docs/notes/spec-graph.md`   Sub-specs and Goals section
@@ -1045,14 +1105,14 @@ scenario name. Test.pkl-only modules leave it empty.
 This is the data spec tooling reads. The executor still doesn't
 touch it; `RenderedScenario` is pure spec-side metadata.
 
-### CLI: `pkt spec` grows four modes
+### CLI: `pkspec spec` grows four modes
 
 ```
-pkt spec MOD...              default Markdown render (now with severity badges + dependsOn / decisions lines)
-pkt spec --coverage MOD...   declared vs implemented, by severity / status
-pkt spec --graph MOD...      graphviz dot of the spec knowledge graph
-pkt spec --decisions MOD...  newest-first Markdown decision log
-pkt spec --check MOD...      CI gate (skips draft + deprecated)
+pkspec spec MOD...              default Markdown render (now with severity badges + dependsOn / decisions lines)
+pkspec spec --coverage MOD...   declared vs implemented, by severity / status
+pkspec spec --graph MOD...      graphviz dot of the spec knowledge graph
+pkspec spec --decisions MOD...  newest-first Markdown decision log
+pkspec spec --check MOD...      CI gate (skips draft + deprecated)
 ```
 
 Behavior matrix:
@@ -1108,7 +1168,7 @@ graphviz shows colour-coded severity nodes with dashed deprecation.
                                DecisionLog / FormatDecisions +
                                writeScenarioBadges / writeScenarioMeta +
                                collectOpenQuestions
-- `cmd/pkt/main.go`            --coverage / --graph / --decisions
+- `cmd/pkspec/main.go`            --coverage / --graph / --decisions
                                flags + dispatch
 - `examples/spec-graph/`       Spec.pkl (5-scenario fixture) + Test.pkl +
                                README.md
@@ -1127,7 +1187,7 @@ dependsOn lines). `--check` falls through to the legacy
 
 ---
 
-## Phase 31 — Spec IDs (`Scenario.id` + `Test.specRef` + `pkt spec --check`)
+## Phase 31 — Spec IDs (`Scenario.id` + `Test.specRef` + `pkspec spec --check`)
 
 README claimed it ("coming next"). Implemented to back the claim.
 
@@ -1150,11 +1210,11 @@ README claimed it ("coming next"). Implemented to back the claim.
 - `formatResult` appends `(verifies SIGNUP-001, AUDIT-007)`
   between the outcome and the duration when SpecRef is non-empty.
 
-### `pkt spec`
+### `pkspec spec`
 
 - SPEC.md per-test bullet now shows `— verifies: <ids>` between
   the test name and the tags.
-- `pkt spec --check` cross-references declared (pending+specRef)
+- `pkspec spec --check` cross-references declared (pending+specRef)
   vs implemented (active+specRef), reports specs in the first
   set but not the second, exits 1. Built around a new
   `spec.CheckUnimplemented(plans) []SpecIssue` API.
@@ -1167,8 +1227,8 @@ declares SIGNUP-001/002/003, Test.pkl implements 001 and 002,
 smoke confirmed:
 
 ```
-$ pkt spec --check Spec.pkl Test.pkl
-pkt: 1 unimplemented spec(s):
+$ pkspec spec --check Spec.pkl Test.pkl
+pkspec: 1 unimplemented spec(s):
   SIGNUP-003 (declared in: rejects invalid email)
 exit=1
 ```
@@ -1190,7 +1250,7 @@ output.
   in Run loop's 5 construction sites, formatResult suffix
 - `internal/spec/spec.go` — `writeTest` verifies clause +
   `CheckUnimplemented` + `SpecIssue`
-- `cmd/pkt/main.go` — `--check` flag + handler, usage update
+- `cmd/pkspec/main.go` — `--check` flag + handler, usage update
 - `examples/spec-id/` — Spec.pkl + Test.pkl + README.md
 - `docs/notes/spec-id.md` — semantics + conventions + limits
 
@@ -1198,7 +1258,7 @@ Total ~140 LOC + docs.
 
 ---
 
-## Phase 30.2 — `pkt timings` inspection subcommand
+## Phase 30.2 — `pkspec timings` inspection subcommand
 
 Phase 30.1 dogfooding kept reaching for the same three `jq` queries
 over `.pkspec/timings.jsonl`: "show me per-test stats", "show me
@@ -1208,26 +1268,26 @@ K/N if I ran it now." Promoted them to a first-class subcommand.
 ### Surface
 
 ```
-pkt timings -f Test.pkl                  per-test runs / median / p90 / latest / kind
-pkt timings -f Test.pkl --failing        only tests whose latest record is non-pass
-pkt timings -f Test.pkl --shard=2/4      preview the K/N assignment without running
-pkt timings -f Test.pkl --env ci-linux   different env bucket
+pkspec timings -f Test.pkl                  per-test runs / median / p90 / latest / kind
+pkspec timings -f Test.pkl --failing        only tests whose latest record is non-pass
+pkspec timings -f Test.pkl --shard=2/4      preview the K/N assignment without running
+pkspec timings -f Test.pkl --env ci-linux   different env bucket
 ```
 
 ### Why the shard preview matters
 
 LPT tie-breaking (duration desc → name asc → lowest-bin-index) is
-deterministic, so `pkt timings --shard=K/N` produces byte-identical
-output to what `pkt exec --shard=K/N` will pick. Verified by running
+deterministic, so `pkspec timings --shard=K/N` produces byte-identical
+output to what `pkspec exec --shard=K/N` will pick. Verified by running
 both on the same history — same 2 tests, same durations. This makes
 CI matrix sizing concrete: you can see "shard 2 of 4 has 18 tests
 totaling 12.3s, 24% of the suite" before committing the YAML.
 
 ### Implementation
 
-- `cmd/pkt/timings_cmd.go` (~140 LOC) — flags + table formatter +
-  shard preview using the same `applyShard` helper as `pkt exec`.
-- `cmd/pkt/main.go` — one case in the dispatch + 3-line usage entry.
+- `cmd/pkspec/timings_cmd.go` (~140 LOC) — flags + table formatter +
+  shard preview using the same `applyShard` helper as `pkspec exec`.
+- `cmd/pkspec/main.go` — one case in the dispatch + 3-line usage entry.
 
 No new packages, no new tests (the underlying primitives —
 `timing.LoadRecent`, `timing.Median`, `shard.Pick` — already have
@@ -1235,7 +1295,7 @@ unit coverage). The cmd is a thin formatter on top.
 
 ### What was tempting but skipped
 
-- A `pkt timings --rotate=N` flag to truncate the jsonl to the most
+- A `pkspec timings --rotate=N` flag to truncate the jsonl to the most
   recent N lines. Still no evidence the unbounded growth is hurting
   anyone; defer.
 - An `--ascii-bar` mode to visualise duration distribution.
@@ -1265,7 +1325,7 @@ new flag.
   `--total-timeout=300ms`, then `--rerun-failed` picked exactly
   those 6, all passed, second `--rerun-failed` returned the
   expected "no failed tests in history".
-- **env-strict matching**: `PKT_TIMING_ENV=ci` with no ci-tagged
+- **env-strict matching**: `PKSPEC_TIMING_ENV=ci` with no ci-tagged
   history degraded cleanly to round-robin at 1000ms — every shard
   got 2-3 tests, no crash.
 
@@ -1280,10 +1340,10 @@ new flag.
    total-timeout". Operators now see the correct cause.
 
 2. **Shard scope was announced AFTER the run.** The line
-   `pkt: shard 2/4: 8 tests assigned to other shards` printed in the
+   `pkspec: shard 2/4: 8 tests assigned to other shards` printed in the
    summary, but during the run the operator had no idea which subset
    they were watching. Fixed: pre-run banner
-   `pkt: shard 2/4: running 3 of 10 tests` prints BEFORE the test
+   `pkspec: shard 2/4: running 3 of 10 tests` prints BEFORE the test
    loop; the post-run line is removed (was redundant).
 
 3. **Missing GitHub Actions recipe.** The shard feature is most
@@ -1292,7 +1352,7 @@ new flag.
    nowhere in the docs. Wrote it into
    `docs/notes/timing-shard.md`. Two non-obvious points captured:
    always pull artifacts from `branch: main` regardless of the
-   triggering branch, and `PKT_TIMING_ENV` must be set so dev
+   triggering branch, and `PKSPEC_TIMING_ENV` must be set so dev
    machines don't inject 10x-faster local records into the CI
    bucket.
 
@@ -1317,7 +1377,7 @@ new flag.
 
 - `internal/executor/executor.go`: 6 LOC for the ctx-aware reason
   override in the per-test loop.
-- `cmd/pkt/main.go`: 7 LOC for the pre-run banners + drop the
+- `cmd/pkspec/main.go`: 7 LOC for the pre-run banners + drop the
   redundant post-run shard line.
 - `docs/notes/timing-shard.md`: ~50 lines of GitHub Actions recipe.
 - `examples/shard-balanced/Test.pkl`: 13-line fixture committed as a
@@ -1349,7 +1409,7 @@ Built on top of it:
 ### Design notes
 
 - **Env-strict matching.** Records carry `env` (default "local", set
-  via `PKT_TIMING_ENV`); shard/rerun only consider records with
+  via `PKSPEC_TIMING_ENV`); shard/rerun only consider records with
   matching env. CI durations and local durations diverge enough that
   cross-env fallback would hurt more than it helps.
 - **Skipped/pending records ignored for medians.** A skipped test
@@ -1383,11 +1443,11 @@ Built on top of it:
   LoadRecent with env filter + per-test cap, Median (int trunc for
   even).
 - `internal/shard/shard.go` (~75 LOC) — Item, LPT bin-pack, Pick.
-- `cmd/pkt/timings.go` (~80 LOC) — recordTimings, mapOutcome, testKind.
-- `cmd/pkt/shard.go` (~125 LOC) — parseShardSpec, collectNames,
+- `cmd/pkspec/timings.go` (~80 LOC) — recordTimings, mapOutcome, testKind.
+- `cmd/pkspec/shard.go` (~125 LOC) — parseShardSpec, collectNames,
   filterPlan, shardDurationFn, applyShard.
-- `cmd/pkt/rerun.go` (~30 LOC) — pickRerunFailed, isFailedOutcome.
-- `cmd/pkt/main.go` — flag wiring + summary line.
+- `cmd/pkspec/rerun.go` (~30 LOC) — pickRerunFailed, isFailedOutcome.
+- `cmd/pkspec/main.go` — flag wiring + summary line.
 - `internal/executor/executor.go` — Tally.Skipped, IsGreen change,
   ctx.Err() check at top of per-test loop with "skip the rest" path.
 - Tests: `internal/timing/timing_test.go`, `internal/shard/shard_test.go`.
@@ -1461,7 +1521,7 @@ new Step {
 ```
 
 Run the step N times in sequence; each iteration sees
-`$PKT_REPEAT` (0-based). First failure aborts with
+`$PKSPEC_REPEAT` (0-based). First failure aborts with
 `repeat K/N: <reason>` prepended. Captures reflect the last
 successful iteration. Closes the "POST 5 times" friction
 where users wrote bash loops inside `cmd` to fake
@@ -1470,7 +1530,7 @@ declarative repetition.
 Implementation: `runStep`'s for-loop dispatches each
 iteration through the existing runStepOnce / runStepEventually
 path. The state map gets a copy per iteration with
-`PKT_REPEAT` set; existing eventually + validation logic
+`PKSPEC_REPEAT` set; existing eventually + validation logic
 applies unchanged.
 
 ### #7 — Test ordering doc
@@ -1486,14 +1546,14 @@ the relationship to parallelSteps for explicit independence.
 Pkl 0.31.1 / macOS 26 prints `unhandled Platform key
 FamilyDisplayName` to stderr on every `pkl eval`. The
 warning is harmless upstream, but appears at least 3 times
-per pkt invocation (once per `EvaluateOutputValue` /
+per pkspec invocation (once per `EvaluateOutputValue` /
 `EvaluateOutputBytes`), making scripted output noisy.
 
-`cmd/pkt/stderr_filter.go` installs a pipe-wrapped
+`cmd/pkspec/stderr_filter.go` installs a pipe-wrapped
 `os.Stderr` in main(). A goroutine reads each line and
 drops anything matching the configured noise substrings
 (currently just the FamilyDisplayName entry). Other stderr
-(`fmt.Fprintln(os.Stderr, "pkt:", err)` etc) flows
+(`fmt.Fprintln(os.Stderr, "pkspec:", err)` etc) flows
 unchanged through the same filter.
 
 Implementation: simple `bufio.Scanner` loop + substring
@@ -1700,7 +1760,7 @@ self-discovery.
   Three runs per N, averaged.
 - **Scaling table:**
 
-  | N | `pkl eval` (raw) | `pkt exec` (full pipeline) |
+  | N | `pkl eval` (raw) | `pkspec exec` (full pipeline) |
   | --- | ---:| ---: |
   | 1 | 619 ms | 719 ms |
   | 10 | 566 ms | 741 ms |
@@ -1712,12 +1772,12 @@ self-discovery.
   fixture size. The cost is **JVM cold-start (~550 ms)**, not
   Pkl's interpretation of the test definitions. The language
   itself is not the bottleneck.
-- **pkt exec grows linearly with N — but it's shell-exec
-  cost, not Pkl.** `pkt exec - pkl eval` = +100 ms (N=1),
+- **pkspec exec grows linearly with N — but it's shell-exec
+  cost, not Pkl.** `pkspec exec - pkl eval` = +100 ms (N=1),
   +1931 ms (N=1000). With 1000 `cmd = "true"` Tests, ~2ms per
   fork+exec ≈ 2 seconds of OS-level process startup. This is
   physics, not pkspec overhead.
-- **pkt's own overhead (decode + executor + reporter) is ~80
+- **pkspec's own overhead (decode + executor + reporter) is ~80
   ms.** Estimated from the N=1 case: 100 ms diff = ~80 ms for
   the second pkl evaluate (canonical bytes for inline-snapshot
   rewrite, via `config.Load`'s second `EvaluateOutputBytes`
@@ -1731,8 +1791,8 @@ self-discovery.
     -500 ms. Cost: distribution complexity (build per-arch,
     feature limitations), needs separate binary.
   - **(C) Long-lived evaluator** for "watch mode" / repeated
-    `pkt exec` calls during dev — Pkl evaluated once, reused.
-    Out of scope for the single-shot CLI shape pkt has today.
+    `pkspec exec` calls during dev — Pkl evaluated once, reused.
+    Out of scope for the single-shot CLI shape pkspec has today.
 - **Decision: don't optimise.** 700 ms cold start is
   acceptable for "run a test fixture and see the result";
   N=1000 in 2.6 s is acceptable for a heavy CI run; nothing
@@ -1857,7 +1917,7 @@ self-discovery.
 
 - **Why phase 23.1 wasn't enough.** Seed-space shrinking
   surfaces "smaller seed that still fails," but the user has
-  to mentally map seed → input themselves. For `PKT_SEED %
+  to mentally map seed → input themselves. For `PKSPEC_SEED %
   N`-style derivations the mapping is clean; for any other
   derivation it's noise. Real QuickCheck shows the actual
   failing **values**, not a number that derives them.
@@ -1917,7 +1977,7 @@ self-discovery.
   `inputs` is non-empty, the seed-space path (phase 23.1)
   is skipped. The `shrink` / `shrinkAttempts` fields are
   reinterpreted as the per-input shrink budget. Documented:
-  use `inputs` for typed Int properties, raw `$PKT_SEED` +
+  use `inputs` for typed Int properties, raw `$PKSPEC_SEED` +
   `shrink` for everything else.
 - **Implementation: ~200 lines in `internal/executor/inputs.go`.**
   Generation (~30 LOC), env composition (~10 LOC), shrink
@@ -1936,7 +1996,7 @@ self-discovery.
   String / Map generators; cross-input shrink; biased
   distributions (mostly-small, edge-case-heavy); generator
   composition (`tuple(intGen, intGen)`). Each is its own
-  feature, none blocking; pkt's MVP now covers the
+  feature, none blocking; pkspec's MVP now covers the
   canonical "named Int parameters" case which is the
   majority of practical property tests.
 
@@ -1945,13 +2005,13 @@ self-discovery.
 ## Phase 23.1 — Seed-space shrinking
 
 - **Scope: seed-space, not input-space.** Honest framing
-  upfront: pkt has no view of how the body derives input from
-  `$PKT_SEED`, so a true QuickCheck-style input shrinker is
-  out of scope. What pkt CAN do is try numerically smaller
+  upfront: pkspec has no view of how the body derives input from
+  `$PKSPEC_SEED`, so a true QuickCheck-style input shrinker is
+  out of scope. What pkspec CAN do is try numerically smaller
   seeds and check whether the body still fails. Works well
-  for monotonic-ish derivations (`PKT_SEED % N`, integer
+  for monotonic-ish derivations (`PKSPEC_SEED % N`, integer
   division), useless for hash-based derivations
-  (`sha256(PKT_SEED)`). Documented as "hint, not proof of
+  (`sha256(PKSPEC_SEED)`). Documented as "hint, not proof of
   minimality."
 - **Schema: 2 new fields.** `shrink: Boolean = false` (opt-in)
   and `shrinkAttempts: Int = 32` (budget). Default off so
@@ -1977,7 +2037,7 @@ self-discovery.
   999999 → 62490 (13 candidates tried)" line + per-seed
   trace of the fails that drove the adoption. Reads as a
   bug-narrowing log.
-- **Smoke: 16x shrink in 13 probes.** `PKT_SEED % 100 < 50`
+- **Smoke: 16x shrink in 13 probes.** `PKSPEC_SEED % 100 < 50`
   property, `iterationSeed = 999999`. Initial failing seed
   = 999,999 (val = 99). After shrink: 62,490 (val = 90 →
   still ≥ 50). Path: 999,999 → 499,999 → 249,999 → 124,999
@@ -1998,8 +2058,8 @@ self-discovery.
   consumed by passing probes is implicit in "X candidates
   tried" vs. the actual number of body executions. Could
   add `--verbose-shrink` if the visibility is wanted later.
-- **PKT_ITERATION = -1 during shrink.** The body sees
-  `PKT_ITERATION = -1` for any shrink-probe invocation, so
+- **PKSPEC_ITERATION = -1 during shrink.** The body sees
+  `PKSPEC_ITERATION = -1` for any shrink-probe invocation, so
   authors can distinguish "main iteration loop" from
   "shrink probe" if their body cares. Documented in
   `quickcheck.md`.
@@ -2007,11 +2067,11 @@ self-discovery.
   testing + shrinking landed without per-kind plumbing.
   Every kind (5 kinds) inherits both via the shared
   `runAttempt` path; the env injection
-  (`PKT_SEED` / `PKT_ITERATION`) is reused for shrink with
+  (`PKSPEC_SEED` / `PKSPEC_ITERATION`) is reused for shrink with
   the new sentinel. Same "kind-uniform dispatch" story as
   before — no per-kind branching needed.
 - **What remains open.** True input-space shrinking would
-  require pkt to know the input type and have type-specific
+  require pkspec to know the input type and have type-specific
   shrink strategies (integers halve, lists drop elements,
   strings drop characters). That's a substantially bigger
   feature — needs a generator API in Pkl, an input
@@ -2044,7 +2104,7 @@ self-discovery.
   `runIterated` path that:
   - Initializes seed = `iterationSeed`.
   - Loops `iterations` times.
-  - Each iteration injects `PKT_SEED` (current seed) + `PKT_ITERATION`
+  - Each iteration injects `PKSPEC_SEED` (current seed) + `PKSPEC_ITERATION`
     (0-based index) into extraEnv.
   - Calls `runAttempt` (the same shape as the retry path).
   - On first non-Passed result: prepends
@@ -2061,22 +2121,22 @@ self-discovery.
   seed values from the experiments-PoC Pkl fact. If anyone
   changes the algorithm in either Go or Pkl, the test or the
   Pkl fact will reject the divergence.
-- **`PKT_SEED` / `PKT_ITERATION` env injection works for every
+- **`PKSPEC_SEED` / `PKSPEC_ITERATION` env injection works for every
   kind.** The body sees them via the standard env-merging chain
   (defaults + Test.env + Step.env + state + iteration extras),
-  so `cmd = "echo $PKT_SEED"`, `script = "tests/foo.mjs"`
-  reading `ctx.env.PKT_SEED`, SQL `args { "$PKT_SEED" }`, http
-  `bodyJson { ["seed"] = "$PKT_SEED" }` all just work — no
+  so `cmd = "echo $PKSPEC_SEED"`, `script = "tests/foo.mjs"`
+  reading `ctx.env.PKSPEC_SEED`, SQL `args { "$PKSPEC_SEED" }`, http
+  `bodyJson { ["seed"] = "$PKSPEC_SEED" }` all just work — no
   per-kind plumbing.
 - **Hooks fire once per Test, not per iteration.** Deliberate:
   `before` / `after` (both scopes) are state setup for the
   Test as a whole; the property-based loop is internal to the
   Test body. Per-iteration setup belongs in the body using
-  `$PKT_SEED`. Documented in `quickcheck.md`.
+  `$PKSPEC_SEED`. Documented in `quickcheck.md`.
 - **Smoke: 50-iteration associativity check, deterministic.**
   Wrote `examples/quickcheck-subprocess/` with two Tests:
   (1) `addition_is_associative` — derives 3 numbers from
-  `$PKT_SEED`, asserts `(a+b)+c == a+(b+c)`. 50 iterations
+  `$PKSPEC_SEED`, asserts `(a+b)+c == a+(b+c)`. 50 iterations
   in 106ms, all pass.
   (2) `property_that_does_not_hold` — deliberately fails on
   the first odd seed. With pending = false, it surfaced
@@ -2086,7 +2146,7 @@ self-discovery.
   Wrote `examples/quickcheck-pkl/SortProperty.test.pkl` with
   `QC.intCases(20260512, 50, 0, 1000000)` generating 50 cases,
   each used as a sub-seed for an 8-element list, asserting
-  `sort(sort(xs)) == sort(xs)`. 2 facts pass under `pkt run`.
+  `sort(sort(xs)) == sort(xs)`. 2 facts pass under `pkspec run`.
 - **Pkl gotcha: function calls are positional only.** Initial
   Pkl example used `QC.intCases(seed = 20260512, count = 50, ...)`
   syntax — rejected with "Expected `,` or `)`." Switched to
@@ -2104,7 +2164,7 @@ self-discovery.
   based testing landed without per-kind plumbing. Every kind
   (shell, http, playwright, playwright-test, sql) inherits
   iteration support through the executor's `runAttempt`
-  pathway. The env injection (`PKT_SEED` / `PKT_ITERATION`)
+  pathway. The env injection (`PKSPEC_SEED` / `PKSPEC_ITERATION`)
   hooks into the existing merge chain. No `if kind == "shell" {
   ... } else if kind == "http" { ... }` branching — same as
   phase 18's promise.
@@ -2164,22 +2224,22 @@ self-discovery.
 
 ## Phase 22.2 — Crashed browser cleanup observation (no code changes)
 
-- **Question.** When pkt cancels a playwright Step via
+- **Question.** When pkspec cancels a playwright Step via
   `Step.timeoutSec` and `exec.CommandContext` SIGKILLs the node
   harness, the harness's `finally { await browser.close() }` does
   NOT run (SIGKILL bypasses JS). Does that leak orphan chromium
   processes?
 - **Observed.** No. `ps -ax | grep -iE 'chromium|playwright'`
-  returns 0 entries immediately after pkt exits, and 0 after
+  returns 0 entries immediately after pkspec exits, and 0 after
   a 3s settle. Verified twice with a fresh fixture.
-- **Why it works without pkt doing anything.** playwright's Node
+- **Why it works without pkspec doing anything.** playwright's Node
   binding manages the chromium child via an internal IPC pipe
   (not the JS finally chain). When the node process dies — for
   any reason, including SIGKILL — the pipe EOFs from chromium's
   side, and chromium has a built-in handler that exits when its
   controlling pipe closes. The cleanup chain is: Go context
   cancel → SIGKILL node → pipe close → chromium self-exit. No
-  pkt-side process group / setpgid / kill -PG needed.
+  pkspec-side process group / setpgid / kill -PG needed.
 - **Caveat.** This is a property of the playwright library, not
   a guarantee pkspec enforces. If a future kind spawns a
   child process that doesn't have an equivalent self-cleanup
@@ -2248,7 +2308,7 @@ self-discovery.
 - **Tests-run-in-alphabetical-order is a subtle interaction.**
   Initial DML smoke had each operation as its own Test;
   pkspec ran them in name order (Phase 13), so `delete`
-  fired before `insert`. Not a bug — pkt's `steps` provides
+  fired before `insert`. Not a bug — pkspec's `steps` provides
   the sequential primitive. Documented as the expected
   authoring pattern: DML chains belong in `steps`, not split
   across `tests`.
@@ -2400,7 +2460,7 @@ self-discovery.
   (3 kinds). The 4th built-in kind, http, was left out then because
   a backgrounded server complicated the fixture. Filled the gap.
 - **Smoke shape.** `python3 -m http.server`-style minimal Python
-  responder backgrounded in pkt, then a single Test with a
+  responder backgrounded in pkspec, then a single Test with a
   4-element parallelSteps: shell (`echo shell done`), http (GET +
   `expectBodyJsonPath`), playwright (page.goto the local server),
   playwright-test (one spec hitting the local server).
@@ -2424,7 +2484,7 @@ self-discovery.
 
 - **Question.** Phase 18.2 showed 3-way parallel playwright at
   2.23x speedup. Where does the linear regime end? At what
-  fanout does pkt or chromium start losing? Mac, Apple Silicon,
+  fanout does pkspec or chromium start losing? Mac, Apple Silicon,
   9-core M-class CPU.
 - **Smoke shape.** `Test.parallelSteps` with N identical
   playwright steps (each a 1-line setContent / no screenshot),
@@ -2445,11 +2505,11 @@ self-discovery.
   Apple Silicon M-class has ~10 high-performance cores
   effectively available to user processes; the math lines up.
   On a 4-core machine the knee would be earlier (~4-5).
-- **Memory: pkt's resident set stays small.** Maximum RSS:
-  ~175MB at N=20, ~177MB at N=30. The pkt process itself is
+- **Memory: pkspec's resident set stays small.** Maximum RSS:
+  ~175MB at N=20, ~177MB at N=30. The pkspec process itself is
   ~10MB; the additional ~165MB is the supervised browser
   processes' shared text + accounting. chromium is its own
-  process tree, so its memory doesn't pile onto pkt's
+  process tree, so its memory doesn't pile onto pkspec's
   page table. On a machine with limited RAM the actual cap
   is "how many chromium can the OS keep resident,"
   measured separately (Activity Monitor / ps).
@@ -2466,8 +2526,8 @@ self-discovery.
   fixture count.
 - **What this does NOT test.** Same-time-step fixtures that
   share filesystem state (e.g., 10 steps writing to the same
-  log file) — that's an authoring problem, not a pkt
-  problem; pkt's job is to dispatch the goroutines, the
+  log file) — that's an authoring problem, not a pkspec
+  problem; pkspec's job is to dispatch the goroutines, the
   steps handle their own state. Crash-mid-step cleanup
   (`SIGKILL` on a running chromium) — left as an "open
   question" from 18.2; not validated here either.
@@ -2601,7 +2661,7 @@ self-discovery.
   (a) existing users on byte-exact aren't broken; (b) anyone
   who wants real pixel diff runs `pnpm add -D pixelmatch
   pngjs` once. No flag to enable, no version coupling between
-  pkt and pixelmatch.
+  pkspec and pixelmatch.
 - **Size mismatch is handled.** If baseline and actual
   dimensions differ (someone changed the viewport, or the
   page reflowed), `pixelmatch` would throw. The harness
@@ -2655,7 +2715,7 @@ self-discovery.
   cleanly for the playwright kind? The shell + http cases have
   been live since phase 9 / phase 8 respectively.
 - **Smoke shape.** A background shell process increments
-  `/tmp/pkt-evt-counter` every 400ms (`1 → 2 → 3`, then holds at
+  `/tmp/pkspec-evt-counter` every 400ms (`1 → 2 → 3`, then holds at
   3). The playwright script reads that file and `throw`s unless
   the value is `"3"`. Step is wrapped in `eventually {
   intervalMs = 300; timeoutSec = 6 }`.
@@ -2697,7 +2757,7 @@ self-discovery.
   "retry me", `return` signals "passed". This mirrors how
   `eventually` on a shell step uses exit code 0/non-0; the
   per-kind translation lives in the script author's head, not
-  in pkt.
+  in pkspec.
 
 ---
 
@@ -2726,7 +2786,7 @@ self-discovery.
   playwright-test steps or 5+ same-cost steps.
 - **Partial fail behaves identically across kinds.** Mutated the
   @playwright/test spec to introduce one failing inner test;
-  ran parallel and sequential. Both surfaced "[pkt]
+  ran parallel and sequential. Both surfaced "[pkspec]
   <test>: failed" + "step \"playwright-test\": failed" with the
   inner test's name + message; shell and playwright stayed
   silent (passed-step suppression). The reporter doesn't
@@ -2743,7 +2803,7 @@ self-discovery.
   failure duration.** Observed 6s+ wall time for the failing
   case vs ~1s for the all-pass case. playwright-test default
   expect-timeout is 5s and `toHaveText` auto-retries during
-  that window. pkt's `timeoutSec` on the Step is unchanged
+  that window. pkspec's `timeoutSec` on the Step is unchanged
   (still 120s wide), so we're not clamping; the time is spent
   inside playwright-test waiting for the assertion to
   eventually become true. Authoring implication: a *failing*
@@ -2772,25 +2832,25 @@ self-discovery.
   one Page, one screenshot. Building visual-regression features on
   top of it (pixel diff with thresholdPct, retry, trace, video,
   fixtures) is loss-making — `@playwright/test` already ships all of
-  them. The choice: rewrite playwright-test inside pkt, or shell out
+  them. The choice: rewrite playwright-test inside pkspec, or shell out
   to it. Shell out wins on ~3 axes (feature parity comes free, less
   code, less drift over time) and loses on one (the user has two
   playwright APIs to choose between). The two-kind design accepts
   the choice cost as the price of not reimplementing a mature test
   runner.
-- **Architecture: pkt is the harness, playwright-test is the runner.**
-  Per-Step: pkt builds the argv, sets `PLAYWRIGHT_JUNIT_OUTPUT_NAME`
+- **Architecture: pkspec is the harness, playwright-test is the runner.**
+  Per-Step: pkspec builds the argv, sets `PLAYWRIGHT_JUNIT_OUTPUT_NAME`
   to a tmp path, spawns `npx playwright test --reporter=junit ...`,
   parses the resulting `<testsuites><testsuite>...` XML, and
   aggregates inner-test results into one Step outcome. Standard
-  pkt aggregation rules (all-pass→Passed, any-fail→Failed,
+  pkspec aggregation rules (all-pass→Passed, any-fail→Failed,
   all-skip→Pending, 0-tests→Errored) apply; the JUnit XML is the
   authoritative source.
 - **Trust the XML, not the exit code.** playwright-test exits
   non-zero whenever any inner test fails — that's expected. The
   runner only treats exec-level errors as Errored when the XML
   wasn't produced at all (config error, missing binary, etc.).
-  This is the same pattern as pkt run's `pkl test` wrapper: a
+  This is the same pattern as pkspec run's `pkl test` wrapper: a
   reporter-faithful tool whose exit code reflects test outcomes,
   not infrastructure state.
 - **--update-snapshots arg signature changed in playwright 1.50+.**
@@ -2800,7 +2860,7 @@ self-discovery.
   `missing` / `none`) and consumes the next positional arg as the
   value if none is provided — which made our `specPath` get
   swallowed as the snapshot-update mode. Switched to
-  `--update-snapshots=all` for parity with pkt's other
+  `--update-snapshots=all` for parity with pkspec's other
   "unconditional rewrite" refresh flags. Worth documenting that
   CLI tools change their flag signatures across minor versions
   even when the long-form flag name stays the same.
@@ -2830,11 +2890,11 @@ self-discovery.
   test's own "snapshot doesn't exist, writing actual" message.
   (5) `--refresh-snapshots` second pass → `--update-snapshots=all`
   forwarded, baseline written, subsequent run passed (783ms).
-- **Two-kind design pays off in `pkt spec`.** A `playwright` Step
+- **Two-kind design pays off in `pkspec spec`.** A `playwright` Step
   shows up in the SPEC with `script = ...` and `expectScreenshot
   = ...` visible — reviewers see what the inline test does.
   A `playwrightTest` Step shows up with `specPath = "..."` — the
-  inner test details live in the `.spec.ts` files and `pkt spec`
+  inner test details live in the `.spec.ts` files and `pkspec spec`
   doesn't pretend to know about them. Different appropriate
   reads for different appropriate uses.
 - **What's NOT in scope for `playwrightTest`.** No artifact
@@ -2842,7 +2902,7 @@ self-discovery.
   archive). No trace-viewer integration (separate `pnpm exec
   playwright show-trace` invocation). No multiple reporters at
   once (forced `--reporter=junit`). These are all things
-  playwright-test does well already; pkt doesn't try to wrap
+  playwright-test does well already; pkspec doesn't try to wrap
   them.
 - **The flat Step + kind dispatch held up.** Phase 18 chose
   proposal D (extend Step, don't subclass) and bet on
@@ -2901,7 +2961,7 @@ self-discovery.
   Side observation: when the first sequential playwright step
   fails (snapshot first-write), the remaining steps are
   `skipped`. Authoring implication: a sequential run with 3
-  fresh `expectScreenshot` slots needs 3 separate `pkt exec`
+  fresh `expectScreenshot` slots needs 3 separate `pkspec exec`
   invocations to commit them all (one per pass through the
   pipeline). Parallel runs commit all snapshots in one shot
   because each step runs regardless of siblings' results. Not
@@ -2987,8 +3047,8 @@ self-discovery.
   to the committed file. All three states (missing / match /
   mismatch) reachable.
 - **The harness is `embed`-ded, not shipped separately.** Single
-  `pkt` binary, no external assets to install or sync. Trade-off
-  is harness changes require a `pkt` rebuild — fine; the
+  `pkspec` binary, no external assets to install or sync. Trade-off
+  is harness changes require a `pkspec` rebuild — fine; the
   alternative ("look up harness on disk by some path") creates a
   version drift footgun.
 - **What `docs/notes/playwright.md` covers vs. doesn't.** Wrote
@@ -3029,7 +3089,7 @@ self-discovery.
   to walk to later.
 - **Hedge 1: `kind: String` computed field on Step.** Set by the
   schema (`if (cmd != null) "shell" else if ...`) so consumers
-  (executor dispatch, reporter, JUnit, `pkt spec`) read one
+  (executor dispatch, reporter, JUnit, `pkspec spec`) read one
   discriminator instead of three nil checks. When (if) we refactor
   to `abstract class Task` with subclasses, the discriminator is
   already in place — call sites don't move.
@@ -3045,8 +3105,8 @@ self-discovery.
   + `ScreenshotSnapshot` classes land. `runPlaywrightStep` returns
   an Errored StepResult with "playwright runner not yet
   implemented (schema landed in phase 18; runner arrives later)."
-  Authors can already write Playwright Steps and have `pkt spec`
-  render them with `[x]` checkboxes; only `pkt exec` short-circuits
+  Authors can already write Playwright Steps and have `pkspec spec`
+  render them with `[x]` checkboxes; only `pkspec exec` short-circuits
   with the not-yet-implemented marker. This lets spec-driven
   authoring move ahead of the implementation cycle.
 - **Exit criterion documented.** `docs/notes/task-interface-future.md`
@@ -3077,7 +3137,7 @@ self-discovery.
 
 ---
 
-## Phase 17 — `Test.tags`, spec-tag auto-pending, `pkt spec`
+## Phase 17 — `Test.tags`, spec-tag auto-pending, `pkspec spec`
 
 - **`Test.tags: Listing<String>` replaces an enum draft.** First pass
   was `kind = "spec" | "unit" | "regression"`. Switched to free-form
@@ -3098,13 +3158,13 @@ self-discovery.
   used by both the Run filter (so the test reports as pending
   without invoking per-test hooks) and `runOne` (so the body path
   short-circuits the same way `pending = true` does).
-- **`--tag` filter on `pkt exec`.** Repeatable, exact-match (not
+- **`--tag` filter on `pkspec exec`.** Repeatable, exact-match (not
   substring — tags are identifiers, not English). ORs within itself,
   ANDs with `--only`. Combining the two gives "spec items in the
   billing area" or "regression checks named login_*". The
   zero-match error message now mentions both filters so the user
   sees which one excluded everything.
-- **`pkt spec` — static Markdown SPEC.** New subcommand. Takes one
+- **`pkspec spec` — static Markdown SPEC.** New subcommand. Takes one
   or more `Test.pkl` paths, evaluates each via pkl-go, groups by
   source-directory filesystem layout (`tests/` → `tests/users/` →
   `tests/billing/`), and renders bullets with description as
@@ -3125,7 +3185,7 @@ self-discovery.
   implemented to match the spec." Reviewers don't need to read the
   diff to know that — the checkbox is the headline.
 - **`internal/spec` is its own package.** Could have gone in
-  `cmd/pkt`, but the renderer has a non-trivial number of
+  `cmd/pkspec`, but the renderer has a non-trivial number of
   branches (mode → expectations → step labels → inline encoding)
   and benefits from being testable separately. 4 tests cover the
   interesting paths: tag-filter, auto-pending classification,
@@ -3140,8 +3200,8 @@ self-discovery.
   test it is) without inventing a third scope inside the module.
 - **Smoke setup, kept ad-hoc.** Built a tmpdir fixture
   (`tests/Test.pkl` + `tests/users/Test.pkl` + `tests/billing/Test.pkl`),
-  ran `pkt spec` with and without `--tag spec`, then ran
-  `pkt exec` against each module to confirm auto-pending and
+  ran `pkspec spec` with and without `--tag spec`, then ran
+  `pkspec exec` against each module to confirm auto-pending and
   `--tag` filtering. No script committed — the value is verifying
   the integration once, not re-running it on every change (unit
   tests cover the renderer; the integration is implicit in the
@@ -3190,14 +3250,14 @@ self-discovery.
 
 ---
 
-## Phase 15 — JUnit reports for `pkt exec`
+## Phase 15 — JUnit reports for `pkspec exec`
 
 - **Output-format alignment is the only viable bridge to pkl test.**
   pkl test's reporter has no extension point — feeding pkspec
   results back as `facts { [name] { bool } }` to re-run `pkl test`
   works mechanically but loses subprocess context and adds a heavy
-  round trip. Writing JUnit XML directly from `pkt exec` produces
-  what `pkt run` already produces, so CI tooling sees a single
+  round trip. Writing JUnit XML directly from `pkspec exec` produces
+  what `pkspec run` already produces, so CI tooling sees a single
   unified runner without pkspec having to embed pkl.
 - **`<error>` vs `<failure>` matters.** Errored tests (couldn't
   start, timed out, beforeAll failed) get `<error>` per JUnit
@@ -3266,8 +3326,8 @@ self-discovery.
   point; feeding pkspec results back through pkl test (write a
   .pkl with `facts { [name] { true_or_false } }`, re-run `pkl test`)
   works mechanically but loses subprocess context and adds a heavy
-  round trip. `pkt exec --junit-reports` (Phase 15-ish) matches the
-  output format that `pkt run` already produces, which is enough for
+  round trip. `pkspec exec --junit-reports` (Phase 15-ish) matches the
+  output format that `pkspec run` already produces, which is enough for
   CI to treat them as one runner.
 
 ---
@@ -3380,7 +3440,7 @@ self-discovery.
   test even if they touched independent snapshot files; locking each
   `<snapshot>.lock` keeps independent verdicts parallel and only
   serialises the genuinely-shared case (multiple steps writing the
-  same snapshotName, or two `pkt exec` invocations racing against
+  same snapshotName, or two `pkspec exec` invocations racing against
   the same workdir). Filesystem flock is also process-level, so it
   covers cross-invocation races for free.
 - **Lock the lockfile, not the snapshot.** Snapshots are written
@@ -3398,7 +3458,7 @@ self-discovery.
   plumbing, vendor selection in the schema, and a heavier binary —
   for a feature most users will rarely reach for. The contract is
   instead "any executable that reads body on stdin, prompt via
-  `$PKT_AI_PROMPT`, and exits 0/non-0." Authors plug in `claude`,
+  `$PKSPEC_AI_PROMPT`, and exits 0/non-0." Authors plug in `claude`,
   `llm`, or a hand-rolled curl-to-Anthropic shell script as they
   prefer; the runner stays vendor-neutral.
 - **Cache key is `sha256(prompt + "\n" + body)` only.** Including
@@ -3496,7 +3556,7 @@ self-discovery.
   - `checkAll(name, cases, pred) → Result { passed, cases, failure?, summary }`
 - pkspec needs **no new runner support** — a property test is just
   a `facts { ... checkAll(...) ... }` block, executed by the existing
-  `pkt run` path.
+  `pkspec run` path.
 - Four Pkl gotchas surfaced while writing this:
   - `IntSeq(a, b)` is **inclusive on both ends**. For `[0, n)` write
     `IntSeq(0, n - 1)`.

@@ -17,12 +17,12 @@ import (
 // tests would land in shard 2/4 if I ran it now" — so they get
 // promoted to first-class flags here.
 func cmdTimings(args []string, stdout, stderr io.Writer) error {
-	fs := flag.NewFlagSet("pkt timings", flag.ContinueOnError)
+	fs := flag.NewFlagSet("pkspec timings", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	file := fs.String("f", "Test.pkl", "path to the Test.pkl module (used to locate the default timings.jsonl)")
 	fs.StringVar(file, "file", "Test.pkl", "alias for -f")
 	timingsFile := fs.String("timings-file", "", "override the timings.jsonl path (default: <workdir>/.pkspec/timings.jsonl)")
-	env := fs.String("env", "", "env tag to filter on (default: PKT_TIMING_ENV or 'local')")
+	env := fs.String("env", "", "env tag to filter on (default: PKSPEC_TIMING_ENV or 'local')")
 	failing := fs.Bool("failing", false, "only show tests whose latest record is non-pass")
 	shardSpec := fs.String("shard", "", "preview which tests would land in shard K/N (does not run them)")
 	n := fs.Int("n", 10, "load up to this many records per test when computing stats")

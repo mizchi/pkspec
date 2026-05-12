@@ -38,25 +38,25 @@ Seven scenarios with mixed lifecycle + parent/child edges:
 
 ```sh
 # Default render — see verifies / severity / contributes / parent next to each entry.
-pkt spec examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
+pkspec spec examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 
 # CI gate — only non-draft non-deprecated unimplementeds (AUTH-001a/b, AUTH-003)
-pkt spec --check examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl   # exit 1
+pkspec spec --check examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl   # exit 1
 
 # Coverage broken down by severity / status
-pkt spec --coverage examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
+pkspec spec --coverage examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 
 # Knowledge graph as graphviz dot
-pkt spec --graph examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl | dot -Tsvg > graph.svg
+pkspec spec --graph examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl | dot -Tsvg > graph.svg
 
 # Decision log, newest-first
-pkt spec --decisions examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
+pkspec spec --decisions examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 
 # Goals (priority desc) with per-Goal coverage
-pkt spec --goals examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
+pkspec spec --goals examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 
 # Next actions: AUTH-001a/b first (critical + Goal p=90), then AUTH-003 (review + Goal p=90)
-pkt spec --next examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
+pkspec spec --next examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 ```
 
 See [`docs/notes/spec-graph.md`](../../docs/notes/spec-graph.md)

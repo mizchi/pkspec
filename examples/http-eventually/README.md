@@ -7,7 +7,7 @@ thereafter; the test polls every 200ms and passes once the
 server flips.
 
 ```sh
-pkt exec -f examples/http-eventually/Test.pkl
+pkspec exec -f examples/http-eventually/Test.pkl
 ```
 
 Expected: passed in ~1.0–1.2s (the time it takes the server to

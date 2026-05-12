@@ -1,8 +1,8 @@
 amends "../../pkl/Spec.pkl"
 
 // Spec module: declare scenarios with stable ids that tests in
-// Test.pkl can reference via specRef. `pkt spec` will render the
-// SPEC.md with id anchors; `pkt spec --check` warns when a
+// Test.pkl can reference via specRef. `pkspec spec` will render the
+// SPEC.md with id anchors; `pkspec spec --check` warns when a
 // declared spec has no implementing test.
 
 feature = "user signup"

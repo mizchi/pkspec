@@ -12,13 +12,13 @@ tests {
     cmd = """
       set -e
       # Derive three values from the seed; modulo keeps numbers small.
-      a=$(( PKT_SEED % 1000 ))
-      b=$(( (PKT_SEED / 1000) % 1000 ))
-      c=$(( (PKT_SEED / 1000000) % 1000 ))
+      a=$(( PKSPEC_SEED % 1000 ))
+      b=$(( (PKSPEC_SEED / 1000) % 1000 ))
+      c=$(( (PKSPEC_SEED / 1000000) % 1000 ))
       lhs=$(( (a + b) + c ))
       rhs=$(( a + (b + c) ))
       if [ "$lhs" != "$rhs" ]; then
-        echo "iter=$PKT_ITERATION seed=$PKT_SEED a=$a b=$b c=$c lhs=$lhs rhs=$rhs"
+        echo "iter=$PKSPEC_ITERATION seed=$PKSPEC_SEED a=$a b=$b c=$c lhs=$lhs rhs=$rhs"
         exit 1
       fi
     """
@@ -36,8 +36,8 @@ tests {
     iterations = 50
     iterationSeed = 20260512
     cmd = """
-      if [ $(( PKT_SEED % 2 )) -ne 0 ]; then
-        echo "iter=$PKT_ITERATION seed=$PKT_SEED is odd"
+      if [ $(( PKSPEC_SEED % 2 )) -ne 0 ]; then
+        echo "iter=$PKSPEC_ITERATION seed=$PKSPEC_SEED is odd"
         exit 1
       fi
     """
@@ -47,7 +47,7 @@ tests {
   // narrows the failing seed via halving + linear probes.
   new {
     name = "shrinkable_modulo_property"
-    description = "PKT_SEED % 100 < 50 — fails for large seeds; shrink narrows"
+    description = "PKSPEC_SEED % 100 < 50 — fails for large seeds; shrink narrows"
     tags { "spec" }
     pending = true   // enable to see shrink in action
     iterations = 5
@@ -55,9 +55,9 @@ tests {
     shrink = true
     shrinkAttempts = 32
     cmd = """
-      val=$(( PKT_SEED % 100 ))
+      val=$(( PKSPEC_SEED % 100 ))
       if [ $val -ge 50 ]; then
-        echo "PKT_SEED=$PKT_SEED → val=$val (>= 50)"
+        echo "PKSPEC_SEED=$PKSPEC_SEED → val=$val (>= 50)"
         exit 1
       fi
     """

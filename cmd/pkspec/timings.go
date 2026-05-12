@@ -17,11 +17,11 @@ func defaultTimingsPath(sourceAbs string) string {
 	return filepath.Join(filepath.Dir(sourceAbs), ".pkspec", "timings.jsonl")
 }
 
-// envTag is the bucket the run will be tagged under. PKT_TIMING_ENV
+// envTag is the bucket the run will be tagged under. PKSPEC_TIMING_ENV
 // is explicit (CI sets it); fallback is "local" so dev runs don't
 // poison CI history and vice versa.
 func envTag() string {
-	if v := os.Getenv("PKT_TIMING_ENV"); v != "" {
+	if v := os.Getenv("PKSPEC_TIMING_ENV"); v != "" {
 		return v
 	}
 	return "local"

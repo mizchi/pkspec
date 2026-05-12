@@ -245,7 +245,7 @@ type Decision struct {
 
 // Scenario mirrors `pkspec.Test#RenderedScenario` — the spec-side
 // metadata Spec.pkl emits alongside the test set. The executor never
-// reads this; spec tooling (`pkt spec --check / --coverage / --graph /
+// reads this; spec tooling (`pkspec spec --check / --coverage / --graph /
 // --decisions / --goals / --next`) does.
 type Scenario struct {
 	Name             string      `pkl:"name"`

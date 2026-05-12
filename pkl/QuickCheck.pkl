@@ -9,12 +9,12 @@
 /// 1. **Pkl-internal property check** (this module standalone).
 ///    Use `intCases` + `checkAll` against a Pkl predicate inside
 ///    `pkl test` facts. Good for "this Pkl function is correct
-///    for every input in a range." Run via `pkt run`.
+///    for every input in a range." Run via `pkspec run`.
 ///
 /// 2. **Subprocess iteration** (paired with `Test.iterations` and
 ///    `Test.iterationSeed` in `Test.pkl`). The seed stream is the
-///    same; pkt runs the Test body N times and exposes the
-///    current seed via `$PKT_SEED` so the subprocess can derive
+///    same; pkspec runs the Test body N times and exposes the
+///    current seed via `$PKSPEC_SEED` so the subprocess can derive
 ///    its own input.
 ///
 /// The xorshift32 algorithm is identical on both sides (Pkl and

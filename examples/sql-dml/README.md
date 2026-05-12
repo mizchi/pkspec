@@ -5,7 +5,7 @@ The full lifecycle in one Test: Create → Insert → Verify → Update
 steps see each other's writes; the last step rm's the file.
 
 ```sh
-pkt exec -f examples/sql-dml/Test.pkl
+pkspec exec -f examples/sql-dml/Test.pkl
 ```
 
 Expected: passed in ~10ms.

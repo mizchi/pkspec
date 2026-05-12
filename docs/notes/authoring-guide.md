@@ -1,7 +1,7 @@
 # Authoring guide — writing your first Spec.pkl
 
 The goal of this guide: get from an empty directory to a Spec.pkl
-that survives `pkt spec --check --lint --strict --discover` in
+that survives `pkspec spec --check --lint --strict --discover` in
 under 15 minutes.
 
 If you only want the reference (every field's semantics), see
@@ -26,13 +26,13 @@ say what is verified, not how. Tests carry the actual subprocess
 
 You write Goals + Scenarios in `specs/<feature>.pkl`. You write
 Tests where they already are (`examples/*/Test.pkl` or your
-project's test directory). `pkt spec` joins the two.
+project's test directory). `pkspec spec` joins the two.
 
 ## 1. Scaffold the module
 
 ```sh
 mkdir specs
-pkt spec --template module > specs/my-feature.pkl
+pkspec spec --template module > specs/my-feature.pkl
 ```
 
 Open `specs/my-feature.pkl` and patch:
@@ -45,7 +45,7 @@ Open `specs/my-feature.pkl` and patch:
 Smoke it:
 
 ```sh
-pkt spec specs/my-feature.pkl
+pkspec spec specs/my-feature.pkl
 ```
 
 You should see a `# Test SPEC` rendering with 1 pending scenario.
@@ -66,7 +66,7 @@ new Goal {
 }
 ```
 
-Lifecycle: `draft` → `review` → `approved`. `pkt spec --check`
+Lifecycle: `draft` → `review` → `approved`. `pkspec spec --check`
 skips draft, fails on review/approved unimplementeds.
 
 ## 3. Write a Scenario that contributes
@@ -87,7 +87,7 @@ What's load-bearing:
 
 - **`id`** uses dot-path convention. Reads independently — no
   cross-reference table required.
-- **`contributes`** is the link to Goal. Without it, `pkt spec
+- **`contributes`** is the link to Goal. Without it, `pkspec spec
   --next` can't rank the spec.
 - **`severity = "critical"`** + empty `contributes` triggers a
   `lint.critical-without-contributes` warning — critical specs
@@ -96,12 +96,12 @@ What's load-bearing:
 ## 4. Run the analyses
 
 ```sh
-pkt spec --check    --discover    # CI gate (skips draft)
-pkt spec --coverage --discover    # declared vs implemented
-pkt spec --goals    --discover    # per-Goal coverage
-pkt spec --next     --discover    # what to work on next
-pkt spec --lint     --discover    # convention checks
-pkt spec --orphans  --discover    # tests with no specRef
+pkspec spec --check    --discover    # CI gate (skips draft)
+pkspec spec --coverage --discover    # declared vs implemented
+pkspec spec --goals    --discover    # per-Goal coverage
+pkspec spec --next     --discover    # what to work on next
+pkspec spec --lint     --discover    # convention checks
+pkspec spec --orphans  --discover    # tests with no specRef
 ```
 
 `--discover` walks the current directory, picking up `Spec.pkl`
@@ -137,7 +137,7 @@ tests {
 }
 ```
 
-Re-run `pkt spec --check --discover`. The scenario flips to
+Re-run `pkspec spec --check --discover`. The scenario flips to
 implemented; coverage updates.
 
 ## 6. Use the knowledge graph
@@ -159,7 +159,7 @@ new {
 ```
 
 ```sh
-pkt spec --graph --discover | dot -Tsvg > spec-graph.svg
+pkspec spec --graph --discover | dot -Tsvg > spec-graph.svg
 ```
 
 Each edge type renders differently — solid for `dependsOn`,
@@ -184,7 +184,7 @@ new {
 }
 ```
 
-`pkt spec --decisions --discover` flattens these across the
+`pkspec spec --decisions --discover` flattens these across the
 project in date-desc order.
 
 ## 8. Lifecycle the spec
@@ -216,7 +216,7 @@ new {
 }
 ```
 
-`pkt spec --check --strict` will additionally verify the file
+`pkspec spec --check --strict` will additionally verify the file
 portion of `implementedAt` exists on disk.
 
 ## 10. CI wiring
@@ -224,7 +224,7 @@ portion of `implementedAt` exists on disk.
 A reasonable gate on every PR:
 
 ```yaml
-- run: pkt spec --check --strict --lint --discover
+- run: pkspec spec --check --strict --lint --discover
 ```
 
 That single line catches:
@@ -242,21 +242,21 @@ metric, and `--goals` / `--next` for human review.
 ## Reference card
 
 ```
-pkt spec --template module     skeleton Spec.pkl
-pkt spec --template scenario   one-scenario skeleton
-pkt spec --template goal       one-goal skeleton
+pkspec spec --template module     skeleton Spec.pkl
+pkspec spec --template scenario   one-scenario skeleton
+pkspec spec --template goal       one-goal skeleton
 
-pkt spec --check               CI gate — unimplemented specs
-pkt spec --check --strict      + verify implementedAt paths
-pkt spec --lint                convention checks (broken refs, ...)
-pkt spec --coverage            % implemented, by severity / status
-pkt spec --goals               Goals by priority + per-Goal coverage
-pkt spec --next                "what to work on next" queue
-pkt spec --orphans             tests with no specRef
-pkt spec --graph               graphviz dot
-pkt spec --decisions           Markdown decision log
+pkspec spec --check               CI gate — unimplemented specs
+pkspec spec --check --strict      + verify implementedAt paths
+pkspec spec --lint                convention checks (broken refs, ...)
+pkspec spec --coverage            % implemented, by severity / status
+pkspec spec --goals               Goals by priority + per-Goal coverage
+pkspec spec --next                "what to work on next" queue
+pkspec spec --orphans             tests with no specRef
+pkspec spec --graph               graphviz dot
+pkspec spec --decisions           Markdown decision log
 
-pkt spec --goal goal.X         filter every mode to one Goal
-pkt spec --severity critical   filter every mode to one severity
-pkt spec --discover            walk the cwd for *.pkl spec files
+pkspec spec --goal goal.X         filter every mode to one Goal
+pkspec spec --severity critical   filter every mode to one severity
+pkspec spec --discover            walk the cwd for *.pkl spec files
 ```

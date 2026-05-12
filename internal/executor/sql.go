@@ -201,7 +201,7 @@ func parseSqlDSN(dsn, workdir string) (string, string, error) {
 		return "sqlite", path, nil
 	default:
 		return "", "", fmt.Errorf(
-			"sql: dsn scheme %q not supported (only 'sqlite' is linked into this pkt binary today)",
+			"sql: dsn scheme %q not supported (only 'sqlite' is linked into this pkspec binary today)",
 			scheme,
 		)
 	}

@@ -13,7 +13,7 @@ pnpm init
 pnpm add playwright pixelmatch pngjs
 pnpm exec playwright install chromium
 cd ../..
-pkt exec -f examples/playwright-screenshot/Test.pkl
+pkspec exec -f examples/playwright-screenshot/Test.pkl
 ```
 
 Expected flow:
@@ -25,7 +25,7 @@ Expected flow:
    0.5% the test passes, otherwise fails with
    `<name>.png.actual` + `<name>.png.diff` artifacts (red overlay
    PNG) for inspection.
-4. **Update intentionally**: `pkt exec ... --refresh-snapshots`
+4. **Update intentionally**: `pkspec exec ... --refresh-snapshots`
    overwrites the committed baseline.
 
 Without `pixelmatch` + `pngjs` installed, the runner falls back

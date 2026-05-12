@@ -6,7 +6,7 @@ duration observations across runs.
 
 ## What it does
 
-- **timing recorder** — every `pkt exec` run appends one record per
+- **timing recorder** — every `pkspec exec` run appends one record per
   test to `.pkspec/timings.jsonl` (next to the `Test.pkl` module).
   Default-on; opt out via `--no-record-timings`.
 - **`--shard=K/N`** — split the test set into N bins via
@@ -38,7 +38,7 @@ poison local shard balancing (or vice-versa). Set it from the run
 context:
 
 ```sh
-PKT_TIMING_ENV=ci-linux-x86 pkt exec -f Test.pkl
+PKSPEC_TIMING_ENV=ci-linux-x86 pkspec exec -f Test.pkl
 ```
 
 Default is `local`. Both `--shard` median lookups and
@@ -70,7 +70,7 @@ candidate set first, then shard splits whatever's left. Useful for
 "re-run the fail set across 4 CI machines":
 
 ```sh
-pkt exec -f tests/all.pkl --rerun-failed --shard=2/4
+pkspec exec -f tests/all.pkl --rerun-failed --shard=2/4
 ```
 
 `--only` / `--tag` also apply before either, so they all stack.
@@ -99,22 +99,22 @@ repo-root `.gitignore` lists `.pkspec/timings.jsonl` so history
 stays local (snapshots under `.pkspec/snapshots/` are still
 committed). Override the path with `--timings-file`.
 
-## Inspection: `pkt timings`
+## Inspection: `pkspec timings`
 
 ```
-pkt timings -f Test.pkl                  per-test runs / median / p90 / latest / kind
-pkt timings -f Test.pkl --failing        only tests whose latest record is non-pass
-pkt timings -f Test.pkl --shard=2/4      preview the K/N shard assignment without running
-pkt timings -f Test.pkl --env ci-linux   inspect a different env bucket
+pkspec timings -f Test.pkl                  per-test runs / median / p90 / latest / kind
+pkspec timings -f Test.pkl --failing        only tests whose latest record is non-pass
+pkspec timings -f Test.pkl --shard=2/4      preview the K/N shard assignment without running
+pkspec timings -f Test.pkl --env ci-linux   inspect a different env bucket
 ```
 
-The `--shard=K/N` preview matches what `pkt exec --shard=K/N` will
+The `--shard=K/N` preview matches what `pkspec exec --shard=K/N` will
 do byte-for-byte given the same history — LPT tie-breaking
 (duration desc, name asc, lowest-bin-index) is deterministic. Use
 it before designing a CI matrix:
 
 ```
-$ pkt timings -f tests/all.pkl --shard=2/4
+$ pkspec timings -f tests/all.pkl --shard=2/4
 shard 2/4: 18 of 72 tests, 12340ms of 51200ms work (24%)
   e2e_checkout_path                   2800ms
   e2e_login_flow                      1700ms
@@ -147,7 +147,7 @@ jobs:
           path: .pkspec/
           if_no_artifact_found: warn
 
-      - run: PKT_TIMING_ENV=ci-linux pkt exec -f tests/all.pkl --shard=${{ matrix.shard }}/4
+      - run: PKSPEC_TIMING_ENV=ci-linux pkspec exec -f tests/all.pkl --shard=${{ matrix.shard }}/4
 
       # Each shard uploads its own jsonl. The next job merges them.
       - uses: actions/upload-artifact@v4
@@ -181,7 +181,7 @@ Two notes:
 - The artifact survives across runs because we always read from
   `branch: main` regardless of whether the current run is on main.
   PR runs use the latest main timings; main runs update them.
-- `PKT_TIMING_ENV=ci-linux` is essential — without it, dev machines
+- `PKSPEC_TIMING_ENV=ci-linux` is essential — without it, dev machines
   appending to a shared history would inject 10x faster `local`
   records that throw the CI shard balance off.
 

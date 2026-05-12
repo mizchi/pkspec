@@ -2,7 +2,7 @@
 
 Phase 19 adds a second playwright kind: `playwrightTest`, which shells
 out to `@playwright/test`'s own runner and aggregates the JUnit XML
-output into one pkt Step result. Use this when you want the full
+output into one pkspec Step result. Use this when you want the full
 `@playwright/test` feature set (pixel-diff via `toHaveScreenshot`,
 retry, trace, video, fixtures, sharding, parallel workers) rather
 than the lightweight one-script-one-page driver in `playwright`.
@@ -64,7 +64,7 @@ test('cart total visual', async ({ page }) => {
 });
 ```
 
-## What pkt does on the wire
+## What pkspec does on the wire
 
 For each `playwrightTest` Step the runner:
 
@@ -91,14 +91,14 @@ If playwright-test exits non-zero AND no JUnit XML was produced, the
 Step is Errored with the stderr (truncated to 800 chars) so
 environment trouble (missing playwright, bad config, can't find
 browser) surfaces clearly. A non-zero exit *with* valid XML is the
-normal "some inner test failed" path — pkt trusts the XML.
+normal "some inner test failed" path — pkspec trusts the XML.
 
 ## Snapshot refresh
 
-`pkt exec --refresh-snapshots` is forwarded to playwright-test as
+`pkspec exec --refresh-snapshots` is forwarded to playwright-test as
 `--update-snapshots=all`. This regenerates `toHaveScreenshot()`
 baselines and any `toMatchSnapshot()` files. The `=all` mode is
-chosen for parity with pkt's other snapshot-refresh flows
+chosen for parity with pkspec's other snapshot-refresh flows
 (unconditional overwrite); use playwright-test directly if you
 want the `changed` / `missing` modes.
 
@@ -106,29 +106,29 @@ want the `changed` / `missing` modes.
 
 - `@playwright/test` must be installed in the user's project
   (`pnpm add -D @playwright/test`), and browsers installed via
-  `pnpm exec playwright install`. pkt does not bundle either.
+  `pnpm exec playwright install`. pkspec does not bundle either.
 - Each `playwrightTest` Step is one `npx playwright test` invocation.
   Parallelism *inside* the Step uses playwright-test's own workers;
-  parallelism *across* Steps uses pkt's `parallelSteps`. The two
+  parallelism *across* Steps uses pkspec's `parallelSteps`. The two
   compose — you can fan out 3 Steps in parallel and have each spawn
   4 workers, but be careful with chromium memory at that point.
 - `trace` / `video` / `screenshots` artifacts land wherever the
   user's `playwright.config.ts` says (`outputDir`, default
-  `test-results/`). pkt does not touch them.
+  `test-results/`). pkspec does not touch them.
 - The JUnit reporter is forced via `--reporter=junit`; the user's
   config can still set additional reporters via the
-  `--reporter=junit,list` syntax, but pkt does not currently
+  `--reporter=junit,list` syntax, but pkspec does not currently
   expose that. If you want to see live progress, watch the
-  Step's stdout in the pkt output.
+  Step's stdout in the pkspec output.
 
 ## What this is NOT solving
 
-- pkt does not parse playwright-test's trace files; trace viewing
+- pkspec does not parse playwright-test's trace files; trace viewing
   is a separate `pnpm exec playwright show-trace <path>` step.
-- pkt does not collect or upload `test-results/` artifacts. If
+- pkspec does not collect or upload `test-results/` artifacts. If
   your CI needs them, archive that directory separately.
-- The user's spec files are not visible to `pkt spec` (the
-  Markdown SPEC generator). `pkt spec` lists one entry per
+- The user's spec files are not visible to `pkspec spec` (the
+  Markdown SPEC generator). `pkspec spec` lists one entry per
   `playwrightTest` Step; the inner tests are opaque to it.
 
 ## Comparison example

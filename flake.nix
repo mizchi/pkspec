@@ -17,17 +17,17 @@
 
           vendorHash = "sha256-0LEwWuRj2Oc66rNZ+Psr11hsESue/YXU2veoaWQpKw4=";
 
-          subPackages = [ "cmd/pkt" ];
+          subPackages = [ "cmd/pkspec" ];
 
           ldflags = [ "-s" "-w" ];
 
-          # `pkt` shells out to `pkl` (via pkl-go) for evaluation, and
-          # `pkt run --reader-helper` re-invokes itself, so PATH needs both.
+          # `pkspec` shells out to `pkl` (via pkl-go) for evaluation, and
+          # `pkspec run --reader-helper` re-invokes itself, so PATH needs both.
           # Wrapping ensures users who installed pkspec via Nix get a
           # working `pkl` without a separate install step.
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''
-            wrapProgram $out/bin/pkt \
+            wrapProgram $out/bin/pkspec \
               --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.pkl ]}
           '';
 
@@ -35,7 +35,7 @@
             description = "Language-agnostic test runner that extends pkl test";
             homepage = "https://github.com/mizchi/pkspec";
             license = licenses.mit;
-            mainProgram = "pkt";
+            mainProgram = "pkspec";
             platforms = platforms.unix;
           };
         };
@@ -47,7 +47,7 @@
 
         apps.default = flake-utils.lib.mkApp {
           drv = pkspec;
-          name = "pkt";
+          name = "pkspec";
         };
 
         # `nix develop` for working on pkspec itself.

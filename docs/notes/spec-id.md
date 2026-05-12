@@ -24,12 +24,12 @@ stable identifiers. The flow:
    ```
 3. **The runner** announces the link in the per-test status line:
    ```
-   [pkt] signup_happy_path: passed (verifies SIGNUP-001) (12ms)
+   [pkspec] signup_happy_path: passed (verifies SIGNUP-001) (12ms)
    ```
-4. **`pkt spec`** renders `verifies: SIGNUP-001` next to the test
+4. **`pkspec spec`** renders `verifies: SIGNUP-001` next to the test
    bullet in the SPEC.md so reviewers see the cross-link without
    leaving the markdown.
-5. **`pkt spec --check`** cross-references the two sides and exits
+5. **`pkspec spec --check`** cross-references the two sides and exits
    non-zero on any declared spec that no active test verifies.
 
 ## Schema
@@ -58,12 +58,12 @@ Test (typically in `Test.pkl`) whose `specRef` contains the same
 id counts as the spec **implementation**. The check command treats
 these two roles separately.
 
-## `pkt spec --check`
+## `pkspec spec --check`
 
 CI gate: "every spec has an implementer." Usage:
 
 ```sh
-pkt spec --check Spec.pkl Test.pkl
+pkspec spec --check Spec.pkl Test.pkl
 ```
 
 The command:
@@ -81,7 +81,7 @@ The command:
 Example output on a spec set where `SIGNUP-003` is unimplemented:
 
 ```
-pkt: 1 unimplemented spec(s):
+pkspec: 1 unimplemented spec(s):
   SIGNUP-003 (declared in: rejects invalid email)
 ```
 

@@ -1,6 +1,6 @@
 # Examples
 
-Each subdirectory is a self-contained `pkt exec` target. The
+Each subdirectory is a self-contained `pkspec exec` target. The
 naming convention is `<kind-or-feature>-<aspect>`, and every
 example follows the same shape:
 
@@ -16,7 +16,7 @@ examples/<name>/
 Run any example with:
 
 ```sh
-pkt exec -f examples/<name>/Test.pkl
+pkspec exec -f examples/<name>/Test.pkl
 ```
 
 ## Index
@@ -73,7 +73,7 @@ pkt exec -f examples/<name>/Test.pkl
 ### Property-based testing
 
 - [`quickcheck-pkl`](quickcheck-pkl/) — `QuickCheck.intCases` +
-  `checkAll` on a Pkl function (`pkt run` path)
+  `checkAll` on a Pkl function (`pkspec run` path)
 - [`quickcheck-subprocess`](quickcheck-subprocess/) —
   `Test.iterations` against a shell body; failure reports the
   seed for reproduction
@@ -94,8 +94,8 @@ pkt exec -f examples/<name>/Test.pkl
 
 ## What no example demonstrates
 
-- Multi-fixture orchestration (a single `pkt exec` runs one
+- Multi-fixture orchestration (a single `pkspec exec` runs one
   module).
 - CI integration patterns — see `docs/notes/junit.md` (planned).
 - Authoring conventions for project-level reuse — these belong
-  in user docs, not in pkt's example tree.
+  in user docs, not in pkspec's example tree.

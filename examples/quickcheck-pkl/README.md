@@ -6,10 +6,10 @@ algorithm), and `QuickCheck.intCases` + `QuickCheck.checkAll`
 generate cases and evaluate a predicate.
 
 ```sh
-pkt run examples/quickcheck-pkl/SortProperty.test.pkl
+pkspec run examples/quickcheck-pkl/SortProperty.test.pkl
 ```
 
-(Or `pkl test` directly — `pkt run` is a thin wrapper that fixes
+(Or `pkl test` directly — `pkspec run` is a thin wrapper that fixes
 pkl's exit-code gap on assertion failure.)
 
 Expected: 2 facts passed.
@@ -25,9 +25,9 @@ failure to reproduce.
 | | `quickcheck-pkl` | `quickcheck-subprocess` |
 | --- | --- | --- |
 | System under test | a Pkl function | a subprocess (cmd / http / sql / ...) |
-| Runner | `pkt run` (= `pkl test`) | `pkt exec` with `Test.iterations > 1` |
+| Runner | `pkspec run` (= `pkl test`) | `pkspec exec` with `Test.iterations > 1` |
 | Seed source | `QuickCheck.intCases` | `Test.iterationSeed` + executor xorshift |
-| Failure report | pkl's power-assertion diagram | pkt's "iteration K seed S" Reason |
+| Failure report | pkl's power-assertion diagram | pkspec's "iteration K seed S" Reason |
 | Shrinking | not yet | not yet |
 
 The xorshift32 algorithm is the same on both sides

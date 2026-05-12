@@ -8,10 +8,10 @@ runs replay the recorded JSON.
 
 ```sh
 # first run: hits the server, records to .pkspec/http/counter_first.json
-pkt exec -f examples/http-cassette/Test.pkl
+pkspec exec -f examples/http-cassette/Test.pkl
 
-# second run: replays the cassette; counter on the server stays at 1 from pkt's view
-pkt exec -f examples/http-cassette/Test.pkl
+# second run: replays the cassette; counter on the server stays at 1 from pkspec's view
+pkspec exec -f examples/http-cassette/Test.pkl
 ```
 
 Modes:

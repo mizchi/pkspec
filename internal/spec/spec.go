@@ -244,7 +244,7 @@ type SpecIssue struct {
 // CheckUnimplemented walks every test in every plan and returns a
 // per-spec-id summary. A spec is "unimplemented" when no active test
 // references it via `specRef`; that is the condition
-// `pkt spec --check` reports. When Plan.Scenarios is populated (the
+// `pkspec spec --check` reports. When Plan.Scenarios is populated (the
 // plan came from Spec.pkl), declarations are read from there with
 // `draft` / `deprecated` ignored. Otherwise the legacy heuristic
 // applies: a pending test with `specRef` counts as the declaration.
@@ -533,7 +533,7 @@ type DecisionEntry struct {
 }
 
 // DecisionLog flattens every Scenario.Decisions into a single
-// newest-first slice. Useful for `pkt spec --decisions`.
+// newest-first slice. Useful for `pkspec spec --decisions`.
 func DecisionLog(plans []*config.Plan) []DecisionEntry {
 	var out []DecisionEntry
 	for _, p := range plans {
@@ -777,7 +777,7 @@ func severityRank(s string) int {
 	return 0
 }
 
-// OrphanTest is one entry in the `pkt spec --orphans` listing:
+// OrphanTest is one entry in the `pkspec spec --orphans` listing:
 // an active Test (non-pending) that does not declare any specRef.
 // For projects transitioning to spec-driven, this is the backlog
 // of "tests that exist but verify nothing nameable."
@@ -840,7 +840,7 @@ func FormatOrphans(orphans []OrphanTest) string {
 	return b.String()
 }
 
-// ImplIssue is one row of `pkt spec --check --strict` output:
+// ImplIssue is one row of `pkspec spec --check --strict` output:
 // a Scenario whose `implementedAt` path can't be resolved on disk.
 type ImplIssue struct {
 	SpecID string

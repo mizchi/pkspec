@@ -12,7 +12,7 @@ pnpm init
 pnpm add playwright
 pnpm exec playwright install chromium
 cd ../..
-pkt exec -f examples/bdd-scenario/Test.pkl
+pkspec exec -f examples/bdd-scenario/Test.pkl
 ```
 
 Expected: passed in ~600ms (most of it the chromium launch).
@@ -24,7 +24,7 @@ steps have `always = true` — they fire even if a prior step
 failed.
 
 This example uses three kinds (`sql`, `playwright`, `cmd`) inside
-the same scenario; pkt routes each step to the right runner
+the same scenario; pkspec routes each step to the right runner
 based on its `kind` discriminator without any BDD-layer
 involvement.
 

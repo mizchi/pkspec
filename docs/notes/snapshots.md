@@ -9,10 +9,10 @@ snapshot is really protecting.
 
 | kind          | what it captures                              | where it lives                                          | how to update                  |
 | ------------- | --------------------------------------------- | ------------------------------------------------------- | ------------------------------ |
-| `byte`        | exact bytes of stdout / stderr                | `<workdir>/.pkspec/snapshots/<name>.bytes`           | `pkt run --refresh-snapshots` (and `pkt exec --refresh-snapshots` for the subprocess path) |
-| `inline`      | exact bytes of test or step stdout / stderr   | inside the `Test.pkl` source itself (`inlineStdout = "..."`) | `pkt exec --update-inline-snapshots` |
-| `ai-verdict`  | a fuzzy pass/fail judgement on a body         | `<workdir>/.pkspec/ai-snapshots/<name>.json`         | `pkt exec --refresh-ai`        |
-| `http`        | the full response (status / headers / body) of one HTTP request | `<workdir>/.pkspec/http/<name>.json`                 | `pkt exec --refresh-http` (and `--http-replay-only` for CI) — see `docs/notes/cassettes.md` |
+| `byte`        | exact bytes of stdout / stderr                | `<workdir>/.pkspec/snapshots/<name>.bytes`           | `pkspec run --refresh-snapshots` (and `pkspec exec --refresh-snapshots` for the subprocess path) |
+| `inline`      | exact bytes of test or step stdout / stderr   | inside the `Test.pkl` source itself (`inlineStdout = "..."`) | `pkspec exec --update-inline-snapshots` |
+| `ai-verdict`  | a fuzzy pass/fail judgement on a body         | `<workdir>/.pkspec/ai-snapshots/<name>.json`         | `pkspec exec --refresh-ai`        |
+| `http`        | the full response (status / headers / body) of one HTTP request | `<workdir>/.pkspec/http/<name>.json`                 | `pkspec exec --refresh-http` (and `--http-replay-only` for CI) — see `docs/notes/cassettes.md` |
 
 These never stack; a single test pins or polls or judges, but the
 runner has no opinion on which it should be. Authors choose per-Test
@@ -44,7 +44,7 @@ Skip when:
 Per-test (Test.cmd output) and per-step (Step.cmd stdout). Opt in by
 setting the field to `""` (or any other string). The runner then
 reports a mismatch on subsequent runs and, when invoked with
-`pkt exec --update-inline-snapshots`, rewrites the Pkl source
+`pkspec exec --update-inline-snapshots`, rewrites the Pkl source
 in-place replacing the prior value with the captured bytes encoded
 as a Pkl double-quoted string. The default value `null` means "no
 inline assertion here" — the runner skips it entirely.
@@ -118,7 +118,7 @@ Is the assertion fuzzy (semantic, not byte-exact)?
 
 A fifth dimension — *what is intended to be checked but not yet
 implemented* — is covered by `tags { "spec" }` + empty body; see
-`docs/notes/spec.md`. The runner reports those as pending and `pkt
+`docs/notes/spec.md`. The runner reports those as pending and `pkspec
 spec` renders them with an unchecked checkbox.
 
 In all three cases the snapshot file (or rewritten source) is part of
