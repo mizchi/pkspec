@@ -5,6 +5,241 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 33 — Sub-specs and user-value Goals
+
+mizchi: "Spec から Sub Spec を参照できるようにする。 また、
+Goal という概念を用意する。 これは実装を持たず、 Spec から
+参照される概念で、 ユーザー視点の価値を定義する。 Goal には
+priority をして、 次に何をやるべきかのヒントにする。"
+
+Two new graph dimensions on top of phase 32's spec graph:
+
+### `Scenario.parent` — sub-spec refinement edge
+
+`Scenario.parent: String?` (Scenario.id of the broader spec).
+Distinct from existing edges:
+
+- `dependsOn`  = "I assume this works"
+- `supersedes` = "I replace this"
+- `parent`     = "I am a more specific case of this"
+
+Example: AUTH-001 (broad: "valid credentials log in") refined into
+AUTH-001a ("happy path body shape") and AUTH-001b ("Set-Cookie has
+HttpOnly+Secure"). The rendered SPEC.md shows `sub-spec of: ...`
+inline; `pkt spec --check` treats parent and child independently
+(each can have its own implementing test).
+
+### `Goal` — user-facing value statement
+
+New top-level concept, sibling of Scenario, carries no test
+implementation. Has `id` / `name` / `description` / `rationale` /
+`priority` (int, higher = more important) / `reviewStatus` /
+`deprecated`.
+
+```pkl
+goals {
+  new Goal {
+    id = "GOAL-SECURE-AUTH"
+    name = "users can authenticate securely"
+    priority = 90
+    reviewStatus = "approved"
+    description = "End users can sign in with credentials and have the session protected against common attacks."
+    rationale = "Without secure auth, every downstream feature is unusable for any real workload."
+  }
+}
+```
+
+Scenarios point at Goals via `Scenario.contributes: Listing<String>`.
+A scenario can contribute to multiple Goals.
+
+### Two new spec modes
+
+- **`pkt spec --goals`** — Goals listed by priority desc, each
+  with contributing-scenario coverage (`2 / 5 contributing specs
+  implemented (40%)`). Unimplemented scenarios appear first within
+  each Goal so reviewers see open work immediately.
+- **`pkt spec --next`** — unimplemented (non-draft, non-deprecated)
+  scenarios ranked by their best Goal's priority (max across
+  contributes[]), then by severity (critical > major > minor),
+  then by id asc. The top entry is "the highest-leverage thing to
+  implement next."
+
+### Example smoke
+
+`examples/spec-graph/` extended with 3 Goals (priorities 90/60/30)
+and 2 sub-specs (AUTH-001a, AUTH-001b under AUTH-001):
+
+```
+# Goals (priority order)
+GOAL-SECURE-AUTH         priority 90, 2/5 (40%)
+GOAL-FRICTIONLESS-LOGIN  priority 60, 1/2 (50%)
+GOAL-AUDIT-TRAIL         priority 30, 1/1 (100%)
+
+# Next actions
+1. AUTH-001a — critical, GOAL-SECURE-AUTH (p=90)
+2. AUTH-001b — critical, GOAL-SECURE-AUTH (p=90)
+3. AUTH-003  — review,   GOAL-SECURE-AUTH (p=90)
+```
+
+AUTH-004 (draft) and AUTH-005 (deprecated) correctly excluded from
+--next.
+
+### Backward compatibility friction
+
+Phase 32 added `reviewStatus` with `"draft"` as default. The
+existing `examples/spec-id/` Spec.pkl didn't set it, so all
+SIGNUP-* scenarios silently became draft and `--check` started
+skipping them. Fix: update the example to set
+`reviewStatus = "approved"` explicitly. This is a real user-facing
+gotcha — when upgrading from pre-phase-32, existing specs need
+their lifecycle made explicit. Documented in the example.
+
+### Footprint
+
+- `pkl/Test.pkl`      RenderedGoal class + Rendered.goals +
+                      renderedGoals hook
+- `pkl/Spec.pkl`      Goal class + top-level goals + Scenario.parent +
+                      Scenario.contributes + renderGoal + renderedGoals
+                      override
+- `internal/config/config.go`  Goal struct + Plan.Goals +
+                               Scenario.Parent + Scenario.Contributes +
+                               RegisterMapping
+- `internal/spec/spec.go`      GoalReport / Goals / FormatGoals +
+                               NextAction / NextActions / FormatNext +
+                               severityRank + writeScenarioMeta updates
+                               (parent + contributes lines)
+- `cmd/pkt/main.go`            --goals / --next flag dispatch
+- `examples/spec-graph/Spec.pkl`  3 Goals + AUTH-001a/b sub-specs
+- `examples/spec-id/Spec.pkl`     reviewStatus = "approved" patch
+- `docs/notes/spec-graph.md`   Sub-specs and Goals section
+- README.md                    CLI block + Spec section refresh
+
+Total ~310 LOC + docs.
+
+---
+
+## Phase 32 — Spec knowledge graph + lifecycle + decision log
+
+mizchi: "仕様をナレッジグラフで表現して、 その廃止や変更、
+意思決定ログも残したい。 それを実装側からリンクする構成にする。"
+
+Built the knowledge-graph layer on top of phase 31's
+`Scenario.id` / `Test.specRef`: edges (dependsOn / supersedes /
+replacedBy), lifecycle (`reviewStatus` × `deprecated`), severity
+classification, append-only decision log, open questions, and a
+top-level `prelude` (Cucumber `Background:`) for shared Given.
+
+### Schema additions (Scenario)
+
+- **knowledge graph**: `dependsOn`, `supersedes`, `replacedBy`
+- **lifecycle**: `reviewStatus` (draft/review/approved),
+  `deprecated`, `deprecatedReason`
+- **classification**: `severity` (critical/major/minor)
+- **authoring helpers**: `openQuestions`, `decisions` (list of
+  `Decision { date, author, summary, rationale }`)
+
+### Top-level: `prelude`
+
+Module-level `prelude: Listing<SpecStep>` injected as the first
+steps of every scenario (after the `Background` tag prefix). Named
+`prelude` rather than `background` because Scenario already has
+`background` for long-running auxiliary processes.
+
+A scenario with empty `given/when/then/cleanup` stays auto-pending
+even when prelude has content — the shared setup doesn't count
+toward "has a body."
+
+### Plan-level: `Plan.Scenarios`
+
+Spec.pkl now renders `RenderedScenario` instances into
+`Rendered.scenarios: Mapping<String, RenderedScenario>`, keyed by
+scenario name. Test.pkl-only modules leave it empty.
+
+This is the data spec tooling reads. The executor still doesn't
+touch it; `RenderedScenario` is pure spec-side metadata.
+
+### CLI: `pkt spec` grows four modes
+
+```
+pkt spec MOD...              default Markdown render (now with severity badges + dependsOn / decisions lines)
+pkt spec --coverage MOD...   declared vs implemented, by severity / status
+pkt spec --graph MOD...      graphviz dot of the spec knowledge graph
+pkt spec --decisions MOD...  newest-first Markdown decision log
+pkt spec --check MOD...      CI gate (skips draft + deprecated)
+```
+
+Behavior matrix:
+
+| state                  | `--check`   | `--coverage` | `--graph`    | `--decisions` |
+| ---------------------- | ----------- | ------------ | ------------ | ------------- |
+| draft                  | skip        | include      | solid node   | include       |
+| review                 | **fail**    | include      | solid node   | include       |
+| approved (active)      | **fail**    | include      | solid node   | include       |
+| approved + deprecated  | skip        | exclude      | dashed node  | include       |
+
+### Example: `examples/spec-graph/`
+
+5 scenarios exercising every new field:
+- AUTH-001 (critical, approved, implemented) — baseline
+- AUTH-002 (critical, approved, implemented) — dependsOn AUTH-001
+- AUTH-003 (major, review, **no impl**) — has open questions
+- AUTH-004 (minor, draft, no impl) — ignored by --check
+- AUTH-005 (minor, deprecated) — replacedBy AUTH-001, supersedes graph edge
+
+Smoke results match expectations: --check exits 1 reporting only
+AUTH-003 (draft AUTH-004 and deprecated AUTH-005 are properly
+filtered); coverage reports 2/4 (50%); decision log surfaces the
+two 2026-03-01 decisions across AUTH-001 and AUTH-005;
+graphviz shows colour-coded severity nodes with dashed deprecation.
+
+### What broke during build-out
+
+- **Pointer type mismatch**: pkl-go decodes `Listing<RenderedDecision>`
+  as `[]*Decision`, not `[]Decision`. First attempt with
+  `Decisions []Decision` panicked at `reflect.Set`. Fix: `[]*Decision`
+  (same convention as `Steps []*Step`).
+- **Prelude defeated auto-pending**: adding prelude flipped every
+  empty-body scenario to ModeSteps → not pending → executed. Fix:
+  `scenarioToTest` now sets `pending = s.pending || (all four step
+  lists are empty)`, evaluated *before* prelude is prepended into
+  the rendered steps. Shared setup no longer pollutes the spec
+  declaration vs implementation distinction.
+
+### Implementation footprint
+
+- `pkl/Test.pkl`         RenderedDecision + RenderedScenario +
+                         Rendered.scenarios + renderedScenarios hook
+- `pkl/Spec.pkl`         Decision class + Scenario field additions +
+                         prelude top-level + renderedScenarios override +
+                         auto-pending refinement
+- `internal/config/config.go`  Scenario + Decision Go structs +
+                               Plan.Scenarios + RegisterMapping
+- `internal/spec/spec.go`      Entry.Scenario field +
+                               CheckUnimplemented split into
+                               checkFromScenarios / checkLegacy +
+                               Coverage / FormatCoverage + Graph +
+                               DecisionLog / FormatDecisions +
+                               writeScenarioBadges / writeScenarioMeta +
+                               collectOpenQuestions
+- `cmd/pkt/main.go`            --coverage / --graph / --decisions
+                               flags + dispatch
+- `examples/spec-graph/`       Spec.pkl (5-scenario fixture) + Test.pkl +
+                               README.md
+- `docs/notes/spec-graph.md`   schema + lifecycle + conventions +
+                               CI recipe + limits
+
+Total ~520 LOC + docs.
+
+### Backward compat
+
+Test.pkl-only modules with no Scenarios continue to render as
+before (no severity badges, no openQuestions tail, no
+dependsOn lines). `--check` falls through to the legacy
+"pending + specRef = declaration" heuristic when
+`Plan.Scenarios` is empty across all plans.
+
+---
+
 ## Phase 31 — Spec IDs (`Scenario.id` + `Test.specRef` + `pkt spec --check`)
 
 README claimed it ("coming next"). Implemented to back the claim.

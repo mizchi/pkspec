@@ -132,26 +132,74 @@ expectAi = new AiAssertion {
 }
 ```
 
-**Spec IDs (cross-module)** — `Spec.pkl` declares scenarios with
-`id`; `Test.pkl` in a sibling module references them via
-`specRef`; the runner prints `(verifies SIGNUP-001)` on each test
-line; `pkt spec` cross-links id → verifying tests in the rendered
-SPEC.md; `pkt spec --check` exits non-zero on any declared spec
-without an implementing test (CI gate). See
-[`docs/notes/spec-id.md`](./docs/notes/spec-id.md) and
-[`examples/spec-id/`](./examples/spec-id/).
+**Spec knowledge graph + Goals** — `Spec.pkl` scenarios are nodes
+in a graph: each carries a stable `id`, lifecycle (`reviewStatus`
+draft/review/approved + `deprecated`), severity, edges (`dependsOn`
+/ `supersedes` / `replacedBy` / `parent` for sub-specs), an
+append-only decision log, and a list of open questions. Goals are
+sibling user-value statements with no test of their own; scenarios
+point at them via `contributes`. `Test.pkl` implements scenarios
+via `specRef`. The runner prints `(verifies AUTH-001)` on each
+test line; `pkt spec` grows six read-only modes:
+
+- `--check` — CI gate: exit 1 on any non-draft non-deprecated spec
+  without an implementing test
+- `--coverage` — declared vs implemented, broken down by severity
+  and review-status
+- `--graph` — graphviz `dot` of the knowledge graph
+- `--decisions` — newest-first Markdown decision log
+- `--goals` — Goals listed by priority with per-Goal coverage
+- `--next` — unimplemented specs ranked by Goal priority + severity
+  ("what to work on next")
 
 ```pkl
 // Spec.pkl
-new Scenario { id = "SIGNUP-001"; name = "creates user"; tags { "spec" } }
+goals {
+  new Goal {
+    id = "GOAL-SECURE-AUTH"
+    name = "users can authenticate securely"
+    priority = 90
+    reviewStatus = "approved"
+  }
+}
+
+scenarios {
+  new {
+    id = "AUTH-001"
+    name = "valid credentials"
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "GOAL-SECURE-AUTH" }
+    dependsOn { "SESSION-001" }
+    decisions {
+      new Decision {
+        date = "2026-03-01"
+        author = "mizchi"
+        summary = "lock the spec to cookie-based auth"
+      }
+    }
+    tags { "spec" }
+  }
+  new {
+    id = "AUTH-001a"
+    name = "valid credentials happy path"
+    parent = "AUTH-001"      // sub-spec refines the parent
+    contributes { "GOAL-SECURE-AUTH" }
+    tags { "spec" }
+  }
+}
 
 // Test.pkl
-new Test { name = "signup_happy_path"; specRef { "SIGNUP-001" }; cmd = "..." }
+new Test { name = "login_happy_path"; specRef { "AUTH-001" }; cmd = "..." }
 ```
 
-See [`docs/notes/spec.md`](./docs/notes/spec.md) /
+Shared setup across scenarios uses the top-level `prelude`
+(Cucumber `Background:`). See
+[`docs/notes/spec.md`](./docs/notes/spec.md) /
 [`docs/notes/ai-assertion.md`](./docs/notes/ai-assertion.md) /
-[`docs/notes/spec-id.md`](./docs/notes/spec-id.md).
+[`docs/notes/spec-id.md`](./docs/notes/spec-id.md) /
+[`docs/notes/spec-graph.md`](./docs/notes/spec-graph.md) and
+[`examples/spec-graph/`](./examples/spec-graph/).
 
 ## Property-based testing, fuzzing, differential testing
 
@@ -243,6 +291,11 @@ pkt spec tests/**/*.pkl                 render Markdown SPEC.md from Scenario ta
 pkt spec tests/**/*.pkl --output SPEC.md
 pkt spec tests/**/*.pkl --tag spec
 pkt spec --check Spec.pkl Test.pkl      CI gate: declared specs vs implementing tests
+pkt spec --coverage Spec.pkl Test.pkl   coverage report by severity / review-status
+pkt spec --graph Spec.pkl Test.pkl      graphviz dot of dependsOn / supersedes / replacedBy
+pkt spec --decisions Spec.pkl Test.pkl  newest-first Markdown decision log
+pkt spec --goals Spec.pkl Test.pkl      user-facing Goals + their contributing-spec coverage
+pkt spec --next Spec.pkl Test.pkl       unimplemented specs ranked by Goal priority + severity
 
 pkt timings -f Test.pkl                 per-test runs / median / p90 / latest / kind
 pkt timings -f Test.pkl --failing       only tests whose latest record is non-pass

@@ -335,7 +335,12 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(io.Discard)
 	output := fs.String("output", "", "write the SPEC to this path (default: stdout)")
 	root := fs.String("root", "", "make source paths relative to this directory (default: current dir)")
-	check := fs.Bool("check", false, "instead of rendering, exit non-zero when any declared spec id has no implementing test (cross-references Scenario.id / Test.specRef)")
+	check := fs.Bool("check", false, "instead of rendering, exit non-zero when any non-draft non-deprecated spec id has no implementing test")
+	coverage := fs.Bool("coverage", false, "instead of rendering, print a coverage report (declared specs vs implementing tests, broken down by severity / review-status)")
+	graph := fs.Bool("graph", false, "instead of rendering, output a graphviz `dot` document of the spec knowledge graph (dependsOn / supersedes / replacedBy)")
+	decisions := fs.Bool("decisions", false, "instead of rendering, output a Markdown decision log flattened across every scenario (newest first)")
+	goalsFlag := fs.Bool("goals", false, "instead of rendering, list user-facing Goals with each Goal's contributing-scenario coverage (priority desc)")
+	next := fs.Bool("next", false, "instead of rendering, list unimplemented specs ranked by their Goal's priority then severity — the \"what to work on next\" view")
 	var tags multiString
 	fs.Var(&tags, "tag", "only include tests whose `tags` Listing contains this exact value (repeatable; OR)")
 	if err := fs.Parse(args); err != nil {
@@ -375,6 +380,30 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		rootDir = abs
 	}
 
+	if *coverage {
+		rep := spec.Coverage(plans)
+		_, err := io.WriteString(stdout, spec.FormatCoverage(rep))
+		return err
+	}
+	if *graph {
+		_, err := io.WriteString(stdout, spec.Graph(plans))
+		return err
+	}
+	if *decisions {
+		entries := spec.DecisionLog(plans)
+		_, err := io.WriteString(stdout, spec.FormatDecisions(entries))
+		return err
+	}
+	if *goalsFlag {
+		reports := spec.Goals(plans)
+		_, err := io.WriteString(stdout, spec.FormatGoals(reports))
+		return err
+	}
+	if *next {
+		actions := spec.NextActions(plans)
+		_, err := io.WriteString(stdout, spec.FormatNext(actions))
+		return err
+	}
 	if *check {
 		issues := spec.CheckUnimplemented(plans)
 		unimplemented := make([]spec.SpecIssue, 0, len(issues))

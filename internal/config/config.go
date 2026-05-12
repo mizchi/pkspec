@@ -232,13 +232,59 @@ type Hook struct {
 	AlwaysRun     bool              `pkl:"alwaysRun"`
 }
 
+// Decision mirrors `pkthunder.Test#RenderedDecision` — one entry in
+// a Scenario's append-only decision log.
+type Decision struct {
+	Date      string  `pkl:"date"`
+	Author    *string `pkl:"author"`
+	Summary   string  `pkl:"summary"`
+	Rationale *string `pkl:"rationale"`
+}
+
+// Scenario mirrors `pkthunder.Test#RenderedScenario` — the spec-side
+// metadata Spec.pkl emits alongside the test set. The executor never
+// reads this; spec tooling (`pkt spec --check / --coverage / --graph /
+// --decisions / --goals / --next`) does.
+type Scenario struct {
+	Name             string      `pkl:"name"`
+	ID               *string     `pkl:"id"`
+	Description      *string     `pkl:"description"`
+	Tags             []string    `pkl:"tags"`
+	DependsOn        []string    `pkl:"dependsOn"`
+	Supersedes       []string    `pkl:"supersedes"`
+	Parent           *string     `pkl:"parent"`
+	Contributes      []string    `pkl:"contributes"`
+	ReviewStatus     string      `pkl:"reviewStatus"`
+	Deprecated       bool        `pkl:"deprecated"`
+	DeprecatedReason *string     `pkl:"deprecatedReason"`
+	ReplacedBy       *string     `pkl:"replacedBy"`
+	Severity         string      `pkl:"severity"`
+	OpenQuestions    []string    `pkl:"openQuestions"`
+	Decisions        []*Decision `pkl:"decisions"`
+}
+
+// Goal mirrors `pkthunder.Test#RenderedGoal` — a user-facing piece
+// of value the system should deliver. Goals have no test of their
+// own; Scenarios point at them via `Scenario.Contributes`.
+type Goal struct {
+	ID           string  `pkl:"id"`
+	Name         string  `pkl:"name"`
+	Description  *string `pkl:"description"`
+	Priority     int     `pkl:"priority"`
+	ReviewStatus string  `pkl:"reviewStatus"`
+	Deprecated   bool    `pkl:"deprecated"`
+	Rationale    *string `pkl:"rationale"`
+}
+
 // Plan is the decoded `Rendered` value the runner consumes.
 type Plan struct {
-	Defaults  *Defaults        `pkl:"defaults"`
-	Tests     map[string]*Test `pkl:"tests"`
-	Before    map[string]*Hook `pkl:"before"`
-	After     map[string]*Hook `pkl:"after"`
-	Canonical []byte           `pkl:"-"`
+	Defaults  *Defaults            `pkl:"defaults"`
+	Tests     map[string]*Test     `pkl:"tests"`
+	Before    map[string]*Hook     `pkl:"before"`
+	After     map[string]*Hook     `pkl:"after"`
+	Scenarios map[string]*Scenario `pkl:"scenarios"`
+	Goals     map[string]*Goal     `pkl:"goals"`
+	Canonical []byte               `pkl:"-"`
 	// SourcePath is the absolute path to the Pkl module that produced
 	// this plan. Inline-snapshot updates rewrite that file in place,
 	// so the runner needs the original location separately from the
@@ -263,6 +309,9 @@ func init() {
 	pkl.RegisterMapping("pkthunder.Test#RenderedConsoleAssertion", ConsoleAssertion{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedSqlSpec", SqlSpec{})
 	pkl.RegisterMapping("pkthunder.Test#RenderedIntInput", IntInput{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedScenario", Scenario{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedDecision", Decision{})
+	pkl.RegisterMapping("pkthunder.Test#RenderedGoal", Goal{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

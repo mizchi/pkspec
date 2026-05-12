@@ -31,6 +31,66 @@ class SpecStep {
   impl: base.Step
 }
 
+/// A user-facing Goal — a piece of value the system should
+/// deliver, independent of any specific implementation. Goals have
+/// no test of their own; Scenarios reference them via
+/// `Scenario.contributes`. `pkt spec --goals` lists Goals with
+/// each Goal's contributing-scenario coverage; `pkt spec --next`
+/// ranks unimplemented scenarios by their Goal's priority to
+/// suggest where to invest next.
+class Goal {
+  /// Stable identifier. Same regex as `Scenario.id`; convention is
+  /// to use a `GOAL-` prefix so the two namespaces don't collide.
+  id: String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))
+
+  /// Short label used in headings.
+  name: String(length > 0)
+
+  /// User-value description: who benefits, what they can do.
+  description: String? = null
+
+  /// Higher = more important. No fixed scale — the runner only
+  /// uses it for relative ordering. Convention: 0-100 range with
+  /// 50 = default importance.
+  priority: Int = 50
+
+  /// Authoring lifecycle. Same semantics as `Scenario.reviewStatus`.
+  reviewStatus: ("draft" | "review" | "approved") = "draft"
+
+  /// Marks the Goal as retired. `pkt spec --goals` excludes
+  /// deprecated Goals from the active list (they remain visible
+  /// for design archaeology).
+  deprecated: Boolean = false
+
+  /// Free-form explanation of why this Goal matters — the
+  /// business / user-experience justification.
+  rationale: String? = null
+}
+
+/// One entry in a scenario's decision log. Append-only by convention
+/// — don't rewrite past entries when a spec changes; add a new
+/// Decision pointing back at what it supersedes.
+///
+/// `pkt spec --decisions` renders these chronologically across the
+/// whole project so reviewers can read the design trail.
+class Decision {
+  /// ISO-8601 date the decision was made. Regex enforces
+  /// `YYYY-MM-DD` so date sorts work without parsing.
+  date: String(matches(Regex(#"^\d{4}-\d{2}-\d{2}$"#)))
+
+  /// Optional author of the decision. Free-form string —
+  /// usernames, real names, or "PM/EngLead/QA" group labels.
+  author: String? = null
+
+  /// One-line summary of what changed. Appears in the SPEC.md
+  /// table-of-decisions. Keep it under ~80 chars.
+  summary: String(length > 0)
+
+  /// Optional multi-paragraph rationale. Rendered as a quoted
+  /// block under the summary in `pkt spec --decisions`.
+  rationale: String? = null
+}
+
 /// A BDD scenario.
 ///
 /// All four step lists default to empty — a scenario can be just
@@ -83,6 +143,74 @@ class Scenario {
   /// Mark the scenario as not-yet-implemented. Useful for "I will
   /// write this tomorrow" placeholders that still document intent.
   pending: Boolean = false
+
+  // ── Knowledge graph edges ────────────────────────────────────
+
+  /// Other `Scenario.id` values this spec depends on / assumes.
+  /// `pkt spec --graph` renders these as graphviz edges so impact
+  /// analysis ("if LOGIN-001 breaks, what else fails?") is mechanical.
+  dependsOn: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+
+  /// Other `Scenario.id` values that this spec replaces. The
+  /// superseded specs should themselves be `deprecated = true`
+  /// with `replacedBy` pointing back at this one — `pkt spec`
+  /// cross-checks both directions.
+  supersedes: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+
+  /// Parent Scenario's id when this scenario is a *sub-spec* — a
+  /// more specific case of a broader spec. Example: AUTH-001
+  /// (parent: "user can log in") refined into AUTH-001a (sub:
+  /// "happy path") and AUTH-001b (sub: "rejects empty
+  /// password"). Distinct from `dependsOn` (preconditions) and
+  /// from `supersedes` (lifecycle replacement) — this is purely
+  /// a refinement / containment edge.
+  parent: String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))? = null
+
+  /// `Goal.id` values this scenario contributes toward. A single
+  /// scenario can advance multiple goals (e.g. "login works" goal
+  /// AND "audit log captures auth events" goal). `pkt spec --next`
+  /// uses these edges to rank unimplemented specs by the priority
+  /// of the goals they would unblock.
+  contributes: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+
+  // ── Lifecycle ────────────────────────────────────────────────
+
+  /// Authoring lifecycle. "draft" = sketched, not yet reviewed —
+  /// `pkt spec --check` ignores draft specs (no failure even when
+  /// unimplemented). "review" = under stakeholder review.
+  /// "approved" = signed off, must be implemented before merging.
+  reviewStatus: ("draft" | "review" | "approved") = "draft"
+
+  /// Marks the spec as retired. `pkt spec --check` skips deprecated
+  /// specs, but they remain in `pkt spec --decisions` / `--graph`
+  /// so the design history is preserved.
+  deprecated: Boolean = false
+
+  /// Free-form explanation of why the spec was retired. Appears in
+  /// the decision log alongside the `deprecated = true` flip.
+  deprecatedReason: String? = null
+
+  /// Successor spec's `Scenario.id`. When `deprecated = true`,
+  /// `replacedBy` is the forwarding pointer readers should follow.
+  replacedBy: String? = null
+
+  /// Severity for failure-impact classification. Affects how
+  /// `pkt spec --check` weighs unimplemented specs — `critical`
+  /// triggers failure, `major` warns, `minor` is silent. Default
+  /// `major` so most specs land in the middle bucket.
+  severity: ("critical" | "major" | "minor") = "major"
+
+  /// Outstanding ambiguities or open questions about this spec.
+  /// `pkt spec` renders these as a TODO list at the end of the
+  /// SPEC.md so reviewers can answer them in one pass instead of
+  /// hunting through descriptions.
+  openQuestions: Listing<String> = new {}
+
+  /// Append-only decision log. Each entry records what changed,
+  /// when, and (optionally) why. Don't edit past entries — add new
+  /// ones. `pkt spec --decisions` renders these across the project
+  /// for design-history review.
+  decisions: Listing<Decision> = new {}
 }
 
 /// Optional human-readable feature name; not currently surfaced in
@@ -93,6 +221,22 @@ feature: String? = null
 /// declare each scenario as `local x = new Scenario { ... }`, then
 /// list them here.
 scenarios: Listing<Scenario> = new {}
+
+/// User-facing Goals. Each Goal is a piece of value the system
+/// should deliver; Scenarios contribute toward them via
+/// `Scenario.contributes`. `pkt spec --goals` lists them; `pkt
+/// spec --next` ranks unimplemented scenarios by Goal priority.
+goals: Listing<Goal> = new {}
+
+/// Shared setup steps prepended to every scenario's Given list —
+/// Cucumber's `Background:` block. Use this for invariants every
+/// scenario in this module relies on (logged-in user, seeded
+/// database, mocked clock). Avoids copy/pasting the same Given
+/// into each scenario.
+///
+/// Named `prelude` rather than `background` because `Scenario.background`
+/// already exists for long-running auxiliary processes.
+prelude: Listing<SpecStep> = new {}
 
 local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.Step = new {
   name = "\(prefix) \(s.description)"
@@ -151,10 +295,21 @@ local function scenarioToTest(s: Scenario): base.Test = new {
   retries = s.retries
   flakyAcceptable = s.flakyAcceptable
   background = s.background
-  pending = s.pending
-  // Order matters: Given → When → Then, then any always-run cleanup.
-  // tests run sequentially via `steps`; mode auto-resolves to ModeSteps.
+  // Auto-pending when the scenario's own steps are empty. A
+  // module-level `prelude` does NOT count toward "has a body" —
+  // shared setup steps are always supporting cast for some
+  // scenario-specific Given/When/Then.
+  pending = s.pending || (
+    s.given.isEmpty
+    && s.`when`.isEmpty
+    && s.then.isEmpty
+    && s.cleanup.isEmpty
+  )
+  // Order matters: Prelude (Background:) → Given → When → Then →
+  // Cleanup. Prelude steps are tagged "Background" in the runner's
+  // report so the spec-side shared-setup is visible.
   steps = new Listing<base.Step> {
+    ...tagSteps("Background", prelude, false)
     ...tagSteps("Given", s.given, false)
     ...tagSteps("When", s.`when`, false)
     ...tagSteps("Then", s.then, false)
@@ -162,9 +317,64 @@ local function scenarioToTest(s: Scenario): base.Test = new {
   }
 }
 
+local function renderDecision(d: Decision): base.RenderedDecision = new {
+  date = d.date
+  author = d.author
+  summary = d.summary
+  rationale = d.rationale
+}
+
+local function renderScenarioMeta(s: Scenario): base.RenderedScenario = new {
+  name = s.name
+  id = s.id
+  description = s.description
+  tags = s.tags
+  dependsOn = s.dependsOn
+  supersedes = s.supersedes
+  parent = s.parent
+  contributes = s.contributes
+  reviewStatus = s.reviewStatus
+  deprecated = s.deprecated
+  deprecatedReason = s.deprecatedReason
+  replacedBy = s.replacedBy
+  severity = s.severity
+  openQuestions = s.openQuestions
+  decisions = new Listing<base.RenderedDecision> {
+    for (d in s.decisions) { renderDecision(d) }
+  }
+}
+
+local function renderGoal(g: Goal): base.RenderedGoal = new {
+  id = g.id
+  name = g.name
+  description = g.description
+  priority = g.priority
+  reviewStatus = g.reviewStatus
+  deprecated = g.deprecated
+  rationale = g.rationale
+}
+
 // Append the rendered scenarios to whatever `tests` the user (or
 // further `amends`) might have declared. Test.pkl's rendering picks
 // it up from here unchanged.
 tests: Listing<base.Test> = new {
   for (s in scenarios) { scenarioToTest(s) }
+}
+
+/// Inject scenario-side metadata into the rendered Plan so
+/// `pkt spec --check / --coverage / --graph / --decisions` can
+/// read it via the Go side. Keyed by Scenario.name since names
+/// are unique within a module; the id (if any) lives inside.
+renderedScenarios: Mapping<String, base.RenderedScenario> = new {
+  for (s in scenarios) {
+    [s.name] = renderScenarioMeta(s)
+  }
+}
+
+/// Inject Goal definitions, keyed by Goal.id. Reachable from the
+/// Go side via `Plan.Goals`.
+renderedGoals: Mapping<String, base.RenderedGoal> = new {
+  for (g in goals) {
+    [g.id] = renderGoal(g)
+  }
 }

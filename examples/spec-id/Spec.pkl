@@ -13,17 +13,20 @@ scenarios {
     name = "creates user"
     description = "POST /users with a fresh email returns 201"
     tags { "spec" }
+    reviewStatus = "approved"
   }
   new {
     id = "SIGNUP-002"
     name = "rejects duplicate email"
     description = "POST /users with an existing email returns 409"
     tags { "spec" }
+    reviewStatus = "approved"
   }
   new {
     id = "SIGNUP-003"
     name = "rejects invalid email"
     description = "RFC 5322 violations return 422"
     tags { "spec" }
+    reviewStatus = "approved"
   }
 }

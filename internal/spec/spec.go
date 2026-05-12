@@ -22,14 +22,20 @@ import (
 
 // Entry pairs a test with the absolute source path of the module that
 // declared it. Render groups entries by directory of SourcePath.
+// `Scenario` is non-nil when the test came from a Spec.pkl rendering
+// (so the entry carries the spec-side metadata: severity, dependsOn,
+// openQuestions, decisions, etc.).
 type Entry struct {
 	SourcePath string
 	Name       string
 	Test       *config.Test
+	Scenario   *config.Scenario
 }
 
 // Collect flattens one or more plans into an Entry slice, applying the
-// optional tag filter. An empty tags slice keeps everything.
+// optional tag filter. An empty tags slice keeps everything. When the
+// plan carries Scenario metadata (Spec.pkl modules), the matching
+// scenario is attached to each entry.
 func Collect(plans []*config.Plan, tags []string) []Entry {
 	var out []Entry
 	for _, p := range plans {
@@ -37,11 +43,15 @@ func Collect(plans []*config.Plan, tags []string) []Entry {
 			if !matchesAnyTag(t.Tags, tags) {
 				continue
 			}
-			out = append(out, Entry{
+			e := Entry{
 				SourcePath: p.SourcePath,
 				Name:       name,
 				Test:       t,
-			})
+			}
+			if sc, ok := p.Scenarios[name]; ok {
+				e.Scenario = sc
+			}
+			out = append(out, e)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -89,7 +99,34 @@ func Render(entries []Entry, root string) string {
 		}
 		writeTest(&b, e)
 	}
+
+	// Aggregate Outstanding Questions across every scenario that
+	// carries any. Renders at the document tail so reviewers can
+	// answer the open questions in one pass.
+	if qs := collectOpenQuestions(entries); len(qs) > 0 {
+		b.WriteString("\n## Outstanding questions\n\n")
+		for _, q := range qs {
+			fmt.Fprintf(&b, "- %s\n", q)
+		}
+	}
 	return b.String()
+}
+
+func collectOpenQuestions(entries []Entry) []string {
+	var out []string
+	for _, e := range entries {
+		if e.Scenario == nil {
+			continue
+		}
+		for _, q := range e.Scenario.OpenQuestions {
+			ref := e.Scenario.Name
+			if e.Scenario.ID != nil {
+				ref = *e.Scenario.ID
+			}
+			out = append(out, fmt.Sprintf("**%s** — %s", ref, q))
+		}
+	}
+	return out
 }
 
 type tally struct {
@@ -126,6 +163,9 @@ func writeTest(b *strings.Builder, e Entry) {
 		prefix = "- [x] **"
 	}
 	fmt.Fprintf(b, "%s%s%s", prefix, e.Name, suffix)
+	if e.Scenario != nil {
+		writeScenarioBadges(b, e.Scenario)
+	}
 	if len(e.Test.SpecRef) > 0 {
 		fmt.Fprintf(b, " — verifies: %s", strings.Join(e.Test.SpecRef, ", "))
 	}
@@ -140,10 +180,55 @@ func writeTest(b *strings.Builder, e Entry) {
 		}
 	}
 
+	if e.Scenario != nil {
+		writeScenarioMeta(b, e.Scenario)
+	}
+
 	for _, ex := range expectations(e.Test) {
 		fmt.Fprintf(b, "  - %s\n", ex)
 	}
 	b.WriteString("\n")
+}
+
+// writeScenarioBadges appends short inline badges (severity,
+// reviewStatus, deprecated marker) next to the test name.
+func writeScenarioBadges(b *strings.Builder, sc *config.Scenario) {
+	if sc.Deprecated {
+		fmt.Fprintf(b, " ⊘ deprecated")
+	}
+	if sc.Severity != "" && sc.Severity != "major" {
+		fmt.Fprintf(b, " (%s)", sc.Severity)
+	}
+	if sc.ReviewStatus != "" && sc.ReviewStatus != "approved" {
+		fmt.Fprintf(b, " [%s]", sc.ReviewStatus)
+	}
+}
+
+// writeScenarioMeta appends spec-graph-flavoured per-test detail:
+// parent / dependsOn / supersedes / replacedBy / contributes /
+// decisions count.
+func writeScenarioMeta(b *strings.Builder, sc *config.Scenario) {
+	if sc.Parent != nil {
+		fmt.Fprintf(b, "  - sub-spec of: %s\n", *sc.Parent)
+	}
+	if len(sc.Contributes) > 0 {
+		fmt.Fprintf(b, "  - contributes to: %s\n", strings.Join(sc.Contributes, ", "))
+	}
+	if len(sc.DependsOn) > 0 {
+		fmt.Fprintf(b, "  - depends on: %s\n", strings.Join(sc.DependsOn, ", "))
+	}
+	if len(sc.Supersedes) > 0 {
+		fmt.Fprintf(b, "  - supersedes: %s\n", strings.Join(sc.Supersedes, ", "))
+	}
+	if sc.ReplacedBy != nil {
+		fmt.Fprintf(b, "  - replaced by: %s\n", *sc.ReplacedBy)
+	}
+	if sc.Deprecated && sc.DeprecatedReason != nil {
+		fmt.Fprintf(b, "  - deprecated: %s\n", *sc.DeprecatedReason)
+	}
+	if len(sc.Decisions) > 0 {
+		fmt.Fprintf(b, "  - decisions: %d entry(ies)\n", len(sc.Decisions))
+	}
 }
 
 // SpecIssue captures one spec id's status across a set of plans:
@@ -156,10 +241,55 @@ type SpecIssue struct {
 }
 
 // CheckUnimplemented walks every test in every plan and returns a
-// per-spec-id summary. A spec is "unimplemented" when at least one
-// pending test declares it but no active test references it; that
-// is the condition `pkt spec --check` reports.
+// per-spec-id summary. A spec is "unimplemented" when no active test
+// references it via `specRef`; that is the condition
+// `pkt spec --check` reports. When Plan.Scenarios is populated (the
+// plan came from Spec.pkl), declarations are read from there with
+// `draft` / `deprecated` ignored. Otherwise the legacy heuristic
+// applies: a pending test with `specRef` counts as the declaration.
 func CheckUnimplemented(plans []*config.Plan) []SpecIssue {
+	if hasScenarios(plans) {
+		return checkFromScenarios(plans)
+	}
+	return checkLegacy(plans)
+}
+
+func hasScenarios(plans []*config.Plan) bool {
+	for _, p := range plans {
+		if len(p.Scenarios) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func checkFromScenarios(plans []*config.Plan) []SpecIssue {
+	decls := map[string]*config.Scenario{}
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID == nil || sc.Deprecated || sc.ReviewStatus == "draft" {
+				continue
+			}
+			decls[*sc.ID] = sc
+		}
+	}
+	impls := collectImpls(plans)
+
+	out := make([]SpecIssue, 0, len(decls))
+	for id, sc := range decls {
+		if len(impls[id]) > 0 {
+			continue
+		}
+		out = append(out, SpecIssue{
+			SpecID:     id,
+			DeclaredIn: []string{sc.Name},
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SpecID < out[j].SpecID })
+	return out
+}
+
+func checkLegacy(plans []*config.Plan) []SpecIssue {
 	decl := map[string][]string{}
 	impl := map[string][]string{}
 	for _, p := range plans {
@@ -195,6 +325,492 @@ func CheckUnimplemented(plans []*config.Plan) []SpecIssue {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].SpecID < out[j].SpecID })
 	return out
+}
+
+func collectImpls(plans []*config.Plan) map[string][]string {
+	out := map[string][]string{}
+	for _, p := range plans {
+		for name, t := range p.Tests {
+			if isPending(t) {
+				continue
+			}
+			for _, id := range t.SpecRef {
+				out[id] = append(out[id], name)
+			}
+		}
+	}
+	for _, v := range out {
+		sort.Strings(v)
+	}
+	return out
+}
+
+// CoverageReport summarises how much of the declared spec set has
+// implementing tests, broken down by severity and review-status.
+type CoverageReport struct {
+	Total         int
+	Implemented   int
+	BySeverity    map[string]CoverageBucket
+	ByStatus      map[string]CoverageBucket
+	Unimplemented []string
+}
+
+type CoverageBucket struct {
+	Total       int
+	Implemented int
+}
+
+// Coverage requires Spec.pkl-rendered plans (with Scenarios populated).
+// Test.pkl-only plans have no declared specs in the schema sense, so
+// coverage is undefined and the report is empty.
+func Coverage(plans []*config.Plan) CoverageReport {
+	rep := CoverageReport{
+		BySeverity: map[string]CoverageBucket{},
+		ByStatus:   map[string]CoverageBucket{},
+	}
+	decls := map[string]*config.Scenario{}
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID == nil || sc.Deprecated {
+				continue
+			}
+			decls[*sc.ID] = sc
+		}
+	}
+	impls := collectImpls(plans)
+	for id, sc := range decls {
+		implemented := len(impls[id]) > 0
+		rep.Total++
+		if implemented {
+			rep.Implemented++
+		} else {
+			rep.Unimplemented = append(rep.Unimplemented, id)
+		}
+		sev := rep.BySeverity[sc.Severity]
+		sev.Total++
+		if implemented {
+			sev.Implemented++
+		}
+		rep.BySeverity[sc.Severity] = sev
+
+		st := rep.ByStatus[sc.ReviewStatus]
+		st.Total++
+		if implemented {
+			st.Implemented++
+		}
+		rep.ByStatus[sc.ReviewStatus] = st
+	}
+	sort.Strings(rep.Unimplemented)
+	return rep
+}
+
+// FormatCoverage renders a CoverageReport as a short text summary.
+func FormatCoverage(rep CoverageReport) string {
+	var b strings.Builder
+	pct := 0.0
+	if rep.Total > 0 {
+		pct = 100 * float64(rep.Implemented) / float64(rep.Total)
+	}
+	fmt.Fprintf(&b, "Coverage: %d / %d specs implemented (%.0f%%)\n\n",
+		rep.Implemented, rep.Total, pct)
+
+	fmt.Fprintln(&b, "By severity:")
+	for _, sev := range []string{"critical", "major", "minor"} {
+		bk := rep.BySeverity[sev]
+		if bk.Total == 0 {
+			continue
+		}
+		p := 100 * float64(bk.Implemented) / float64(bk.Total)
+		fmt.Fprintf(&b, "  %-9s %d / %d (%.0f%%)\n", sev+":", bk.Implemented, bk.Total, p)
+	}
+
+	fmt.Fprintln(&b, "\nBy review status:")
+	for _, st := range []string{"draft", "review", "approved"} {
+		bk := rep.ByStatus[st]
+		if bk.Total == 0 {
+			continue
+		}
+		p := 100 * float64(bk.Implemented) / float64(bk.Total)
+		fmt.Fprintf(&b, "  %-9s %d / %d (%.0f%%)\n", st+":", bk.Implemented, bk.Total, p)
+	}
+
+	if len(rep.Unimplemented) > 0 {
+		fmt.Fprintf(&b, "\nUnimplemented (%d):\n", len(rep.Unimplemented))
+		for _, id := range rep.Unimplemented {
+			fmt.Fprintf(&b, "  %s\n", id)
+		}
+	}
+	return b.String()
+}
+
+// Graph produces a graphviz `dot` document covering every Scenario
+// with an id. Edges: dependsOn (solid arrow), supersedes (dashed),
+// replacedBy (dotted). Node colour encodes severity; deprecated
+// nodes use a dashed border.
+func Graph(plans []*config.Plan) string {
+	var b strings.Builder
+	b.WriteString("digraph specs {\n")
+	b.WriteString("  rankdir=LR;\n")
+	b.WriteString("  node [shape=box, style=rounded];\n\n")
+
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID == nil {
+				continue
+			}
+			color := "black"
+			switch sc.Severity {
+			case "critical":
+				color = "red"
+			case "major":
+				color = "orange"
+			case "minor":
+				color = "gray"
+			}
+			style := "rounded"
+			if sc.Deprecated {
+				style = "rounded,dashed"
+			}
+			label := *sc.ID + "\\n" + sc.Name
+			fmt.Fprintf(&b, "  %q [label=%q, color=%s, style=%q];\n",
+				*sc.ID, label, color, style)
+		}
+	}
+	b.WriteString("\n")
+
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID == nil {
+				continue
+			}
+			for _, dep := range sc.DependsOn {
+				fmt.Fprintf(&b, "  %q -> %q;\n", *sc.ID, dep)
+			}
+			for _, sup := range sc.Supersedes {
+				fmt.Fprintf(&b, "  %q -> %q [style=dashed, label=%q];\n",
+					*sc.ID, sup, "supersedes")
+			}
+			if sc.ReplacedBy != nil {
+				fmt.Fprintf(&b, "  %q -> %q [style=dotted, label=%q];\n",
+					*sc.ID, *sc.ReplacedBy, "replaced by")
+			}
+		}
+	}
+
+	b.WriteString("}\n")
+	return b.String()
+}
+
+// DecisionEntry is one row in the project-wide decision log,
+// flattened from every Scenario's Decisions slice.
+type DecisionEntry struct {
+	Date      string
+	Author    string
+	Summary   string
+	Rationale string
+	SpecID    string
+	SpecName  string
+}
+
+// DecisionLog flattens every Scenario.Decisions into a single
+// newest-first slice. Useful for `pkt spec --decisions`.
+func DecisionLog(plans []*config.Plan) []DecisionEntry {
+	var out []DecisionEntry
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			for _, d := range sc.Decisions {
+				if d == nil {
+					continue
+				}
+				e := DecisionEntry{
+					Date:     d.Date,
+					Summary:  d.Summary,
+					SpecName: sc.Name,
+				}
+				if sc.ID != nil {
+					e.SpecID = *sc.ID
+				}
+				if d.Author != nil {
+					e.Author = *d.Author
+				}
+				if d.Rationale != nil {
+					e.Rationale = *d.Rationale
+				}
+				out = append(out, e)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Date != out[j].Date {
+			return out[i].Date > out[j].Date
+		}
+		return out[i].SpecID < out[j].SpecID
+	})
+	return out
+}
+
+// GoalReport summarises one Goal — how many contributing scenarios
+// exist and how many are implemented.
+type GoalReport struct {
+	Goal         *config.Goal
+	Contributing []ContributingScenario
+	Implemented  int
+	Total        int
+}
+
+// ContributingScenario is one row in a GoalReport: a scenario that
+// declares it contributes to the parent Goal.
+type ContributingScenario struct {
+	SpecID      string
+	Name        string
+	Implemented bool
+	Severity    string
+	Status      string
+}
+
+// Goals returns a per-Goal report across every plan. Deprecated
+// Goals are filtered out. Reports are sorted by priority desc,
+// then id asc.
+func Goals(plans []*config.Plan) []GoalReport {
+	goals := map[string]*config.Goal{}
+	for _, p := range plans {
+		for id, g := range p.Goals {
+			if g.Deprecated {
+				continue
+			}
+			goals[id] = g
+		}
+	}
+	impls := collectImpls(plans)
+	contribs := map[string][]ContributingScenario{}
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID == nil {
+				continue
+			}
+			implemented := len(impls[*sc.ID]) > 0
+			for _, gid := range sc.Contributes {
+				contribs[gid] = append(contribs[gid], ContributingScenario{
+					SpecID:      *sc.ID,
+					Name:        sc.Name,
+					Implemented: implemented,
+					Severity:    sc.Severity,
+					Status:      sc.ReviewStatus,
+				})
+			}
+		}
+	}
+
+	out := make([]GoalReport, 0, len(goals))
+	for id, g := range goals {
+		cs := contribs[id]
+		sort.Slice(cs, func(i, j int) bool {
+			if cs[i].Implemented != cs[j].Implemented {
+				return !cs[i].Implemented // unimplemented first
+			}
+			return cs[i].SpecID < cs[j].SpecID
+		})
+		var impl int
+		for _, c := range cs {
+			if c.Implemented {
+				impl++
+			}
+		}
+		out = append(out, GoalReport{
+			Goal:         g,
+			Contributing: cs,
+			Implemented:  impl,
+			Total:        len(cs),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Goal.Priority != out[j].Goal.Priority {
+			return out[i].Goal.Priority > out[j].Goal.Priority
+		}
+		return out[i].Goal.ID < out[j].Goal.ID
+	})
+	return out
+}
+
+// FormatGoals renders a Goals report as Markdown.
+func FormatGoals(reports []GoalReport) string {
+	var b strings.Builder
+	b.WriteString("# Goals\n\n")
+	if len(reports) == 0 {
+		b.WriteString("_No Goals declared._\n")
+		return b.String()
+	}
+	for _, r := range reports {
+		pct := 0
+		if r.Total > 0 {
+			pct = int(100 * float64(r.Implemented) / float64(r.Total))
+		}
+		fmt.Fprintf(&b, "## %s — %s\n\n", r.Goal.ID, r.Goal.Name)
+		fmt.Fprintf(&b, "_priority %d · %d / %d contributing specs implemented (%d%%)_\n\n",
+			r.Goal.Priority, r.Implemented, r.Total, pct)
+		if r.Goal.Description != nil && *r.Goal.Description != "" {
+			fmt.Fprintf(&b, "%s\n\n", *r.Goal.Description)
+		}
+		if r.Goal.Rationale != nil && *r.Goal.Rationale != "" {
+			fmt.Fprintf(&b, "> %s\n\n", *r.Goal.Rationale)
+		}
+		if len(r.Contributing) == 0 {
+			b.WriteString("_No contributing scenarios yet._\n\n")
+			continue
+		}
+		for _, c := range r.Contributing {
+			mark := "[x]"
+			if !c.Implemented {
+				mark = "[ ]"
+			}
+			fmt.Fprintf(&b, "- %s **%s** — %s", mark, c.SpecID, c.Name)
+			if c.Severity != "" && c.Severity != "major" {
+				fmt.Fprintf(&b, " (%s)", c.Severity)
+			}
+			if c.Status != "" && c.Status != "approved" {
+				fmt.Fprintf(&b, " [%s]", c.Status)
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// NextAction is one entry in the "what to work on next" listing.
+type NextAction struct {
+	SpecID       string
+	Name         string
+	Severity     string
+	ReviewStatus string
+	Goals        []NextGoalRef
+	TopPriority  int
+}
+
+// NextGoalRef is a Goal this NextAction would contribute to.
+type NextGoalRef struct {
+	ID       string
+	Priority int
+}
+
+// NextActions returns unimplemented scenarios ranked by Goal priority
+// then severity. Drafts and deprecated specs are skipped — the list
+// is "what's blocking the highest-value approved work."
+func NextActions(plans []*config.Plan) []NextAction {
+	impls := collectImpls(plans)
+	goals := map[string]*config.Goal{}
+	for _, p := range plans {
+		for id, g := range p.Goals {
+			goals[id] = g
+		}
+	}
+
+	var out []NextAction
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID == nil || sc.Deprecated || sc.ReviewStatus == "draft" {
+				continue
+			}
+			if len(impls[*sc.ID]) > 0 {
+				continue
+			}
+			n := NextAction{
+				SpecID:       *sc.ID,
+				Name:         sc.Name,
+				Severity:     sc.Severity,
+				ReviewStatus: sc.ReviewStatus,
+			}
+			for _, gid := range sc.Contributes {
+				g, ok := goals[gid]
+				if !ok || g.Deprecated {
+					continue
+				}
+				n.Goals = append(n.Goals, NextGoalRef{ID: gid, Priority: g.Priority})
+				if g.Priority > n.TopPriority {
+					n.TopPriority = g.Priority
+				}
+			}
+			out = append(out, n)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].TopPriority != out[j].TopPriority {
+			return out[i].TopPriority > out[j].TopPriority
+		}
+		if severityRank(out[i].Severity) != severityRank(out[j].Severity) {
+			return severityRank(out[i].Severity) > severityRank(out[j].Severity)
+		}
+		return out[i].SpecID < out[j].SpecID
+	})
+	return out
+}
+
+func severityRank(s string) int {
+	switch s {
+	case "critical":
+		return 3
+	case "major":
+		return 2
+	case "minor":
+		return 1
+	}
+	return 0
+}
+
+// FormatNext renders a NextActions list as a numbered Markdown list.
+func FormatNext(actions []NextAction) string {
+	var b strings.Builder
+	b.WriteString("# Next actions\n\n")
+	if len(actions) == 0 {
+		b.WriteString("_No outstanding implementation work — all reviewable specs have impls._\n")
+		return b.String()
+	}
+	fmt.Fprintf(&b, "%d unimplemented spec(s), ranked by Goal priority then severity:\n\n", len(actions))
+	for i, a := range actions {
+		fmt.Fprintf(&b, "%d. **%s** — %s\n", i+1, a.SpecID, a.Name)
+		if a.Severity != "" && a.Severity != "major" {
+			fmt.Fprintf(&b, "   - severity: %s\n", a.Severity)
+		}
+		if a.ReviewStatus != "" && a.ReviewStatus != "approved" {
+			fmt.Fprintf(&b, "   - status: %s\n", a.ReviewStatus)
+		}
+		if len(a.Goals) > 0 {
+			gs := make([]string, 0, len(a.Goals))
+			for _, gr := range a.Goals {
+				gs = append(gs, fmt.Sprintf("%s (p=%d)", gr.ID, gr.Priority))
+			}
+			fmt.Fprintf(&b, "   - contributes to: %s\n", strings.Join(gs, ", "))
+		}
+	}
+	return b.String()
+}
+
+// FormatDecisions renders a Markdown decision log.
+func FormatDecisions(entries []DecisionEntry) string {
+	var b strings.Builder
+	b.WriteString("# Decision log\n\n")
+	if len(entries) == 0 {
+		b.WriteString("_No decisions recorded._\n")
+		return b.String()
+	}
+	for _, e := range entries {
+		ref := e.SpecName
+		if e.SpecID != "" {
+			ref = e.SpecID + " — " + e.SpecName
+		}
+		fmt.Fprintf(&b, "## %s — %s\n\n", e.Date, ref)
+		fmt.Fprintf(&b, "%s\n\n", e.Summary)
+		if e.Author != "" {
+			fmt.Fprintf(&b, "_by: %s_\n\n", e.Author)
+		}
+		if e.Rationale != "" {
+			for _, line := range strings.Split(strings.TrimRight(e.Rationale, "\n"), "\n") {
+				fmt.Fprintf(&b, "> %s\n", line)
+			}
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }
 
 // expectations returns short, human-readable labels for the
