@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mizchi/pkthunder/internal/timing"
+	"github.com/mizchi/pkspec/internal/timing"
 )
 
 func TestAppendLoadRoundtrip(t *testing.T) {

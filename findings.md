@@ -5,6 +5,73 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 39 — Rename: pkthunder → pkspec, SPEC.pkl at repo root
+
+mizchi: "これは SPEC.pkl としてリポジトリルートに置くというルールにしよう。
+ライブラリ名も pkthunder ではなく、pkspec にする"
+
+Project rename. The spec-driven layer has become the defining
+feature (Phase 32+ goal graph, lifecycle, knowledge edges, lint,
+authoring guide). The name `pkthunder` was a Phase 0 placeholder
+that no longer matches.
+
+### Scope
+
+- Go module path: `github.com/mizchi/pkthunder` →
+  `github.com/mizchi/pkspec`. All internal imports rewritten in
+  one pass. The binary stays as `pkt` (muscle-memory cost too high
+  to change at the same time).
+- Dogfood spec: `specs/pkthunder.pkl` → `SPEC.pkl` at the repo
+  root. New convention: `pkt spec --check` with no path arg looks
+  up `./SPEC.pkl`. `--discover` includes the root-level file.
+- Runtime directory: `.pkthunder/` → `.pkspec/` (timings.jsonl,
+  snapshots/, screenshots/, http/, ai-snapshots/). Lock and tmp
+  suffixes (`.pkthunder-lock`, `.pkthunder.tmp`) → `.pkspec-*`.
+- Branding sweep across `*.go` / `*.pkl` / `*.md` /
+  `flake.nix` / `.gitignore` / `harness/playwright.mjs`.
+- `cmdSpec` no-arg path: looks up `./SPEC.pkl`, otherwise errors
+  with a "place a SPEC.pkl at the repo root" hint.
+
+### Skipped / pending mizchi action
+
+1. **GitHub repo rename** — `gh repo rename mizchi/pkthunder
+   pkspec`. README links, flake URL, and `go install
+   github.com/mizchi/pkspec/cmd/pkt@latest` all assume this is
+   done. Until then the URLs 404.
+2. **Local clone path** — `mv ~/ghq/github.com/mizchi/pkthunder
+   ~/ghq/github.com/mizchi/pkspec` + `git remote set-url origin`.
+3. **Old XML fixture** —
+   `experiments/02-junit-out/02-failure-output.xml` retains
+   absolute `file:///.../pkthunder/...` paths from when it was
+   first recorded; regenerate on next experiment run.
+
+### Why a binary called `pkt` from a project named `pkspec`
+
+Plausible enough — `pkt` reads as "pk test". The user-facing
+verbs (`pkt run`, `pkt exec`, `pkt spec`, `pkt timings`) stay
+intact. Renaming the binary would be a separate workflow change
+and the cost / benefit is wrong to bundle with the project rename.
+
+### Why retroactive doc rename
+
+`findings.md`, `docs/notes/*.md`, `docs/proposals/*.md`, and all
+docstrings were sed-renamed wholesale. This rewrites history in
+the narrative sense — Phase 30 actually shipped under the name
+pkthunder. The codebase is now self-consistent at the cost of
+that historical accuracy. Acceptable: the framework hasn't been
+published, the name change is meant to be the canonical one going
+forward, and the git history preserves what was actually shipped.
+
+### Reads cleanly?
+
+`SPEC.pkl` now reads top-down: `feature = "pkspec —
+language-agnostic Pkl-based spec & test runner"`, `amends
+"pkl/Spec.pkl"`, 8 Goals, 35 Scenarios. `pkt spec --check
+--discover` from the repo root picks up SPEC.pkl plus
+`examples/*/Test.pkl` automatically — no path arg needed.
+
+---
+
 ## Phase 38 — Inline snapshot upgrades
 
 mizchi: "inline snapshot を実装したい。 a, b, c"
@@ -88,7 +155,7 @@ inline.RewriteUnderLock(path, func(src []byte) ([]byte, error) {
 })
 ```
 
-POSIX `flock(LOCK_EX)` on `<path>.pkthunder-lock` for the
+POSIX `flock(LOCK_EX)` on `<path>.pkspec-lock` for the
 duration of the triple. Same pattern as the existing
 `acquireAiLock`. The executor's in-process `sourceMu` covers
 goroutine concurrency; this covers cross-process.
@@ -110,11 +177,11 @@ counter scans the mask; the original `source` is still used for
 field-content extraction.
 
 Block comments (`/* */`) not yet handled — rare enough in
-pkthunder spec modules that the cost-benefit doesn't warrant.
+pkspec spec modules that the cost-benefit doesn't warrant.
 
 ### Self-referential dogfood
 
-Three new scenarios added to `specs/pkthunder.pkl`:
+Three new scenarios added to `specs/pkspec.pkl`:
 
   diff.inline-http-body         → executor.go:runHttpStep
   diff.inline-multiline         → rewriter.go:shouldUseTripleQuoted
@@ -127,7 +194,7 @@ acknowledge `inlineHttpBody`. Coverage:
   After:  45 / 50 (90%)
 
 5 unimplementeds remain — all local fixtures in
-`examples/spec-graph/` and `examples/spec-id/`. `specs/pkthunder.pkl`
+`examples/spec-graph/` and `examples/spec-id/`. `specs/pkspec.pkl`
 itself stays at 100% across approved entries.
 
 ### Deferred (Phase 39 candidate)
@@ -164,7 +231,7 @@ itself stays at 100% across approved entries.
   - internal/executor/executor.go  inlineHttpBody check in
                                    runHttpStep + hasHttpFields
                                    inclusion
-  - specs/pkthunder.pkl         3 new diff.inline-* scenarios +
+  - specs/pkspec.pkl         3 new diff.inline-* scenarios +
                                 diff.inline-snapshot description
                                 expanded
   - findings.md                 this entry
@@ -277,8 +344,8 @@ By review status:
 
 The 5 remaining unimplementeds are all local fixtures in
 `examples/spec-graph/` and `examples/spec-id/` (intentional —
-those modules demonstrate the spec language, not pkthunder's
-project specs). `specs/pkthunder.pkl` itself is now **100%
+those modules demonstrate the spec language, not pkspec's
+project specs). `specs/pkspec.pkl` itself is now **100%
 implemented across approved entries**.
 
 ### Lint catches discovered while writing this commit
@@ -298,7 +365,7 @@ implemented across approved entries**.
                                    ExpectAi branch skip logic
 - `internal/spec/lint.go`  lint.code-doc-without-implementedAt rule
 - `cmd/pkt/main.go`        --lint-disable flag + filter logic
-- `specs/pkthunder.pkl`    ai.prefer-deterministic flipped to
+- `specs/pkspec.pkl`    ai.prefer-deterministic flipped to
                            approved+code+implementedAt
 - `docs/notes/ai-assertion.md`  preferDeterministic section
 - `README.md`              --lint-disable in CLI block
@@ -389,12 +456,12 @@ lifecycle → framework-internal specs → CI wiring. Ends with a
 reference card listing every `pkt spec` flag.
 
 The goal was "empty directory → CI-gated spec module in 15
-minutes." Tested by writing the dogfood `specs/pkthunder.pkl`
+minutes." Tested by writing the dogfood `specs/pkspec.pkl`
 from this guide — it tracks.
 
 ### Self-referential dogfood update
 
-Added three new scenarios to `specs/pkthunder.pkl`:
+Added three new scenarios to `specs/pkspec.pkl`:
 
   tooling.lint              → internal/spec/lint.go:Lint
   tooling.template          → cmd/pkt/spec_templates.go
@@ -428,7 +495,7 @@ dates, no orphan implementedAt pointers.
                                     dispatch + countLintErrors
 - `cmd/pkt/spec_templates.go`       ~110 LOC — specTemplate() with
                                     three string constants
-- `specs/pkthunder.pkl`             3 new tooling.* scenarios
+- `specs/pkspec.pkl`             3 new tooling.* scenarios
 - `docs/notes/authoring-guide.md`   ~280 lines — full walkthrough
 - `README.md`                       CLI block: 3 new entries
                                     (--lint / --template / --strict)
@@ -462,7 +529,7 @@ check. Both addressed here.
 
 ### ID naming: numeric → dot-path
 
-All Scenario.id and Goal.id in `specs/pkthunder.pkl` migrated:
+All Scenario.id and Goal.id in `specs/pkspec.pkl` migrated:
 
 ```
 CORE-001  →  runner.exit-code.pkt-run
@@ -551,7 +618,7 @@ subagent, spec file only) would show:
 
 ### Implementation footprint
 
-- `specs/pkthunder.pkl`         id rewrite (Goals + 32 Scenarios)
+- `specs/pkspec.pkl`         id rewrite (Goals + 32 Scenarios)
                                 + new `spec.implemented-by`
                                 scenario + decision summary
                                 detuned to remove "phase 35" literal
@@ -589,7 +656,7 @@ mizchi: "これらの問題を解決する。"
 Six fixes that address the dogfood friction list. The dogfood
 itself went from "13 / 31 implemented (42%)" to "37 / 43 (86%) —
 only AI-002 (review status, not yet built) is genuinely
-unimplemented from `specs/pkthunder.pkl`."
+unimplemented from `specs/pkspec.pkl`."
 
 ### Resolved frictions
 
@@ -623,7 +690,7 @@ unimplemented from `specs/pkthunder.pkl`."
 **#8 — `pkt spec --discover`**
   Walks the current directory for `Spec.pkl` / `Test.pkl` (any
   subdir) and `*.pkl` directly under `specs/`. Skips
-  `.git` / `.pkthunder` / `node_modules` / `pkl/` (schema dir).
+  `.git` / `.pkspec` / `node_modules` / `pkl/` (schema dir).
   Replaces the previous "list every file explicitly" pattern;
   `pkt spec --check --discover` is now the canonical CI gate.
 
@@ -656,12 +723,12 @@ The 6 remaining unimplementeds are:
 - **AI-002** — `prefer_deterministic_over_ai`, intentionally
   marked as `review` status (queued for phase 35).
 - **AUTH-001a / AUTH-001b / AUTH-003** — local-fixture demo
-  scenarios in `examples/spec-graph/Spec.pkl` (not pkthunder's
+  scenarios in `examples/spec-graph/Spec.pkl` (not pkspec's
   real spec; --discover sweeps them up as a side effect).
 - **AUTH-004** — local-fixture, draft status.
 - **SIGNUP-003** — local-fixture in `examples/spec-id/Spec.pkl`.
 
-`specs/pkthunder.pkl` itself is 100% accounted for except for
+`specs/pkspec.pkl` itself is 100% accounted for except for
 AI-002 — exactly what the spec language now claims.
 
 ### Deferred frictions
@@ -669,7 +736,7 @@ AI-002 — exactly what the spec language now claims.
 - **#2 — specRef retrofit labor**: still a tooling concern. No
   fix landed; the `--orphans` listing partially mitigates
   ("here's the backlog, sort it manually").
-- **#7 — splitting `specs/pkthunder.pkl`**: the file stayed as
+- **#7 — splitting `specs/pkspec.pkl`**: the file stayed as
   one ~340-line module since the cross-module merge already
   works. Splitting per Goal (`specs/ci.pkl`, `specs/sharding.pkl`,
   ...) is an organizational choice, not a feature need.
@@ -691,7 +758,7 @@ AI-002 — exactly what the spec language now claims.
                               --discover flag dispatch +
                               discoverSpecFiles walker (skip pkl/,
                               hidden dirs, node_modules)
-- `specs/pkthunder.pkl`       implementedBy / implementedAt on 18
+- `specs/pkspec.pkl`       implementedBy / implementedAt on 18
                               framework-internal scenarios
 - `docs/notes/spec-graph.md`  4 new sections (framework-internal
                               specs, filters, orphans, discover)
@@ -702,12 +769,12 @@ Total ~280 LOC implementation + ~150 lines of docs. All tests pass.
 
 ---
 
-## Phase 33.1 — Dogfooding the spec language on pkthunder itself
+## Phase 33.1 — Dogfooding the spec language on pkspec itself
 
-mizchi: "この仕様の概念で、 pkthunder 自体を記述して、
+mizchi: "この仕様の概念で、 pkspec 自体を記述して、
 ドッグフーディングしよう。"
 
-Wrote `specs/pkthunder.pkl`: 8 Goals (priority 95 → 30) covering
+Wrote `specs/pkspec.pkl`: 8 Goals (priority 95 → 30) covering
 CI trust, language independence, spec-driven authoring, parallel
 execution, history-aware sharding, PBT, differential testing,
 and AI assertions. 31 Scenarios under them, each with severity /
@@ -718,12 +785,12 @@ back at scenario ids.
 ### What worked
 
 - **`pkt spec --goals` shows priority-ordered coverage**. Reading
-  it makes pkthunder's value claims concrete: "GOAL-LANG-INDEPENDENT
+  it makes pkspec's value claims concrete: "GOAL-LANG-INDEPENDENT
   is 5/6 (83%), only KIND-006 (kind pluggability) not demonstrated
   by an example." That's a real review signal, not folklore.
 - **`pkt spec --next` ranks `CORE-001` and `CORE-003` first**
   (critical + p=95). The output reads like a triage queue.
-- **Cross-module aggregation works**: `pkt spec ... specs/pkthunder.pkl
+- **Cross-module aggregation works**: `pkt spec ... specs/pkspec.pkl
   examples/*/Test.pkl` correctly merges declarations (from the
   spec file) with implementations (from each example), even though
   Plan.Goals and Plan.Scenarios come from different plans.
@@ -743,7 +810,7 @@ back at scenario ids.
    **Sketch for phase 34**: `Scenario.implementedBy: ("test" |
    "code" | "doc") = "test"`. When set to `"code"`, `--check`
    accepts an implementing reference at the directory / commit
-   level (e.g. a comment marker `// pkthunder-spec: CORE-001` in
+   level (e.g. a comment marker `// pkspec-spec: CORE-001` in
    the Go source) instead of requiring a Pkl `Test.specRef`.
 
 2. **`specRef` is heavy to retrofit.** Adding it to 11 examples
@@ -778,7 +845,7 @@ back at scenario ids.
    The "next action" listing degrades into noise until friction #1
    is addressed.
 
-7. **`specs/pkthunder.pkl` ended up ~300 lines.** Manageable for
+7. **`specs/pkspec.pkl` ended up ~300 lines.** Manageable for
    the dogfood, but a real project with ≥100 specs would need
    module splitting. The cross-module merge works at the Plan
    level (the Go side unions Goals across plans), but Goals are
@@ -788,7 +855,7 @@ back at scenario ids.
    Go side.
 
 8. **CLI file enumeration is verbose.** `pkt spec --check
-   specs/pkthunder.pkl examples/shell-smoke/Test.pkl
+   specs/pkspec.pkl examples/shell-smoke/Test.pkl
    examples/http-basic/Test.pkl ...` listing every file works but
    is awkward. Glob discovery (`examples/**/Test.pkl`) is at the
    shell layer, not pkt, so quoting / shell-specifics leak in.
@@ -814,7 +881,7 @@ it to read this very report); it just lacks "test" impls.
 
 ### Footprint
 
-- `specs/pkthunder.pkl` (~300 LOC) — the dogfood spec
+- `specs/pkspec.pkl` (~300 LOC) — the dogfood spec
 - `examples/{shell-smoke,http-basic,http-cassette,parallel-steps,
    background-server,sql-select,playwright-page,playwright-test-suite,
    spec-pending,quickcheck-input-space,shard-balanced}/Test.pkl` —
@@ -1134,7 +1201,7 @@ Total ~140 LOC + docs.
 ## Phase 30.2 — `pkt timings` inspection subcommand
 
 Phase 30.1 dogfooding kept reaching for the same three `jq` queries
-over `.pkthunder/timings.jsonl`: "show me per-test stats", "show me
+over `.pkspec/timings.jsonl`: "show me per-test stats", "show me
 what failed last run", and "show me which tests would land in shard
 K/N if I ran it now." Promoted them to a first-class subcommand.
 
@@ -1185,7 +1252,7 @@ unit coverage). The cmd is a thin formatter on top.
 
 Built a 10-test mixed-duration fixture (`examples/shard-balanced/`)
 with 4 fast (50ms), 3 mid (150ms), 3 slow (400ms) tests. Ran it
-5 times to populate `.pkthunder/timings.jsonl`, then exercised every
+5 times to populate `.pkspec/timings.jsonl`, then exercised every
 new flag.
 
 ### What worked
@@ -1260,7 +1327,7 @@ new flag.
 
 ## Phase 30 — timing history + shard + total-timeout + rerun-failed
 
-One artifact, four features. `.pkthunder/timings.jsonl` per-suite
+One artifact, four features. `.pkspec/timings.jsonl` per-suite
 records every test's wall-clock duration with env tag and outcome.
 Built on top of it:
 
@@ -1288,8 +1355,8 @@ Built on top of it:
 - **Skipped/pending records ignored for medians.** A skipped test
   has `duration_ms=0`; including it would pull the median toward
   zero and unbalance the shard.
-- **gitignore `.pkthunder/timings.jsonl` only, not `.pkthunder/`.**
-  Snapshots under `.pkthunder/snapshots/` are committed test oracles.
+- **gitignore `.pkspec/timings.jsonl` only, not `.pkspec/`.**
+  Snapshots under `.pkspec/snapshots/` are committed test oracles.
 - **Filtering pushed up to cmdExec when shard/rerun is involved.**
   Executor's existing `Only`/`Tags` still drive the simple case; when
   shard or rerun fires, cmdExec builds the final test set itself and
@@ -1521,7 +1588,7 @@ issues, not schema bugs.
 
 ## Phase 27 — Dogfooding: mini counter API E2E across all kinds
 
-- **Goal.** Use pkthunder as a real user would, on a small but
+- **Goal.** Use pkspec as a real user would, on a small but
   realistic target, exercising every kind in one fixture.
   Surface ergonomic friction that doesn't appear in synthetic
   smoke tests.
@@ -1550,7 +1617,7 @@ issues, not schema bugs.
 | 5 | per-iteration setup ("reset DB at each property iteration") is hand-rolled in the body — `sqlite3 prop.db "UPDATE ..."` at the top of the cmd. Phase 23 explicitly chose "no per-iteration hooks" but the workaround is awkward enough to want documenting prominently. | medium | document the body-side reset pattern; or add `Test.iterationBefore: String?` (cheap, scoped) |
 | 6 | "POST N times" cannot be expressed in Pkl declaratively; user falls back to `for i in $(seq 1 $N)` bash loops inside `cmd`. The http kind is 1-step-1-request by design. | low-medium | `Step.repeat: Int = 1` or `Test.repeatStep` mechanism (future) |
 | 7 | test execution order is alphabetical (Phase 13). Authors numbering tests `01_xxx` for ordering get blocked by friction #1; even if regex widens, ordering is still by name not declaration. | low | docs note: "use `steps` for sequence, `tests` for independent units" |
-| 8 | Pkl `unhandled Platform key FamilyDisplayName` warning floods stderr (Phase 26 already noted). | low | upstream Pkl issue, not pkthunder |
+| 8 | Pkl `unhandled Platform key FamilyDisplayName` warning floods stderr (Phase 26 already noted). | low | upstream Pkl issue, not pkspec |
 
 ### What worked unexpectedly well
 
@@ -1622,7 +1689,7 @@ self-discovery.
 
 ## Phase 26 — Pkl execution speed: not the bottleneck
 
-- **Question.** pkthunder uses Pkl as the test-definition layer.
+- **Question.** pkspec uses Pkl as the test-definition layer.
   If Pkl evaluation is slow, the framework's bottom line is
   capped regardless of how clever the runner is. Measured to
   find out where the wall-clock cost actually goes.
@@ -1649,7 +1716,7 @@ self-discovery.
   cost, not Pkl.** `pkt exec - pkl eval` = +100 ms (N=1),
   +1931 ms (N=1000). With 1000 `cmd = "true"` Tests, ~2ms per
   fork+exec ≈ 2 seconds of OS-level process startup. This is
-  physics, not pkthunder overhead.
+  physics, not pkspec overhead.
 - **pkt's own overhead (decode + executor + reporter) is ~80
   ms.** Estimated from the N=1 case: 100 ms diff = ~80 ms for
   the second pkl evaluate (canonical bytes for inline-snapshot
@@ -1672,7 +1739,7 @@ self-discovery.
   on the curve smells like a Pkl design problem. If the
   workflow shifts to repeated runs during inline-snapshot
   authoring, (A) is the obvious first lever. (B) is reserved
-  for if pkthunder ever becomes a hot dev-loop tool that gets
+  for if pkspec ever becomes a hot dev-loop tool that gets
   invoked dozens of times per minute.
 - **What the data also rules out.** "Pkl scales badly with
   fixture size" — false. "pkl-go decode is slow" — false
@@ -1682,7 +1749,7 @@ self-discovery.
   FamilyDisplayName` warnings constantly on macOS.** Harmless
   but noisy in scripted output. Affects every `pkl eval` call
   with the current Pkl 0.31.1 / macOS 26 combination. Not a
-  pkthunder issue; logged here for posterity.
+  pkspec issue; logged here for posterity.
 
 ---
 
@@ -1957,7 +2024,7 @@ self-discovery.
 ## Phase 23 — Property-based testing (QuickCheck promotion + iteration primitive)
 
 - **Two surfaces, one seed stream.** Property-based testing in
-  pkthunder lives on two layers: (a) Pkl-internal property check
+  pkspec lives on two layers: (a) Pkl-internal property check
   via `pkl/QuickCheck.pkl` (promoted from `experiments/12-quickcheck/`),
   (b) subprocess iteration via `Test.iterations` + `Test.iterationSeed`
   in the executor. Both use xorshift32 with the same algorithm,
@@ -2114,7 +2181,7 @@ self-discovery.
   cancel → SIGKILL node → pipe close → chromium self-exit. No
   pkt-side process group / setpgid / kill -PG needed.
 - **Caveat.** This is a property of the playwright library, not
-  a guarantee pkthunder enforces. If a future kind spawns a
+  a guarantee pkspec enforces. If a future kind spawns a
   child process that doesn't have an equivalent self-cleanup
   mechanism (raw curl, custom Node script that forks without
   exit-on-parent-death), we'd need explicit process group
@@ -2122,7 +2189,7 @@ self-discovery.
 - **Side note.** Go's `exec.CommandContext` default cancel
   behaviour sends SIGKILL (not SIGTERM). For a graceful path
   one would set `Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }`
-  and `WaitDelay = N` for the SIGKILL grace. pkthunder doesn't
+  and `WaitDelay = N` for the SIGKILL grace. pkspec doesn't
   need this today because the harness has no graceful-shutdown
   story; it's all-or-nothing. Note for future kinds that *do*
   want graceful (long-lived gRPC server steps, etc.).
@@ -2180,7 +2247,7 @@ self-discovery.
   SQLite file).
 - **Tests-run-in-alphabetical-order is a subtle interaction.**
   Initial DML smoke had each operation as its own Test;
-  pkthunder ran them in name order (Phase 13), so `delete`
+  pkspec ran them in name order (Phase 13), so `delete`
   fired before `insert`. Not a bug — pkt's `steps` provides
   the sequential primitive. Documented as the expected
   authoring pattern: DML chains belong in `steps`, not split
@@ -2237,7 +2304,7 @@ self-discovery.
   through 5+ runner files.
 - **`sql` implementation choices.**
   - **modernc.org/sqlite**: pure-Go, no cgo. Trade-off: slower
-    than mattn/go-sqlite3 for heavy workloads, but pkthunder's
+    than mattn/go-sqlite3 for heavy workloads, but pkspec's
     use case is "did the row land?" assertions over small
     result sets — speed-of-light isn't relevant. Pure-Go
     means cross-compilation works without C toolchains.
@@ -2741,7 +2808,7 @@ self-discovery.
   `<testsuites><testsuite>...` (the spec-compliant nested form);
   some older configs emit a bare `<testsuite>` root. The
   loadPlaywrightTestJunit function tries the nested form first
-  and falls back to the bare form. The pkthunder internal/junit
+  and falls back to the bare form. The pkspec internal/junit
   package only knew about bare `<testsuite>` (it was built for
   `pkl test --junit-reports`); rather than widening that
   package's responsibility, the wrapper struct stays local to
@@ -2825,9 +2892,9 @@ self-discovery.
   surfacing failed-only is the same `formatResult` from phase
   13; the new playwright runner slots in without special-casing.
 - **Harness drops cleaned up.** Each playwright step writes
-  `<workdir>/.pkthunder/playwright-harness-XXXXXX.mjs`, defers
+  `<workdir>/.pkspec/playwright-harness-XXXXXX.mjs`, defers
   `os.Remove`. After all runs: zero `.mjs` files left in
-  `.pkthunder/`. The `CreateTemp` random-suffix means concurrent
+  `.pkspec/`. The `CreateTemp` random-suffix means concurrent
   writes don't collide even when three goroutines hit the same
   `MkdirAll` + create within microseconds of each other.
 - **Sequential's "skip rest on first failure" surfaced here.**
@@ -2851,7 +2918,7 @@ self-discovery.
   about browsers.
 - **What we did NOT validate.** Heavy-fanout (10+ playwright
   steps concurrent) — likely hits machine resource limits
-  (memory per chromium ~200MB+) before any pkthunder bug
+  (memory per chromium ~200MB+) before any pkspec bug
   surfaces. Mixed-kind parallel (shell + http + playwright in
   one parallelSteps) — should work by construction but wasn't
   smoked. Crashed browser cleanup — if a `node` subprocess
@@ -2866,7 +2933,7 @@ self-discovery.
   schema (`PlaywrightSpec`, `ScreenshotSnapshot`, `Step.kind`) and
   a runner stub that returned "not yet implemented." 18.1 fills in
   the runner: an embedded `.mjs` harness that the Go runner writes
-  to `<workdir>/.pkthunder/playwright-harness-*.mjs`, spawns
+  to `<workdir>/.pkspec/playwright-harness-*.mjs`, spawns
   `node` against, and decodes a JSON response from. Authors can
   now write `expectScreenshot` and have it actually compare.
 - **Harness must live next to the user's `node_modules`, not in
@@ -2874,14 +2941,14 @@ self-discovery.
   → Node ESM resolver starts at the harness file's directory and
   walks upward looking for `node_modules`. With the harness in
   `/var/folders/...`, no upward path leads to the user's deps.
-  Fix: write the harness into `<workdir>/.pkthunder/`. Same dir
+  Fix: write the harness into `<workdir>/.pkspec/`. Same dir
   the snapshots / cassettes live in, so users already gitignore
   it (or commit it intentionally). One MkdirAll on each
   playwright step.
 - **Per-step Node process, not a long-lived worker.** Each
   playwright Step spawns one `node` that launches one browser,
   runs the script, closes the browser. ~250ms startup cost per
-  step. The alternative (worker process pkthunder talks to over
+  step. The alternative (worker process pkspec talks to over
   stdin/stdout) would amortise startup but couples browser
   lifetime to runner lifetime, and complicates the "script throws
   → next step starts clean" guarantee. Took the simpler shape
@@ -3087,7 +3154,7 @@ self-discovery.
 - **Snapshot kind 4: HTTP cassette.** Per-Step opt-in via
   `Step.cassette = "name"`. The runner records the full response
   (status / headers / body) on first dispatch and replays from
-  `<workdir>/.pkthunder/http/<name>.json` thereafter. Slots into
+  `<workdir>/.pkspec/http/<name>.json` thereafter. Slots into
   the existing taxonomy alongside byte / inline / ai-verdict.
 - **Key = `sha256(method + url + body)`, headers excluded.** Headers
   carry credentials and tracing metadata that rotate per-run; making
@@ -3126,12 +3193,12 @@ self-discovery.
 ## Phase 15 — JUnit reports for `pkt exec`
 
 - **Output-format alignment is the only viable bridge to pkl test.**
-  pkl test's reporter has no extension point — feeding pkthunder
+  pkl test's reporter has no extension point — feeding pkspec
   results back as `facts { [name] { bool } }` to re-run `pkl test`
   works mechanically but loses subprocess context and adds a heavy
   round trip. Writing JUnit XML directly from `pkt exec` produces
   what `pkt run` already produces, so CI tooling sees a single
-  unified runner without pkthunder having to embed pkl.
+  unified runner without pkspec having to embed pkl.
 - **`<error>` vs `<failure>` matters.** Errored tests (couldn't
   start, timed out, beforeAll failed) get `<error>` per JUnit
   convention; assertion failures get `<failure>`. Tools like Jenkins
@@ -3144,7 +3211,7 @@ self-discovery.
   optional.
 - **Classname = source path, not module name.** pkl test uses
   `<module>.facts` / `<module>.examples` as classname to separate
-  the two test kinds inside a module. pkthunder has only one kind
+  the two test kinds inside a module. pkspec has only one kind
   per Test, so I use the source `.pkl`'s absolute path instead —
   reviewers clicking through CI output land on the right file.
 - **Atomic write via `.tmp` + rename.** Same pattern the AI snapshot
@@ -3167,7 +3234,7 @@ self-discovery.
   `before` / `after` Mappings via Pkl's normal merge semantics; the
   runner sees one flat Mapping at evaluation time and doesn't need
   any awareness of ancestry. We avoid carrying two scope systems
-  (Pkl module tree + pkthunder Describe class) for the same idea.
+  (Pkl module tree + pkspec Describe class) for the same idea.
 - **Ordering is alphabetical by hook name, not by ancestry.** Pkl's
   `amends` flattens parent + child entries into one Mapping; the
   "parent before child" intent dies on the way out of Pkl. Users
@@ -3196,7 +3263,7 @@ self-discovery.
   per-test, so they won't collide across parallel siblings.
 - **Reporter alignment with `pkl test` is impractical, JUnit output
   is the realistic bridge.** pkl test's reporter has no extension
-  point; feeding pkthunder results back through pkl test (write a
+  point; feeding pkspec results back through pkl test (write a
   .pkl with `facts { [name] { true_or_false } }`, re-run `pkl test`)
   works mechanically but loses subprocess context and adds a heavy
   round trip. `pkt exec --junit-reports` (Phase 15-ish) matches the
@@ -3327,7 +3394,7 @@ self-discovery.
 ## Phase 10 — `Step.expectAi` with snapshot-cached judge
 
 - **Shell-out beats embedded SDK for the judge.** Embedding an
-  Anthropic / OpenAI client inside pkthunder would have meant API key
+  Anthropic / OpenAI client inside pkspec would have meant API key
   plumbing, vendor selection in the schema, and a heavier binary —
   for a feature most users will rarely reach for. The contract is
   instead "any executable that reads body on stdin, prompt via
@@ -3427,7 +3494,7 @@ self-discovery.
   - `seedAt(seed, index) → Int`
   - `intCases(seed, count, lo, hi) → Listing<Case>`
   - `checkAll(name, cases, pred) → Result { passed, cases, failure?, summary }`
-- pkthunder needs **no new runner support** — a property test is just
+- pkspec needs **no new runner support** — a property test is just
   a `facts { ... checkAll(...) ... }` block, executed by the existing
   `pkt run` path.
 - Four Pkl gotchas surfaced while writing this:
@@ -3460,7 +3527,7 @@ self-discovery.
   `MessageTypeException: Expected Array, but got Integer (0a)`.)
 - **Implication — Probe 06's verdict was too strong.** Pkl cannot start
   subprocesses *by default*, but a registered external reader can.
-  pkthunder gains a design option **B**: register the runner itself
+  pkspec gains a design option **B**: register the runner itself
   as the helper, expose a `cmd:` (or similar) scheme, and let users
   write `read("cmd:./run-tests")` inside facts/examples to capture
   subprocess output and assert against it.
@@ -3483,7 +3550,7 @@ self-discovery.
   measured against the module evaluation as a whole, and a value of
   `1` allowed the run to complete at the granularity pkl actually
   enforces.
-- **Implication — pkthunder treats `pkl test` as a black box** and
+- **Implication — pkspec treats `pkl test` as a black box** and
   does not need to add its own concurrency primitives for the
   pkl-native side. Subprocess-driven external tests (option B above)
   are where parallelism will matter.
@@ -3519,7 +3586,7 @@ self-discovery.
   show every intermediate value across import boundaries (`foo.x`
   evaluates to a `ModuleClass`, the called function shows its
   argument, etc.).
-- No surprises here. This is the pattern pkthunder users will use to
+- No surprises here. This is the pattern pkspec users will use to
   test their own Pkl helpers.
 
 ## Probe 06 — `experiments/06-subprocess-attempt.pkl`
@@ -3550,7 +3617,7 @@ self-discovery.
   / `<testcase classname="<module>.examples">`, `<failure message="...">`
   bodies preserve the power-assertion diagram. Snapshot writes show up
   as `<failure message="Example Output Written">`.
-- **Implication — pkthunder's wrapper can use the XML to surface a
+- **Implication — pkspec's wrapper can use the XML to surface a
   reliable exit code** (see Probe 03 for why we need that). One
   `<failure>` ⇒ exit non-zero.
 
@@ -3564,7 +3631,7 @@ self-discovery.
   PklProject-driven discovery. This is a CI hazard — a wrapper that
   inspects either the textual output (`X/Y failed` line) or the JUnit
   XML must be the source of truth for "did the suite pass".
-- This is the single biggest gap pkthunder needs to close.
+- This is the single biggest gap pkspec needs to close.
 
 ## Probe 02 — `experiments/02-failure-output.pkl`
 
@@ -3584,7 +3651,7 @@ self-discovery.
 
 ---
 
-## Design implications for pkthunder (rev. 2)
+## Design implications for pkspec (rev. 2)
 
 Confirmed by the wider probe set:
 
@@ -3592,7 +3659,7 @@ Confirmed by the wider probe set:
    The runner spawns pkl as a child process, parses the XML, and forces
    a non-zero exit on any `<failure>` element. This gives a CI-trustworthy
    exit code on top of pkl's existing facts/examples/snapshot machinery.
-2. **Optional architecture (option B): register pkthunder as an
+2. **Optional architecture (option B): register pkspec as an
    external resource reader.** Adds a `cmd:` / `proc:` scheme so that
    `read("cmd:go test ./...")` runs the subprocess, captures stdout/
    stderr/exit code, and exposes the result inside Pkl for assertions.

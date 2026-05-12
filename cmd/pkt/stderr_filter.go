@@ -9,7 +9,7 @@ import (
 )
 
 // pklNoiseSubstrings are stderr lines from the Pkl JVM that
-// pkthunder filters out — they appear on every invocation under
+// pkspec filters out — they appear on every invocation under
 // Pkl 0.31.1 on macOS 26.4+ and are documented as harmless
 // upstream warnings. Listed as substrings (case-sensitive) so a
 // matching line is dropped entirely.

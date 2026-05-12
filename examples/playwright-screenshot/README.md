@@ -4,7 +4,7 @@ Visual regression with pixel diff. The script renders a fixed
 piece of content; the harness takes a full-page screenshot
 automatically (no explicit `return` in the script means "the
 harness takes one"), then compares against
-`.pkthunder/screenshots/fixed_label.png` with the threshold from
+`.pkspec/screenshots/fixed_label.png` with the threshold from
 `ScreenshotSnapshot.thresholdPct`.
 
 ```sh

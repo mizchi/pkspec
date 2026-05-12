@@ -14,14 +14,14 @@ import (
 	"github.com/apple/pkl-go/pkl"
 )
 
-// Eventually mirrors `pkthunder.Test#RenderedEventually` — the
+// Eventually mirrors `pkspec.Test#RenderedEventually` — the
 // per-step polling configuration.
 type Eventually struct {
 	IntervalMs int `pkl:"intervalMs"`
 	TimeoutSec int `pkl:"timeoutSec"`
 }
 
-// AiAssertion mirrors `pkthunder.Test#RenderedAiAssertion` — the
+// AiAssertion mirrors `pkspec.Test#RenderedAiAssertion` — the
 // external-judge fuzzy assertion. The runner caches the judge's
 // verdict by sha256(prompt + body) so the cmd only re-runs when the
 // inputs actually change.
@@ -32,7 +32,7 @@ type AiAssertion struct {
 	PreferDeterministic bool   `pkl:"preferDeterministic"`
 }
 
-// HttpRequest mirrors `pkthunder.Test#RenderedHttpRequest`.
+// HttpRequest mirrors `pkspec.Test#RenderedHttpRequest`.
 type HttpRequest struct {
 	Method     string            `pkl:"method"`
 	URL        string            `pkl:"url"`
@@ -42,13 +42,13 @@ type HttpRequest struct {
 	TimeoutSec int               `pkl:"timeoutSec"`
 }
 
-// ConsoleAssertion mirrors `pkthunder.Test#RenderedConsoleAssertion`.
+// ConsoleAssertion mirrors `pkspec.Test#RenderedConsoleAssertion`.
 type ConsoleAssertion struct {
 	ContainsAll  []string `pkl:"containsAll"`
 	ContainsNone []string `pkl:"containsNone"`
 }
 
-// PlaywrightSpec mirrors `pkthunder.Test#RenderedPlaywrightSpec`.
+// PlaywrightSpec mirrors `pkspec.Test#RenderedPlaywrightSpec`.
 // Implementation lands in a later phase; today the executor returns
 // an errored Step result with "not yet implemented" when this slot
 // is set.
@@ -59,14 +59,14 @@ type PlaywrightSpec struct {
 	ExpectConsole    *ConsoleAssertion   `pkl:"expectConsole"`
 }
 
-// ScreenshotSnapshot mirrors `pkthunder.Test#RenderedScreenshotSnapshot`.
+// ScreenshotSnapshot mirrors `pkspec.Test#RenderedScreenshotSnapshot`.
 type ScreenshotSnapshot struct {
 	Name         string  `pkl:"name"`
 	ThresholdPct float64 `pkl:"thresholdPct"`
 }
 
 // Input is the polymorphic interface backing
-// `pkthunder.Test#RenderedInput` and its concrete subclasses.
+// `pkspec.Test#RenderedInput` and its concrete subclasses.
 // The `kind` discriminator lives in the data (as a Pkl field
 // fixed by each subclass), not just in the Go type — so
 // reporters / JUnit dumps / JSON exports can carry it as a
@@ -81,7 +81,7 @@ const (
 	KindInt = "int"
 )
 
-// IntInput mirrors `pkthunder.Test#RenderedIntInput`. Concrete
+// IntInput mirrors `pkspec.Test#RenderedIntInput`. Concrete
 // implementation of Input.
 type IntInput struct {
 	Kind string `pkl:"kind"`
@@ -92,7 +92,7 @@ type IntInput struct {
 // InputKind satisfies the Input interface.
 func (i *IntInput) InputKind() string { return KindInt }
 
-// PlaywrightTestSpec mirrors `pkthunder.Test#RenderedPlaywrightTestSpec`.
+// PlaywrightTestSpec mirrors `pkspec.Test#RenderedPlaywrightTestSpec`.
 // The runner shells out to `npx playwright test` and aggregates the
 // JUnit XML output into a single Step outcome.
 type PlaywrightTestSpec struct {
@@ -104,7 +104,7 @@ type PlaywrightTestSpec struct {
 	Shard      *string  `pkl:"shard"`
 }
 
-// SqlSpec mirrors `pkthunder.Test#RenderedSqlSpec`. All assertions
+// SqlSpec mirrors `pkspec.Test#RenderedSqlSpec`. All assertions
 // live on the spec, not on Step — sql doesn't share Step-level
 // expectations with shell/http.
 type SqlSpec struct {
@@ -115,7 +115,7 @@ type SqlSpec struct {
 	ExpectRowsJsonPath map[string]any `pkl:"expectRowsJsonPath"`
 }
 
-// Step mirrors `pkthunder.Test#RenderedStep`. Exactly one of `Cmd`,
+// Step mirrors `pkspec.Test#RenderedStep`. Exactly one of `Cmd`,
 // `Http`, or `Playwright` is set; the executor dispatches on `Kind`.
 type Step struct {
 	Name            *string           `pkl:"name"`
@@ -157,7 +157,7 @@ type Step struct {
 	Repeat     int          `pkl:"repeat"`
 }
 
-// ReferenceSnapshot mirrors `pkthunder.Test#RenderedSnapshot`.
+// ReferenceSnapshot mirrors `pkspec.Test#RenderedSnapshot`.
 type ReferenceSnapshot struct {
 	Name string `pkl:"name"`
 	// Generator is the optional reference Test whose stdout is
@@ -166,7 +166,7 @@ type ReferenceSnapshot struct {
 	Generator *Test `pkl:"generator"`
 }
 
-// Background mirrors `pkthunder.Test#RenderedBackground`.
+// Background mirrors `pkspec.Test#RenderedBackground`.
 type Background struct {
 	Name               *string           `pkl:"name"`
 	Cmd                string            `pkl:"cmd"`
@@ -180,7 +180,7 @@ type Background struct {
 	PortEnv            *string           `pkl:"portEnv"`
 }
 
-// Test mirrors `pkthunder.Test#RenderedTest`.
+// Test mirrors `pkspec.Test#RenderedTest`.
 type Test struct {
 	Description     *string           `pkl:"description"`
 	Tags            []string          `pkl:"tags"`
@@ -214,13 +214,13 @@ type Test struct {
 	Background    []*Background `pkl:"background"`
 }
 
-// Defaults mirrors `pkthunder.Test#Defaults`.
+// Defaults mirrors `pkspec.Test#Defaults`.
 type Defaults struct {
 	Shell string            `pkl:"shell"`
 	Env   map[string]string `pkl:"env"`
 }
 
-// Hook mirrors `pkthunder.Test#RenderedHook` — a lifecycle hook
+// Hook mirrors `pkspec.Test#RenderedHook` — a lifecycle hook
 // running before or after tests, scoped either "all" (once per Run)
 // or "each" (per test).
 type Hook struct {
@@ -234,7 +234,7 @@ type Hook struct {
 	AlwaysRun     bool              `pkl:"alwaysRun"`
 }
 
-// Decision mirrors `pkthunder.Test#RenderedDecision` — one entry in
+// Decision mirrors `pkspec.Test#RenderedDecision` — one entry in
 // a Scenario's append-only decision log.
 type Decision struct {
 	Date      string  `pkl:"date"`
@@ -243,7 +243,7 @@ type Decision struct {
 	Rationale *string `pkl:"rationale"`
 }
 
-// Scenario mirrors `pkthunder.Test#RenderedScenario` — the spec-side
+// Scenario mirrors `pkspec.Test#RenderedScenario` — the spec-side
 // metadata Spec.pkl emits alongside the test set. The executor never
 // reads this; spec tooling (`pkt spec --check / --coverage / --graph /
 // --decisions / --goals / --next`) does.
@@ -267,7 +267,7 @@ type Scenario struct {
 	Decisions        []*Decision `pkl:"decisions"`
 }
 
-// Goal mirrors `pkthunder.Test#RenderedGoal` — a user-facing piece
+// Goal mirrors `pkspec.Test#RenderedGoal` — a user-facing piece
 // of value the system should deliver. Goals have no test of their
 // own; Scenarios point at them via `Scenario.Contributes`.
 type Goal struct {
@@ -297,25 +297,25 @@ type Plan struct {
 }
 
 func init() {
-	pkl.RegisterMapping("pkthunder.Test#Rendered", Plan{})
-	pkl.RegisterMapping("pkthunder.Test#Defaults", Defaults{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedTest", Test{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedStep", Step{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedBackground", Background{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedSnapshot", ReferenceSnapshot{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedHttpRequest", HttpRequest{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedEventually", Eventually{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedAiAssertion", AiAssertion{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedHook", Hook{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedPlaywrightSpec", PlaywrightSpec{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedScreenshotSnapshot", ScreenshotSnapshot{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedPlaywrightTestSpec", PlaywrightTestSpec{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedConsoleAssertion", ConsoleAssertion{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedSqlSpec", SqlSpec{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedIntInput", IntInput{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedScenario", Scenario{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedDecision", Decision{})
-	pkl.RegisterMapping("pkthunder.Test#RenderedGoal", Goal{})
+	pkl.RegisterMapping("pkspec.Test#Rendered", Plan{})
+	pkl.RegisterMapping("pkspec.Test#Defaults", Defaults{})
+	pkl.RegisterMapping("pkspec.Test#RenderedTest", Test{})
+	pkl.RegisterMapping("pkspec.Test#RenderedStep", Step{})
+	pkl.RegisterMapping("pkspec.Test#RenderedBackground", Background{})
+	pkl.RegisterMapping("pkspec.Test#RenderedSnapshot", ReferenceSnapshot{})
+	pkl.RegisterMapping("pkspec.Test#RenderedHttpRequest", HttpRequest{})
+	pkl.RegisterMapping("pkspec.Test#RenderedEventually", Eventually{})
+	pkl.RegisterMapping("pkspec.Test#RenderedAiAssertion", AiAssertion{})
+	pkl.RegisterMapping("pkspec.Test#RenderedHook", Hook{})
+	pkl.RegisterMapping("pkspec.Test#RenderedPlaywrightSpec", PlaywrightSpec{})
+	pkl.RegisterMapping("pkspec.Test#RenderedScreenshotSnapshot", ScreenshotSnapshot{})
+	pkl.RegisterMapping("pkspec.Test#RenderedPlaywrightTestSpec", PlaywrightTestSpec{})
+	pkl.RegisterMapping("pkspec.Test#RenderedConsoleAssertion", ConsoleAssertion{})
+	pkl.RegisterMapping("pkspec.Test#RenderedSqlSpec", SqlSpec{})
+	pkl.RegisterMapping("pkspec.Test#RenderedIntInput", IntInput{})
+	pkl.RegisterMapping("pkspec.Test#RenderedScenario", Scenario{})
+	pkl.RegisterMapping("pkspec.Test#RenderedDecision", Decision{})
+	pkl.RegisterMapping("pkspec.Test#RenderedGoal", Goal{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

@@ -10,7 +10,7 @@ If you only want the reference (every field's semantics), see
 
 ## 0. Mental model
 
-pkthunder separates three concerns:
+pkspec separates three concerns:
 
 | concept    | answers                                       | lives in                            |
 | ---------- | --------------------------------------------- | ----------------------------------- |
@@ -37,7 +37,7 @@ pkt spec --template module > specs/my-feature.pkl
 
 Open `specs/my-feature.pkl` and patch:
 
-- the `amends "PATH/TO/pkthunder/pkl/Spec.pkl"` line — point at
+- the `amends "PATH/TO/pkspec/pkl/Spec.pkl"` line — point at
   your local checkout, or use the package URL once you publish.
 - `feature = "..."` — short label, not load-bearing for the
   runner.
@@ -117,7 +117,7 @@ you'll see it appear in the unimplemented set, with a
 Write the test in `tests/checkout.pkl` (or wherever):
 
 ```pkl
-amends "PATH/TO/pkthunder/pkl/Test.pkl"
+amends "PATH/TO/pkspec/pkl/Test.pkl"
 
 tests {
   new {

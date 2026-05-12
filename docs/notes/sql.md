@@ -129,7 +129,7 @@ parameterised.
   inputs (no parameterised-query API yet, so a `$VAR` injected
   query is string-concatenated).
 - **Connection lifetime**: one `sql.Open` + `defer Close` per Step.
-  No pooling across Steps; pkthunder treats each Step as
+  No pooling across Steps; pkspec treats each Step as
   standalone. For tests that need pooled state, point successive
   Steps at the same on-disk DB.
 - **Validation**: setting `expectStatus`, `expectBodyJsonPath`,

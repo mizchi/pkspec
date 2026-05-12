@@ -1,13 +1,13 @@
 # Task interface — 4 proposals
 
-`pkthunder` is moving from "shell or http" hard-coded mode to a generic
+`pkspec` is moving from "shell or http" hard-coded mode to a generic
 **task interface**: a Test holds an ordered sequence of tasks, and each
 task is one concrete implementation of the same contract (something
 that produces an outcome and emits values for later tasks to consume).
 
 Built-in task kinds will include `shell`, `http`, and `playwright`.
 External authors should be able to add a fourth (e.g. `grpc`, `sql`,
-`mqtt`) without modifying pkthunder itself.
+`mqtt`) without modifying pkspec itself.
 
 This directory contains four candidate API shapes. The same three
 scenarios are written against each so the *authoring experience* is
@@ -28,7 +28,7 @@ Files:
   `playwright?`).
 - `03-proposal-C-protocol.md` — `Task { runner; config }` where
   `runner` is a registered name and `config` is `Mapping<String, Any>`.
-  External authors register a `Runner` from outside pkthunder.
+  External authors register a `Runner` from outside pkspec.
 - `04-proposal-D-extend-step.md` — keep today's `Step` and just add a
   `playwright: PlaywrightSpec?` slot (and a `kind` accessor). Minimum
   change; minimum upheaval.

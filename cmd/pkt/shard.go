@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mizchi/pkthunder/internal/config"
-	"github.com/mizchi/pkthunder/internal/shard"
-	"github.com/mizchi/pkthunder/internal/timing"
+	"github.com/mizchi/pkspec/internal/config"
+	"github.com/mizchi/pkspec/internal/shard"
+	"github.com/mizchi/pkspec/internal/timing"
 )
 
 // parseShardSpec parses "K/N" with 1 <= K <= N.

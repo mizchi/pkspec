@@ -23,5 +23,5 @@ The script's contract: default-export `async ({page, ctx}) => result`.
 If you don't want to install per example, install `playwright`
 once at the repo root (`pnpm add playwright`) and Node's
 upward-walking resolution will find it. The harness writes
-itself into `<workdir>/.pkthunder/` so the resolver does find
+itself into `<workdir>/.pkspec/` so the resolver does find
 hoisted deps.

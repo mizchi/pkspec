@@ -1,4 +1,4 @@
-# pkthunder runner design
+# pkspec runner design
 
 Locked in by the experiments under `experiments/` and summarized in
 [`pkl-test.md`](./pkl-test.md) / [`external-readers.md`](./external-readers.md).
@@ -8,13 +8,13 @@ Locked in by the experiments under `experiments/` and summarized in
 `pkl test` already does a lot well: power assertions, snapshot
 diffing, JUnit XML, parameterized tests via plain `for`. What it does
 **not** do is exit non-zero on assertion failure (probes 02 & 03).
-That alone disqualifies it as a CI-friendly entry point. pkthunder's
+That alone disqualifies it as a CI-friendly entry point. pkspec's
 core job is to be the `pkt` command users invoke instead, with the
 rest of the value-add layered on top.
 
 ## Target use cases
 
-These are the scenarios pkthunder is being shaped around. Each one
+These are the scenarios pkspec is being shaped around. Each one
 demands runner-side orchestration that `pkl test` does not provide
 — `Test` declarations live in Pkl, but retry policy, flaky detection,
 and snapshot generation against a live reference implementation all
@@ -52,7 +52,7 @@ written to `*.pkl-expected.pcf` for the pure-Pkl path, or to dedicated
 
 `playwright test` and similar runners do one thing well (driving a
 browser) and reluctantly bundle a test runner with retry / flake
-handling that the wider ecosystem also wants. pkthunder is meant to
+handling that the wider ecosystem also wants. pkspec is meant to
 absorb that runner role: declare the e2e command in Pkl, let the
 runner own retry / timeout / parallelism / reporting:
 
@@ -71,7 +71,7 @@ control replace that.
 
 ### 3. Snapshot porting from a reference implementation
 
-Mid-port, the reference is the spec. pkthunder runs the reference,
+Mid-port, the reference is the spec. pkspec runs the reference,
 captures its output, and stores it as a snapshot the port must match.
 Subsequent runs no longer need the reference present — the snapshot
 is the contract.
@@ -121,7 +121,7 @@ Cons:
   expressed somewhere — option A leaves that to the user's surrounding
   shell / CI step.
 
-### Option B — register pkthunder as an external reader (extension)
+### Option B — register pkspec as an external reader (extension)
 
 ```
 +----------+              +---------+
@@ -152,7 +152,7 @@ Cons:
 - Failure modes are more varied: helper crashes, subprocess timeouts,
   evaluator-side cancellation, etc.
 
-The two options compose: a pkthunder build that ships option A
+The two options compose: a pkspec build that ships option A
 unconditionally and turns option B on with a flag (e.g. `--allow-cmd`)
 gives the simplest mental model.
 
@@ -165,7 +165,7 @@ another `Test` / `ReferenceSnapshot` for the reference-implementation
 flow.
 
 ```pkl
-amends "package://pkg.pkl-lang.org/mizchi/pkthunder/pkthunder@0.0.1#/Test.pkl"
+amends "package://pkg.pkl-lang.org/mizchi/pkspec/pkspec@0.0.1#/Test.pkl"
 
 class Test {
   /// Shell command to execute.
@@ -233,7 +233,7 @@ Mirrors `pkl test` (probe 03) so users do not learn a second rule:
 ## Concurrency
 
 - **Inside Pkl** (option A): pkl test evaluates with internal
-  parallelism but no user knob (probe 10). pkthunder cannot influence
+  parallelism but no user knob (probe 10). pkspec cannot influence
   it; treat the spawn as a black box.
 - **Across declared `Test` instances** (option B): the Go runner
   schedules subprocess executions itself. A `--workers N` flag (default
@@ -241,7 +241,7 @@ Mirrors `pkl test` (probe 03) so users do not learn a second rule:
 
 ## Reporting
 
-- **Console (default)**: pkthunder forwards pkl's textual output
+- **Console (default)**: pkspec forwards pkl's textual output
   verbatim, then appends its own summary line that distinguishes
   *pkl-side* failures from *cmd-side* failures.
 - **JUnit XML**: passthrough of pkl's `--junit-reports` plus optional
@@ -279,7 +279,7 @@ usable.
    model instead of the `Test` declarative one.
 6. **Pkl package + Nix flake + CI**: matches pkfire's setup —
    `pkl/PklProject` for `package://` distribution, `flake.nix` for
-   `nix run github:mizchi/pkthunder`, `.github/workflows/nix.yml` for
+   `nix run github:mizchi/pkspec`, `.github/workflows/nix.yml` for
    per-push verification on Linux + macOS.
 
 Steps 1–3 cover the playwright-replacement case end to end. Step 4

@@ -1,4 +1,7 @@
-/// pkthunder's own spec — dogfooded.
+/// pkspec's own spec — dogfooded.
+///
+/// Lives at the repo root as `SPEC.pkl` — `pkt spec --check`
+/// with no path argument discovers it via the convention.
 ///
 /// Every scenario is `tags { "spec" }` with no body, so the runner
 /// reports them as pending. Implementations come in two shapes:
@@ -8,8 +11,8 @@
 ///     reviewed doc; `implementedBy + implementedAt` are the
 ///     pointer. `--check` accepts them without a Pkl Test.
 ///
-/// `pkt spec --check specs/pkthunder.pkl --discover` is the canonical
-/// invocation: the spec module plus auto-discovered examples.
+/// `pkt spec --check --discover` is the canonical invocation:
+/// the root SPEC.pkl plus auto-discovered examples.
 ///
 /// ── ID naming convention ────────────────────────────────────
 ///
@@ -26,9 +29,9 @@
 /// Reads independently of the spec body and survives
 /// re-ordering — there is no global numeric sequence to keep
 /// in sync.
-amends "../pkl/Spec.pkl"
+amends "pkl/Spec.pkl"
 
-feature = "pkthunder — language-agnostic Pkl-based test runner"
+feature = "pkspec — language-agnostic Pkl-based spec & test runner"
 
 // ── Goals ───────────────────────────────────────────────────────────
 
@@ -178,7 +181,7 @@ scenarios {
   new {
     id = "kind.playwright-test"
     name = "playwrightTest_kind_wraps_external_runner"
-    description = "Step.playwrightTest delegates to `@playwright/test` (fixtures, traces, retries) and round-trips the JUnit output back to pkthunder's tally."
+    description = "Step.playwrightTest delegates to `@playwright/test` (fixtures, traces, retries) and round-trips the JUnit output back to pkspec's tally."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -381,7 +384,7 @@ scenarios {
   new {
     id = "history.timings-jsonl"
     name = "timings_jsonl_records_per_test_durations"
-    description = ".pkthunder/timings.jsonl records {ts, test, duration_ms, outcome, env, kind} per test, env-bucketed via PKT_TIMING_ENV."
+    description = ".pkspec/timings.jsonl records {ts, test, duration_ms, outcome, env, kind} per test, env-bucketed via PKT_TIMING_ENV."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -472,7 +475,7 @@ scenarios {
   new {
     id = "diff.reference-snapshot"
     name = "reference_snapshot_files_committed"
-    description = ".pkthunder/snapshots/<name>.bytes is written on first run and committed; subsequent runs match against it. Mismatch writes a `.actual` sibling for diffing."
+    description = ".pkspec/snapshots/<name>.bytes is written on first run and committed; subsequent runs match against it. Mismatch writes a `.actual` sibling for diffing."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -518,7 +521,7 @@ scenarios {
   new {
     id = "diff.inline-concurrent-safety"
     name = "inline_rewriter_safe_under_concurrent_processes"
-    description = "`inline.RewriteUnderLock` acquires a POSIX flock on `<module>.pkthunder-lock` for the read-mutate-write triple, so two `pkt exec --update-inline-snapshots` processes against the same module serialise instead of clobbering each other. The brace counter masks string interiors and `//` comments before scanning, so a literal `}` inside a Pkl string doesn't escape the enclosing object."
+    description = "`inline.RewriteUnderLock` acquires a POSIX flock on `<module>.pkspec-lock` for the read-mutate-write triple, so two `pkt exec --update-inline-snapshots` processes against the same module serialise instead of clobbering each other. The brace counter masks string interiors and `//` comments before scanning, so a literal `}` inside a Pkl string doesn't escape the enclosing object."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"

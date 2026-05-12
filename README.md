@@ -1,6 +1,6 @@
-# pkthunder
+# pkspec
 
-[![Nix CI](https://github.com/mizchi/pkthunder/actions/workflows/nix.yml/badge.svg)](https://github.com/mizchi/pkthunder/actions/workflows/nix.yml)
+[![Nix CI](https://github.com/mizchi/pkspec/actions/workflows/nix.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/nix.yml)
 
 > **[experimental]** A language-agnostic test runner built on
 > [Pkl](https://pkl-lang.org/). Generalizes the retry / sharding /
@@ -11,7 +11,7 @@
 > and differential testing across language implementations.
 
 ```pkl
-amends "package://.../pkthunder@0.0.x#/Test.pkl"
+amends "package://.../pkspec@0.0.x#/Test.pkl"
 
 tests {
   new {
@@ -53,7 +53,7 @@ schema:
   in Go (`cmd/pkt/`). A new test kind is a new Pkl class plus a
   new Go executor — the authoring surface and the runtime stay
   decoupled.
-- **Reusable with `pkl test`**: pkthunder rendered output is a Pkl
+- **Reusable with `pkl test`**: pkspec rendered output is a Pkl
   module; Pkl's own facts / examples / snapshot machinery still
   applies, and `pkt run` wraps `pkl test` so its unreliable exit
   code becomes CI-trustworthy.
@@ -73,7 +73,7 @@ The features `playwright test` ships as built-ins (`--retries`,
 | polling / eventually     | `Step.eventually = new { intervalMs; timeoutSec }` |
 | inspection / preview     | `pkt timings -f Test.pkl --shard=K/N`          |
 
-Sharding uses an append-only `.pkthunder/timings.jsonl` history,
+Sharding uses an append-only `.pkspec/timings.jsonl` history,
 median of the most recent 5 runs per test, Longest-Processing-Time
 bin-packing with deterministic tie-breaking. The same input
 produces the same shard assignment on every machine. See
@@ -121,7 +121,7 @@ the scenarios.
 **`expectAi` (orthogonal)** — fuzzy natural-language assertions on
 response bodies, delegated to an external judge command (typically
 an LLM wrapper). The verdict is cached by `sha256(prompt + body)`
-under `.pkthunder/ai-snapshots/`; identical inputs reuse the cached
+under `.pkspec/ai-snapshots/`; identical inputs reuse the cached
 verdict and never spawn the judge.
 
 ```pkl
@@ -211,10 +211,10 @@ Shared setup across scenarios uses the top-level `prelude`
   See [`docs/notes/quickcheck.md`](./docs/notes/quickcheck.md).
 
 - **Snapshot testing** — reference bytes under
-  `.pkthunder/snapshots/<name>.bytes`, written on first run,
+  `.pkspec/snapshots/<name>.bytes`, written on first run,
   committed to git. Inline snapshots (`inlineStdout`) get
   rewritten in-place via `--update-inline-snapshots`. Mid-port,
-  the reference implementation IS the spec — pkthunder runs it,
+  the reference implementation IS the spec — pkspec runs it,
   captures the bytes, asserts every port matches.
   See [`docs/notes/snapshots.md`](./docs/notes/snapshots.md).
 
@@ -240,8 +240,8 @@ Beyond the per-test plumbing:
 ### Nix (recommended)
 
 ```sh
-nix run github:mizchi/pkthunder -- exec -f path/to/Test.pkl
-nix profile install github:mizchi/pkthunder
+nix run github:mizchi/pkspec -- exec -f path/to/Test.pkl
+nix profile install github:mizchi/pkspec
 ```
 
 The flake builds the `pkt` binary and wraps it so the bundled Pkl
@@ -253,12 +253,12 @@ In a home-manager flake:
 
 ```nix
 {
-  inputs.pkthunder.url = "github:mizchi/pkthunder";
+  inputs.pkspec.url = "github:mizchi/pkspec";
 
-  outputs = { self, nixpkgs, home-manager, pkthunder, ... }: {
+  outputs = { self, nixpkgs, home-manager, pkspec, ... }: {
     homeConfigurations.example = home-manager.lib.homeManagerConfiguration {
       modules = [{
-        home.packages = [ pkthunder.packages.${pkgs.system}.default ];
+        home.packages = [ pkspec.packages.${pkgs.system}.default ];
       }];
     };
   };
@@ -268,7 +268,7 @@ In a home-manager flake:
 ### Go
 
 ```sh
-go install github.com/mizchi/pkthunder/cmd/pkt@latest
+go install github.com/mizchi/pkspec/cmd/pkt@latest
 ```
 
 You also need the [Pkl CLI](https://pkl-lang.org/main/current/pkl-cli/)
@@ -326,7 +326,7 @@ the time-ordered raw log. For thematic deep dives, see
 
 If you are looking for a real **task** runner rather than a test
 runner, see [mizchi/pkfire](https://github.com/mizchi/pkfire);
-pkthunder is its testing-focused sibling.
+pkspec is its testing-focused sibling.
 
 ## License
 

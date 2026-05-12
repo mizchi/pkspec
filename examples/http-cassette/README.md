@@ -7,7 +7,7 @@ would see different values on each run. With `cassette =
 runs replay the recorded JSON.
 
 ```sh
-# first run: hits the server, records to .pkthunder/http/counter_first.json
+# first run: hits the server, records to .pkspec/http/counter_first.json
 pkt exec -f examples/http-cassette/Test.pkl
 
 # second run: replays the cassette; counter on the server stays at 1 from pkt's view

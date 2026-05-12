@@ -1,4 +1,4 @@
-/// pkthunder Test schema (Phase 2.5: steps + background + parallel).
+/// pkspec Test schema (Phase 2.5: steps + background + parallel).
 ///
 /// A `Test` declares exactly one of `cmd`, `steps`, or `parallelSteps`,
 /// optionally with one or more `background` processes that the runner
@@ -6,7 +6,7 @@
 /// after the body finishes. Resource cleanup is enforced by the runner;
 /// authors do not write `trap` plumbing.
 @ModuleInfo { minPklVersion = "0.31.0" }
-open module pkthunder.Test
+open module pkspec.Test
 
 /// HTTP request authored on a Step. When `Step.http` is non-null, the
 /// runner takes the HTTP path: it dispatches the request via Go's
@@ -177,7 +177,7 @@ class Step {
 
   /// HTTP record-and-replay cassette name. When set on an HTTP step,
   /// the response (status / headers / body) is cached on first run
-  /// to `<workdir>/.pkthunder/http/<cassette>.json` keyed by
+  /// to `<workdir>/.pkspec/http/<cassette>.json` keyed by
   /// `sha256(method + url + body)` and replayed on subsequent runs
   /// with the same key. Hermetic by default after recording.
   ///
@@ -220,7 +220,7 @@ class Step {
 /// in the report.
 ///
 /// The runner caches the verdict under
-/// `<test-module-dir>/.pkthunder/ai-snapshots/<snapshotName>.json`,
+/// `<test-module-dir>/.pkspec/ai-snapshots/<snapshotName>.json`,
 /// keyed by `sha256(prompt + "\n" + body)`. Cache hits skip the cmd
 /// entirely; mismatches re-invoke and rewrite the snapshot.
 class AiAssertion {
@@ -232,7 +232,7 @@ class AiAssertion {
   /// fail. Stdout is captured as the explanation.
   cmd: String(length > 0)
 
-  /// File name (under `.pkthunder/ai-snapshots/`) where the cached
+  /// File name (under `.pkspec/ai-snapshots/`) where the cached
   /// verdict is stored. Restricted to safe characters so the path
   /// can never escape the snapshots dir.
   snapshotName: String(matches(Regex(#"^[a-zA-Z0-9_\-]+$"#)))
@@ -320,7 +320,7 @@ class ConsoleAssertion {
 ///
 /// Authoring side: the user writes `*.spec.ts` files using
 /// `@playwright/test`'s normal authoring conventions and a
-/// `playwright.config.ts` if the defaults don't fit. pkthunder
+/// `playwright.config.ts` if the defaults don't fit. pkspec
 /// does not look inside the spec files; it only routes the run
 /// and consumes the JUnit output.
 ///
@@ -331,7 +331,7 @@ class ConsoleAssertion {
 ///                                 each failing test's name + message
 ///   - every inner test skipped  → Step pending
 ///   - mix of pass + skip        → Step passed (skipped tests
-///                                 are pkthunder's "pending"
+///                                 are pkspec's "pending"
 ///                                 bucket; non-actionable)
 ///
 /// When the runner is invoked with `--refresh-snapshots`, the
@@ -454,7 +454,7 @@ class SqlSpec {
 }
 
 /// Screenshot snapshot reference. Stored at
-/// `<workdir>/.pkthunder/screenshots/<name>.png`. The `thresholdPct`
+/// `<workdir>/.pkspec/screenshots/<name>.png`. The `thresholdPct`
 /// is the percentage of pixels that may differ before the assertion
 /// fails — small fonts and anti-aliasing rarely produce a 0% match,
 /// so a few tenths of a percent is the practical floor.
@@ -464,7 +464,7 @@ class ScreenshotSnapshot {
 }
 
 /// Reference to a committed snapshot file. The runner stores expected
-/// bytes under `<test-module-dir>/.pkthunder/snapshots/<name>.bytes`.
+/// bytes under `<test-module-dir>/.pkspec/snapshots/<name>.bytes`.
 ///
 /// Without a `generator`: on first encounter the consumer's own
 /// captured output becomes the snapshot, the test fails so the user

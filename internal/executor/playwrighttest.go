@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mizchi/pkthunder/internal/config"
-	"github.com/mizchi/pkthunder/internal/junit"
+	"github.com/mizchi/pkspec/internal/config"
+	"github.com/mizchi/pkspec/internal/junit"
 )
 
 // runPlaywrightTestStep shells out to `npx playwright test` with the
@@ -46,7 +46,7 @@ func (e *Executor) runPlaywrightTestStep(ctx context.Context, step *config.Step,
 
 	stepWorkdir := resolveDir(e.opts.Workdir, t.Workdir, step.Workdir)
 
-	junitDir, err := os.MkdirTemp("", "pkthunder-pwtest-junit-*")
+	junitDir, err := os.MkdirTemp("", "pkspec-pwtest-junit-*")
 	if err != nil {
 		sr.Outcome = OutcomeErrored
 		sr.Reasons = []string{fmt.Sprintf("mkdtemp for junit output: %v", err)}
@@ -82,7 +82,7 @@ func (e *Executor) runPlaywrightTestStep(ctx context.Context, step *config.Step,
 		// playwright-test 1.50+ made --update-snapshots take a mode
 		// (all/changed/missing/none); a value-less flag eats the next
 		// positional arg as its value. "all" mirrors the
-		// --refresh-snapshots semantics pkthunder uses elsewhere:
+		// --refresh-snapshots semantics pkspec uses elsewhere:
 		// unconditionally rewrite every snapshot.
 		args = append(args, "--update-snapshots=all")
 	}

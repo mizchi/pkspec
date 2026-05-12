@@ -368,7 +368,7 @@ new Scenario {
   guarantee lives in a doc that reviewers must cross-check."
 
 This dissolves the friction surfaced in phase 33.1 dogfood:
-pkthunder's own functions (CORE-001, SPEC-002, SHARD-003, ...) had
+pkspec's own functions (CORE-001, SPEC-002, SHARD-003, ...) had
 no Test.pkl to verify them and showed up as 18 unimplemented in
 `--check`. With `implementedBy = "code"` + a pointer, they're
 accounted for.
@@ -409,8 +409,8 @@ pkt spec --check --discover
 
 Walks the current directory and adds every `Spec.pkl` / `Test.pkl`
 (and any `*.pkl` directly under a `specs/` directory) to the
-positional file set. Skips `.git`, `.pkthunder`, `node_modules`,
-and the pkthunder schema directory `pkl/`. Project-level spec
+positional file set. Skips `.git`, `.pkspec`, `node_modules`,
+and the pkspec schema directory `pkl/`. Project-level spec
 modules live under `specs/foo.pkl`; per-test schemas live as
 `examples/<name>/Test.pkl`; both are picked up automatically.
 

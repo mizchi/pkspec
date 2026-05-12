@@ -2,7 +2,7 @@
 
 ## Today (phase 18)
 
-pkthunder keeps the flat `Step` class with three body slots: `cmd`
+pkspec keeps the flat `Step` class with three body slots: `cmd`
 (shell), `http` (HTTP request), and `playwright` (browser script).
 Exactly one of the three is non-null per Step; a computed
 `kind` field exposes the discriminator. This is "proposal D" from
@@ -15,7 +15,7 @@ Three subagent reviewers, three different recommendations:
 - **New-user authoring** ranked **A** (abstract `Task` + subclasses)
   first — "fields live on the type that owns them," easiest to
   generalise after writing one task.
-- **Migration / maintainer** ranked **D** first — pkthunder has
+- **Migration / maintainer** ranked **D** first — pkspec has
   three kinds today, not ten; the redesign cost of A/B/C is paid
   on speculation, and the one-line `Test.cmd` ergonomics are
   preserved.
@@ -90,7 +90,7 @@ and re-evaluate when **any one** of the following is true:
   schema starts to make the "abstract `Task` + subclasses" or
   "protocol + sugar" shape pay for itself.
 - **An external author asks to register a runner without forking
-  pkthunder.** This is the explicit constraint proposal C solves
+  pkspec.** This is the explicit constraint proposal C solves
   and D does not. The first such request is the signal that the
   open-protocol design's time has come.
 - **A cross-kind feature lands twice.** If feature X (e.g. a new
@@ -113,7 +113,7 @@ These are the trade-offs we are knowingly carrying:
   `expectStatus` is reachable in the schema; it is a runner error
   to set, but a reader of the schema sees it. Acceptable until the
   schema grows wider.
-- New built-in kinds require a PR to pkthunder. There is no
+- New built-in kinds require a PR to pkspec. There is no
   third-party runner registry; an external author who wants `grpc`
   must fork.
 - ~~The `playwright` dispatch is a stub.~~ The Node harness

@@ -1,6 +1,6 @@
-# Snapshot kinds in pkthunder
+# Snapshot kinds in pkspec
 
-pkthunder ships three orthogonal snapshot mechanisms. Each has a
+pkspec ships three orthogonal snapshot mechanisms. Each has a
 different storage location, a different update workflow, and a
 different set of trade-offs. Pick the one that matches what the
 snapshot is really protecting.
@@ -9,10 +9,10 @@ snapshot is really protecting.
 
 | kind          | what it captures                              | where it lives                                          | how to update                  |
 | ------------- | --------------------------------------------- | ------------------------------------------------------- | ------------------------------ |
-| `byte`        | exact bytes of stdout / stderr                | `<workdir>/.pkthunder/snapshots/<name>.bytes`           | `pkt run --refresh-snapshots` (and `pkt exec --refresh-snapshots` for the subprocess path) |
+| `byte`        | exact bytes of stdout / stderr                | `<workdir>/.pkspec/snapshots/<name>.bytes`           | `pkt run --refresh-snapshots` (and `pkt exec --refresh-snapshots` for the subprocess path) |
 | `inline`      | exact bytes of test or step stdout / stderr   | inside the `Test.pkl` source itself (`inlineStdout = "..."`) | `pkt exec --update-inline-snapshots` |
-| `ai-verdict`  | a fuzzy pass/fail judgement on a body         | `<workdir>/.pkthunder/ai-snapshots/<name>.json`         | `pkt exec --refresh-ai`        |
-| `http`        | the full response (status / headers / body) of one HTTP request | `<workdir>/.pkthunder/http/<name>.json`                 | `pkt exec --refresh-http` (and `--http-replay-only` for CI) — see `docs/notes/cassettes.md` |
+| `ai-verdict`  | a fuzzy pass/fail judgement on a body         | `<workdir>/.pkspec/ai-snapshots/<name>.json`         | `pkt exec --refresh-ai`        |
+| `http`        | the full response (status / headers / body) of one HTTP request | `<workdir>/.pkspec/http/<name>.json`                 | `pkt exec --refresh-http` (and `--http-replay-only` for CI) — see `docs/notes/cassettes.md` |
 
 These never stack; a single test pins or polls or judges, but the
 runner has no opinion on which it should be. Authors choose per-Test
@@ -22,7 +22,7 @@ and per-Step.
 
 Per-test only. `expectStdoutSnapshot` / `expectStderrSnapshot` reference
 a `ReferenceSnapshot` whose `name` resolves to a file under
-`.pkthunder/snapshots/`. Optional `generator` is itself a Test whose
+`.pkspec/snapshots/`. Optional `generator` is itself a Test whose
 stdout becomes the snapshot when the file is missing or refreshed.
 
 Use when:
@@ -78,7 +78,7 @@ Skip when:
   the enclosing object — robust enough for normal authoring, but not
   for hand-written modules that, say, embed a brace inside a string
   literal.
-- Source rewrites are atomic (`<file>.pkthunder.tmp` + rename).
+- Source rewrites are atomic (`<file>.pkspec.tmp` + rename).
   Concurrent step rewrites within the same run serialise on an
   `Executor`-level mutex.
 
@@ -123,5 +123,5 @@ spec` renders them with an unchecked checkbox.
 
 In all three cases the snapshot file (or rewritten source) is part of
 the test contract — commit it. A reviewer reading a change to
-`.pkthunder/snapshots/` or a moved `inlineStdout = "..."` line is the
+`.pkspec/snapshots/` or a moved `inlineStdout = "..."` line is the
 intended flow; it is what makes a snapshot trustworthy.

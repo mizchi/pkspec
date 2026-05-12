@@ -1,4 +1,4 @@
-module github.com/mizchi/pkthunder
+module github.com/mizchi/pkspec
 
 go 1.26.2
 

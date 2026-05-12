@@ -156,7 +156,7 @@ The `Step` class grows wider. Each new kind:
 - adds a branch in the executor's dispatch.
 
 There is no extension point — external authors cannot add a kind
-without modifying pkthunder itself.
+without modifying pkspec itself.
 
 ## pkl-go decode strategy
 
@@ -188,7 +188,7 @@ given step. A shell step still has `expectStatus` and `cassette`
 fields available (silently ignored) — the schema can't say "only
 applicable when http is set." Adding a fifth kind continues to widen
 `Step` linearly. External extension is impossible without a PR to
-pkthunder.
+pkspec.
 
 **Migration.** None — this is the "do the least and ship" option.
 The cost is paid later, when adding the sixth or seventh kind makes

@@ -1,5 +1,5 @@
 {
-  description = "pkthunder — language-agnostic test runner that extends pkl test";
+  description = "pkspec — language-agnostic test runner that extends pkl test";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -10,8 +10,8 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        pkthunder = pkgs.buildGoModule {
-          pname = "pkthunder";
+        pkspec = pkgs.buildGoModule {
+          pname = "pkspec";
           version = "0.0.0";
           src = ./.;
 
@@ -23,7 +23,7 @@
 
           # `pkt` shells out to `pkl` (via pkl-go) for evaluation, and
           # `pkt run --reader-helper` re-invokes itself, so PATH needs both.
-          # Wrapping ensures users who installed pkthunder via Nix get a
+          # Wrapping ensures users who installed pkspec via Nix get a
           # working `pkl` without a separate install step.
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''
@@ -33,7 +33,7 @@
 
           meta = with pkgs.lib; {
             description = "Language-agnostic test runner that extends pkl test";
-            homepage = "https://github.com/mizchi/pkthunder";
+            homepage = "https://github.com/mizchi/pkspec";
             license = licenses.mit;
             mainProgram = "pkt";
             platforms = platforms.unix;
@@ -41,16 +41,16 @@
         };
       in {
         packages = {
-          default = pkthunder;
-          pkthunder = pkthunder;
+          default = pkspec;
+          pkspec = pkspec;
         };
 
         apps.default = flake-utils.lib.mkApp {
-          drv = pkthunder;
+          drv = pkspec;
           name = "pkt";
         };
 
-        # `nix develop` for working on pkthunder itself.
+        # `nix develop` for working on pkspec itself.
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             go

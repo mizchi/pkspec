@@ -41,8 +41,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mizchi/pkthunder/internal/config"
-	"github.com/mizchi/pkthunder/internal/inline"
+	"github.com/mizchi/pkspec/internal/config"
+	"github.com/mizchi/pkspec/internal/inline"
 )
 
 // Outcome categorizes the result of a test or step.
@@ -128,7 +128,7 @@ type Options struct {
 	// defaults to io.Discard.
 	Stderr io.Writer
 	// SnapshotsDir is where reference snapshot files live, relative to
-	// Workdir. Defaults to `.pkthunder/snapshots`.
+	// Workdir. Defaults to `.pkspec/snapshots`.
 	SnapshotsDir string
 	// RefreshSnapshots forces every snapshot file to be (re)written from
 	// the live capture, regardless of whether it currently matches.
@@ -186,7 +186,7 @@ func New(opts Options) *Executor {
 		opts.Workdir = "."
 	}
 	if opts.SnapshotsDir == "" {
-		opts.SnapshotsDir = filepath.Join(opts.Workdir, ".pkthunder", "snapshots")
+		opts.SnapshotsDir = filepath.Join(opts.Workdir, ".pkspec", "snapshots")
 	}
 	return &Executor{opts: opts}
 }
@@ -654,7 +654,7 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 	// Test returns (pass or fail), so side-effecting files (SQLite
 	// DBs, generated snapshots-in-progress) don't accumulate.
 	if t.EphemeralWorkdir {
-		tmpDir, err := os.MkdirTemp("", "pkthunder-test-*")
+		tmpDir, err := os.MkdirTemp("", "pkspec-test-*")
 		if err != nil {
 			return Result{
 				Name:     name,
@@ -1834,7 +1834,7 @@ func (e *Executor) startBackgrounds(ctx context.Context, t *config.Test, default
 		// portEnv: allocate a free TCP port and inject it into the
 		// Test's env so the background cmd, the readyProbe, and any
 		// later steps see it under the named variable. The Test.Env
-		// mutation is intentional — pkthunder treats each Test as
+		// mutation is intentional — pkspec treats each Test as
 		// single-use within a Run, and the port assignment is part
 		// of that Test's lifecycle state.
 		if b.PortEnv != nil {

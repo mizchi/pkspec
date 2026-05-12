@@ -1,4 +1,4 @@
-// Command pkt is the pkthunder test runner.
+// Command pkt is the pkspec test runner.
 //
 // Two execution paths share the binary:
 //
@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/apple/pkl-go/pkl"
-	"github.com/mizchi/pkthunder/internal/config"
-	"github.com/mizchi/pkthunder/internal/executor"
-	"github.com/mizchi/pkthunder/internal/junit"
-	"github.com/mizchi/pkthunder/internal/spec"
+	"github.com/mizchi/pkspec/internal/config"
+	"github.com/mizchi/pkspec/internal/executor"
+	"github.com/mizchi/pkspec/internal/junit"
+	"github.com/mizchi/pkspec/internal/spec"
 )
 
 const version = "0.0.0"
@@ -63,7 +63,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	case "timings":
 		return cmdTimings(args[1:], stdout, stderr)
 	case "--reader-helper":
-		// Hidden mode: pkthunder spawns itself as the external-reader
+		// Hidden mode: pkspec spawns itself as the external-reader
 		// helper that pkl talks to over msgpack. Users do not invoke
 		// this directly.
 		return cmdReaderHelper(args[1:])
@@ -74,7 +74,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprint(w, `pkt — pkthunder test runner
+	fmt.Fprint(w, `pkt — pkspec test runner
 
 usage:
   pkt <command> [args]
@@ -97,7 +97,7 @@ commands:
                               --check cross-references Scenario.id with
                               Test.specRef and exits non-zero on any
                               declared spec without an implementing test.
-  timings -f Test.pkl [opts]  inspect .pkthunder/timings.jsonl —
+  timings -f Test.pkl [opts]  inspect .pkspec/timings.jsonl —
                               per-test median / p90 / latest outcome.
                               --env / --failing / --shard=K/N (preview)
   version                     print pkt version
@@ -109,7 +109,7 @@ including module paths, --junit-aggregate-reports, --overwrite, etc.
 }
 
 func cmdRun(args []string, stdout, stderr io.Writer) error {
-	// Pre-process pkthunder-owned flags before forwarding the rest to
+	// Pre-process pkspec-owned flags before forwarding the rest to
 	// `pkl test`. Currently just `--allow-cmd` (Phase 5).
 	allowCmd := false
 	pklUserArgs := make([]string, 0, len(args))
@@ -121,7 +121,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 		pklUserArgs = append(pklUserArgs, a)
 	}
 
-	tmp, err := os.MkdirTemp("", "pkthunder-junit-*")
+	tmp, err := os.MkdirTemp("", "pkspec-junit-*")
 	if err != nil {
 		return fmt.Errorf("create junit tempdir: %w", err)
 	}
@@ -194,8 +194,8 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	fs.Var(&only, "only", "only run tests whose name contains this substring (repeatable; case-sensitive)")
 	var tags multiString
 	fs.Var(&tags, "tag", "only run tests whose `tags` Listing contains this exact value (repeatable; AND with --only)")
-	noRecordTimings := fs.Bool("no-record-timings", false, "skip writing per-test wall-clock durations to .pkthunder/timings.jsonl")
-	timingsFile := fs.String("timings-file", "", "override the timings.jsonl path (default: <workdir>/.pkthunder/timings.jsonl)")
+	noRecordTimings := fs.Bool("no-record-timings", false, "skip writing per-test wall-clock durations to .pkspec/timings.jsonl")
+	timingsFile := fs.String("timings-file", "", "override the timings.jsonl path (default: <workdir>/.pkspec/timings.jsonl)")
 	shardSpec := fs.String("shard", "", "run only the K-th shard of N (format: K/N, 1-indexed). Uses timings history to balance via LPT")
 	totalTimeout := fs.Duration("total-timeout", 0, "abort the run after this wall-clock and report remaining tests as skipped (e.g. 300s, 5m)")
 	rerunFailed := fs.Bool("rerun-failed", false, "only run tests whose most recent record in timings.jsonl is fail/error/skip")
@@ -374,7 +374,11 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		positional = append(positional, found...)
 	}
 	if len(positional) == 0 {
-		return fmt.Errorf("spec needs at least one Test.pkl path (or use --discover)")
+		if _, err := os.Stat("SPEC.pkl"); err == nil {
+			positional = []string{"SPEC.pkl"}
+		} else {
+			return fmt.Errorf("spec needs at least one Test.pkl path (or use --discover, or place a SPEC.pkl at the repo root)")
+		}
 	}
 
 	ctx := context.Background()
@@ -601,14 +605,14 @@ func joinReasonsWithSteps(r executor.Result) string {
 	return b.String()
 }
 
-// cmdReaderHelper is the worker mode of pkthunder. When `pkt run --allow-cmd`
+// cmdReaderHelper is the worker mode of pkspec. When `pkt run --allow-cmd`
 // invokes `pkl test`, pkl spawns this very binary again with `--reader-helper`
 // as its first argument. Pkl and the helper then exchange msgpack messages
 // over stdin/stdout; the helper services every `read("cmd:...")` by running
 // the command in `bash -c` and returning the stdout bytes to pkl.
 //
 // pkl-go's `NewExternalReaderClient` handles the entire wire format (frame
-// decoding, response routing, lifecycle), so pkthunder only contributes the
+// decoding, response routing, lifecycle), so pkspec only contributes the
 // `Read` callback.
 func cmdReaderHelper(_ []string) error {
 	client, err := pkl.NewExternalReaderClient(
@@ -709,9 +713,9 @@ func findRepoRoot() string {
 }
 
 // discoverSpecFiles walks `root` and returns every Spec.pkl /
-// Test.pkl / *.test.pkl path so `pkt spec --discover` can pick up an
-// entire repo without the operator listing each file. Hidden dirs
-// (`.git`, `.pkthunder`, ...) and `node_modules` are skipped.
+// Test.pkl path plus a root-level SPEC.pkl, so `pkt spec --discover`
+// can pick up an entire repo without the operator listing each file.
+// Hidden dirs (`.git`, `.pkspec`, ...) and `node_modules` are skipped.
 func discoverSpecFiles(root string) ([]string, error) {
 	var out []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
@@ -726,7 +730,7 @@ func discoverSpecFiles(root string) ([]string, error) {
 			if base == "node_modules" {
 				return filepath.SkipDir
 			}
-			// The `pkl/` directory holds pkthunder's own schema modules
+			// The `pkl/` directory holds pkspec's own schema modules
 			// (Test.pkl, Spec.pkl, QuickCheck.pkl). They are amended by
 			// users, not loaded directly as a Plan.
 			if base == "pkl" {
@@ -735,16 +739,15 @@ func discoverSpecFiles(root string) ([]string, error) {
 			return nil
 		}
 		base := filepath.Base(path)
-		// Canonical pkthunder filenames anywhere in the tree, plus
-		// any *.pkl directly inside a `specs/` directory (for
-		// project-level spec modules like `specs/pkthunder.pkl`).
-		// `*.test.pkl` is the pkl-test convention for native modules
-		// that don't necessarily amend our Test.pkl, so we skip it.
+		// Canonical pkspec filenames anywhere in the tree, plus the
+		// root-level SPEC.pkl convention. `*.test.pkl` is the pkl-test
+		// convention for native modules that don't necessarily amend
+		// our Test.pkl, so we skip it.
 		if base == "Spec.pkl" || base == "Test.pkl" {
 			out = append(out, path)
 			return nil
 		}
-		if strings.HasSuffix(base, ".pkl") && filepath.Base(filepath.Dir(path)) == "specs" {
+		if base == "SPEC.pkl" && filepath.Dir(path) == root {
 			out = append(out, path)
 		}
 		return nil

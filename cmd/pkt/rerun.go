@@ -1,6 +1,6 @@
 package main
 
-import "github.com/mizchi/pkthunder/internal/timing"
+import "github.com/mizchi/pkspec/internal/timing"
 
 // pickRerunFailed returns the subset of candidates whose most recent
 // timing record in env is a "needs another try" outcome: fail, error,

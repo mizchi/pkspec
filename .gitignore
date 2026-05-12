@@ -5,9 +5,9 @@
 *.test
 *.out
 
-# Per-suite timings history (Phase 30). Snapshots under .pkthunder/snapshots/
-# ARE meant to be committed, so don't gitignore .pkthunder/ wholesale.
-.pkthunder/timings.jsonl
+# Per-suite timings history (Phase 30). Snapshots under .pkspec/snapshots/
+# ARE meant to be committed, so don't gitignore .pkspec/ wholesale.
+.pkspec/timings.jsonl
 
 # experiments produce snapshot files we DO want to commit
 !experiments/**/*.pkl-expected.pcf

@@ -101,7 +101,7 @@ preference (probe 03):
 Verified with both an explicit file argument and PklProject-driven
 discovery. CI cannot trust the exit code by itself; a wrapper must
 inspect either the textual `X/Y failed` line or the JUnit XML and
-exit non-zero on its own. This is the single biggest gap pkthunder
+exit non-zero on its own. This is the single biggest gap pkspec
 intends to close.
 
 ## Concurrency and timeouts

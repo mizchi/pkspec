@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mizchi/pkthunder/internal/config"
+	"github.com/mizchi/pkspec/internal/config"
 )
 
 func TestSortedScopedHookNames(t *testing.T) {

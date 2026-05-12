@@ -8,7 +8,7 @@
 //
 // Note: `pkl test` returns exit 0 even when assertions fail. The
 // `failures` attribute on the root testsuite element is the source of
-// truth for "did anything fail?", which is exactly what pkthunder uses
+// truth for "did anything fail?", which is exactly what pkspec uses
 // to decide its own exit code.
 package junit
 
@@ -20,7 +20,7 @@ import (
 	"sort"
 )
 
-// Suite mirrors `<testsuite>`. Only the fields pkthunder needs are decoded.
+// Suite mirrors `<testsuite>`. Only the fields pkspec needs are decoded.
 type Suite struct {
 	XMLName  xml.Name `xml:"testsuite"`
 	Name     string   `xml:"name,attr"`

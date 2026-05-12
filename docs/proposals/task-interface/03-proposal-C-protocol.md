@@ -74,7 +74,7 @@ function shellTask(_args: Mixin<Task>): Task = new Task {
 With the sugar module:
 
 ```pkl
-import "pkthunder/runners/Shell.pkl" as Shell
+import "pkspec/runners/Shell.pkl" as Shell
 
 new Test {
   name = "ping"
@@ -103,7 +103,7 @@ new Test {
 ## S2 — HTTP + capture + jsonpath
 
 ```pkl
-import "pkthunder/runners/Http.pkl" as Http
+import "pkspec/runners/Http.pkl" as Http
 
 new Test {
   name = "create_then_fetch_user"
@@ -133,8 +133,8 @@ new Test {
 ## S3 — Playwright screenshot match
 
 ```pkl
-import "pkthunder/runners/Shell.pkl" as Shell
-import "pkthunder/runners/Playwright.pkl" as Pw
+import "pkspec/runners/Shell.pkl" as Shell
+import "pkspec/runners/Playwright.pkl" as Pw
 
 new Test {
   name = "login_form_renders"
@@ -159,14 +159,14 @@ new Test {
 
 ## Adding a new task kind
 
-External author publishes `pkthunder-grpc` (a Go package + a Pkl sugar
+External author publishes `pkspec-grpc` (a Go package + a Pkl sugar
 module):
 
 ```go
-// pkthunder-grpc/runner.go
+// pkspec-grpc/runner.go
 package grpcrunner
 
-import "github.com/mizchi/pkthunder/api"
+import "github.com/mizchi/pkspec/api"
 
 func Register(exe *api.Executor) {
     exe.RegisterRunner("grpc", &grpcRunner{})
@@ -174,8 +174,8 @@ func Register(exe *api.Executor) {
 ```
 
 ```pkl
-// pkthunder-grpc/Grpc.pkl
-import "package://pkg.../pkthunder/Task.pkl" as base
+// pkspec-grpc/Grpc.pkl
+import "package://pkg.../pkspec/Task.pkl" as base
 
 function task(_args: ...): base.Task = new base.Task {
   runner = "grpc"
@@ -186,11 +186,11 @@ function task(_args: ...): base.Task = new base.Task {
 User wires it up in their `main` (or a config file):
 
 ```go
-import grpcrunner "github.com/foo/pkthunder-grpc"
+import grpcrunner "github.com/foo/pkspec-grpc"
 grpcrunner.Register(exe)
 ```
 
-The schema does not change; pkthunder doesn't need to know about
+The schema does not change; pkspec doesn't need to know about
 `grpc` at compile time.
 
 ## pkl-go decode strategy
@@ -223,7 +223,7 @@ shapes hand-rolled.
 ## Trade-offs
 
 **Strengths.** External extension is symmetric with built-ins: any
-package can register a runner without modifying pkthunder.
+package can register a runner without modifying pkspec.
 Polymorphism is gone from pkl-go entirely. The sugar modules give
 the same authoring ergonomics as proposal A while preserving the
 runner-registration story.

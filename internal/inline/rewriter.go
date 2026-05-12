@@ -80,7 +80,7 @@ func ReplaceField(source []byte, testName, fieldName, value string) ([]byte, err
 //     opening trio)
 //
 // Block comments `/* */` are not handled — they are extremely
-// rare in pkthunder modules. If they bite, add handling here.
+// rare in pkspec modules. If they bite, add handling here.
 func maskStringsAndComments(source []byte) []byte {
 	out := make([]byte, len(source))
 	copy(out, source)
@@ -311,7 +311,7 @@ func encodeTripleQuoted(s string, indent string) string {
 // WriteAtomic writes `data` to `path` via a temp file + rename so a
 // crash mid-write cannot leave a half-rewritten Pkl module on disk.
 func WriteAtomic(path string, data []byte) error {
-	tmp := path + ".pkthunder.tmp"
+	tmp := path + ".pkspec.tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func WriteAtomic(path string, data []byte) error {
 }
 
 // RewriteUnderLock acquires an exclusive POSIX flock on
-// `path + ".pkthunder-lock"`, reads the file, applies `mutate`,
+// `path + ".pkspec-lock"`, reads the file, applies `mutate`,
 // writes the result via WriteAtomic, releases the lock.
 //
 // Two concurrent `pkt exec --update-inline-snapshots` invocations
@@ -351,7 +351,7 @@ type fileLock struct {
 }
 
 func acquireFileLock(path string) (*fileLock, error) {
-	lockPath := path + ".pkthunder-lock"
+	lockPath := path + ".pkspec-lock"
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, err

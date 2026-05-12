@@ -18,7 +18,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mizchi/pkthunder/internal/config"
+	"github.com/mizchi/pkspec/internal/config"
 )
 
 // Entry pairs a test with the absolute source path of the module that

@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mizchi/pkthunder/internal/junit"
+	"github.com/mizchi/pkspec/internal/junit"
 )
 
 // realPklOutput is a verbatim sample written by `pkl test --junit-reports`
 // against probe 02 (two facts pass, two facts fail, one fresh example
-// snapshot). It is the canonical shape pkthunder must read.
+// snapshot). It is the canonical shape pkspec must read.
 const realPklOutput = `<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="02-failure-output" tests="4" failures="3">
     <testcase classname="02-failure-output.facts" name="passes"></testcase>

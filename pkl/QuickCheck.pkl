@@ -1,4 +1,4 @@
-/// pkthunder property-based testing helpers.
+/// pkspec property-based testing helpers.
 ///
 /// Pkl is side-effect-free, so "random" inputs come from a seeded
 /// PRNG (xorshift32) implemented in the language itself. Every run
@@ -21,7 +21,7 @@
 /// the Go executor), so `seedAt(seed, i)` in Pkl matches the seed
 /// the executor injects on iteration `i`.
 @ModuleInfo { minPklVersion = "0.31.0" }
-module pkthunder.QuickCheck
+module pkspec.QuickCheck
 
 class Case {
   /// 0-based iteration index in the case stream.

@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/mizchi/pkthunder/internal/shard"
-	"github.com/mizchi/pkthunder/internal/timing"
+	"github.com/mizchi/pkspec/internal/shard"
+	"github.com/mizchi/pkspec/internal/timing"
 )
 
-// cmdTimings is the inspection subcommand for `.pkthunder/timings.jsonl`.
+// cmdTimings is the inspection subcommand for `.pkspec/timings.jsonl`.
 // During dogfooding the same `jq` queries kept coming up — "show me
 // the slow tests", "show me what failed last run", "show me which
 // tests would land in shard 2/4 if I ran it now" — so they get
@@ -21,7 +21,7 @@ func cmdTimings(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(io.Discard)
 	file := fs.String("f", "Test.pkl", "path to the Test.pkl module (used to locate the default timings.jsonl)")
 	fs.StringVar(file, "file", "Test.pkl", "alias for -f")
-	timingsFile := fs.String("timings-file", "", "override the timings.jsonl path (default: <workdir>/.pkthunder/timings.jsonl)")
+	timingsFile := fs.String("timings-file", "", "override the timings.jsonl path (default: <workdir>/.pkspec/timings.jsonl)")
 	env := fs.String("env", "", "env tag to filter on (default: PKT_TIMING_ENV or 'local')")
 	failing := fs.Bool("failing", false, "only show tests whose latest record is non-pass")
 	shardSpec := fs.String("shard", "", "preview which tests would land in shard K/N (does not run them)")

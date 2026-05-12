@@ -1,4 +1,4 @@
-/// pkthunder Spec — BDD-style high-level DSL on top of Test.pkl.
+/// pkspec Spec — BDD-style high-level DSL on top of Test.pkl.
 ///
 /// Author scenarios as Given / When / Then triplets, paired with a
 /// concrete `Step` implementation (the same `Step` class Test.pkl
@@ -15,7 +15,7 @@
 /// The runner is unchanged — Spec.pkl `amends Test.pkl`, so the
 /// rendered output shape is identical.
 @ModuleInfo { minPklVersion = "0.31.0" }
-module pkthunder.Spec extends "Test.pkl"
+module pkspec.Spec extends "Test.pkl"
 
 import "Test.pkl" as base
 

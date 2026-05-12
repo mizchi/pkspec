@@ -62,7 +62,7 @@ sys.exit(1)
 ## Snapshot cache
 
 The runner stores each judged verdict under
-`<test-module-dir>/.pkthunder/ai-snapshots/<snapshotName>.json`:
+`<test-module-dir>/.pkspec/ai-snapshots/<snapshotName>.json`:
 
 ```json
 {
@@ -89,7 +89,7 @@ Partial writes never leave a corrupted snapshot behind.
 - **Cache key intentionally excludes `cmd` and any model identifier.**
   Renaming the judge or upgrading the model does *not* invalidate
   cached verdicts. To force a refresh, delete the affected snapshot
-  files (or the whole `.pkthunder/ai-snapshots/` directory).
+  files (or the whole `.pkspec/ai-snapshots/` directory).
 - **Commit snapshots.** They are part of the test contract. A reviewer
   reading the JSON can see what the prompt was, what verdict the
   judge returned, and the explanation, all without re-running an LLM.

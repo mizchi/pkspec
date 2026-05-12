@@ -1,4 +1,4 @@
-/// pkthunder QuickCheck PoC — property-based testing in pure Pkl.
+/// pkspec QuickCheck PoC — property-based testing in pure Pkl.
 ///
 /// Pkl is side-effect-free, so "random" inputs come from a seeded
 /// PRNG (xorshift32) implemented in the language itself. That makes
@@ -10,7 +10,7 @@
 ///   intCases(s, n, lo, hi)  Listing<Case>, lo/hi inclusive.
 ///   checkAll(name, cs, p)   Result with first counterexample.
 @ModuleInfo { minPklVersion = "0.31.0" }
-module pkthunder.experiments.QuickCheck
+module pkspec.experiments.QuickCheck
 
 class Case {
   index: Int

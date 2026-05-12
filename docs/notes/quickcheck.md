@@ -1,6 +1,6 @@
 # Property-based testing
 
-pkthunder supports property-based testing on two surfaces, sharing
+pkspec supports property-based testing on two surfaces, sharing
 a single deterministic seed stream (xorshift32) so failures
 discovered on one side can be re-investigated on the other.
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mizchi/pkthunder/internal/config"
+	"github.com/mizchi/pkspec/internal/config"
 )
 
 // runInputIterated drives a property-based loop using typed inputs.

@@ -1,6 +1,6 @@
 # Test tags and the SPEC view
 
-pkthunder treats `Test.tags` as a free-form classification list. Three
+pkspec treats `Test.tags` as a free-form classification list. Three
 conventional values cover the common spec-driven workflow:
 
 | tag           | who writes it                                  | what it implies                                       |

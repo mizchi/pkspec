@@ -27,7 +27,7 @@ cannot escape the cassettes directory.
 ## Disk layout
 
 ```
-<workdir>/.pkthunder/http/<cassette>.json
+<workdir>/.pkspec/http/<cassette>.json
 ```
 
 One file per cassette name, JSON-encoded:

@@ -3,7 +3,7 @@ package shard_test
 import (
 	"testing"
 
-	"github.com/mizchi/pkthunder/internal/shard"
+	"github.com/mizchi/pkspec/internal/shard"
 )
 
 func TestLPTEvenSplit(t *testing.T) {

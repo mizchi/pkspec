@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mizchi/pkthunder/internal/config"
+	"github.com/mizchi/pkspec/internal/config"
 	_ "modernc.org/sqlite"
 )
 
@@ -145,7 +145,7 @@ func (e *Executor) runSqlStep(ctx context.Context, step *config.Step, t *config.
 // string entries (numbers, bools, nil) pass through untouched so
 // the driver sees the right Go type. The `?` placeholder
 // substitution is the driver's job; we only handle the
-// env-expansion contract pkthunder uses elsewhere.
+// env-expansion contract pkspec uses elsewhere.
 func expandSqlArgs(args []any, env map[string]string) []any {
 	if len(args) == 0 {
 		return nil

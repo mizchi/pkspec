@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pkthunder Playwright harness.
+// pkspec Playwright harness.
 //
 // The pkt Go binary embeds this file, writes it to a tmp path, and
 // spawns `node <this>` for each playwright Step. Communication is

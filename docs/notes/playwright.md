@@ -13,7 +13,7 @@ test against it.
 ## Project setup
 
 The harness is a `.mjs` file embedded in the `pkt` binary; the
-runner writes it to `<workdir>/.pkthunder/playwright-harness-*.mjs`
+runner writes it to `<workdir>/.pkspec/playwright-harness-*.mjs`
 at execution time. Because Node's ESM resolver searches upward from
 the harness location, the user's `node_modules` must live at or
 above the test module's directory.
@@ -94,7 +94,7 @@ layout — avoid them.
 
 ## Screenshot snapshots
 
-Stored at `<workdir>/.pkthunder/screenshots/<name>.png`.
+Stored at `<workdir>/.pkspec/screenshots/<name>.png`.
 
 Compare mode is decided at runtime by what's in the user's
 `node_modules`:
@@ -226,7 +226,7 @@ identical on every attempt.
 
 - Network mocking from Pkl. If you need request interception, do
   it inside the script via `page.route(...)` for now.
-- Parallel playwright steps share `<workdir>/.pkthunder/` for
+- Parallel playwright steps share `<workdir>/.pkspec/` for
   harness drops; they get distinct random suffixes so the writes
   don't collide, but a heavy parallel run will leave several
   `playwright-harness-*.mjs` files momentarily before each

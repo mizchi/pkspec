@@ -1,6 +1,6 @@
 # Lifecycle hooks
 
-pkthunder supports four hook positions through two Mapping sections at
+pkspec supports four hook positions through two Mapping sections at
 the module's top level:
 
 ```pkl
@@ -21,7 +21,7 @@ The `scope` field on each Hook chooses the lifecycle position:
 
 `pkl test` itself organises tests via top-level Mapping sections
 (`facts`, `examples`) and uses module composition (`amends` / `import`)
-for grouping. pkthunder mirrors that shape:
+for grouping. pkspec mirrors that shape:
 
 - one Pkl module = one scope
 - `amends` is inheritance: a child module's `before` Mapping merges
@@ -30,7 +30,7 @@ for grouping. pkthunder mirrors that shape:
   `tests/Test.pkl`), not in-source `describe` blocks
 
 This avoids carrying two scoping systems (Pkl module hierarchy + a
-pkthunder-specific `Describe` class) for the same concept.
+pkspec-specific `Describe` class) for the same concept.
 
 ## Example
 

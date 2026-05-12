@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mizchi/pkthunder/harness"
-	"github.com/mizchi/pkthunder/internal/config"
+	"github.com/mizchi/pkspec/harness"
+	"github.com/mizchi/pkspec/internal/config"
 )
 
 // runPlaywrightStep dispatches a playwright Step to the embedded Node
@@ -22,7 +22,7 @@ import (
 // to the Test module's workdir), invokes its default export with
 // `{page, ctx}`, and returns a JSON payload over stdout. Optional
 // screenshot capture flows through base64 and lands in
-// `<workdir>/.pkthunder/screenshots/<name>.png`.
+// `<workdir>/.pkspec/screenshots/<name>.png`.
 //
 // First-run / mismatch / refresh semantics mirror byte snapshots:
 //   - missing file       → write actual, return Failed with "review and commit"
@@ -48,7 +48,7 @@ func (e *Executor) runPlaywrightStep(ctx context.Context, step *config.Step, t *
 
 	stepWorkdir := resolveDir(e.opts.Workdir, t.Workdir, step.Workdir)
 
-	// Harness lives under workdir/.pkthunder/ so Node's package
+	// Harness lives under workdir/.pkspec/ so Node's package
 	// resolution walks up into the user's node_modules and finds
 	// `playwright`. Writing it to /tmp (the natural CreateTemp
 	// default) breaks `import 'playwright'` because Node resolves
@@ -92,7 +92,7 @@ func (e *Executor) runPlaywrightStep(ctx context.Context, step *config.Step, t *
 	// read when refresh is requested (the baseline is about to be
 	// overwritten anyway).
 	if pw.ExpectScreenshot != nil && !e.opts.RefreshSnapshots {
-		baseline := filepath.Join(e.opts.Workdir, ".pkthunder", "screenshots", pw.ExpectScreenshot.Name+".png")
+		baseline := filepath.Join(e.opts.Workdir, ".pkspec", "screenshots", pw.ExpectScreenshot.Name+".png")
 		if data, err := os.ReadFile(baseline); err == nil {
 			cfg["expectScreenshotBaseline"] = base64.StdEncoding.EncodeToString(data)
 		}
@@ -265,7 +265,7 @@ func firstContains(haystacks []string, needle string) (int, string) {
 // against `thresholdPct`. Without pixelmatch the runner falls back
 // to byte-exact compare — same behaviour as the phase 18.1 ship.
 func (e *Executor) checkScreenshot(s *config.ScreenshotSnapshot, actual []byte, diffPct *float64, diffPng []byte) (bool, string) {
-	dir := filepath.Join(e.opts.Workdir, ".pkthunder", "screenshots")
+	dir := filepath.Join(e.opts.Workdir, ".pkspec", "screenshots")
 	path := filepath.Join(dir, s.Name+".png")
 
 	if e.opts.RefreshSnapshots {
@@ -328,12 +328,12 @@ func writePNG(path string, body []byte) error {
 }
 
 // writePlaywrightHarness drops the embedded Node harness into
-// `<workdir>/.pkthunder/` so Node's ESM resolver can find the
+// `<workdir>/.pkspec/` so Node's ESM resolver can find the
 // user's `playwright` package in their `node_modules`. Each Step
 // run gets its own random-suffixed file so parallel playwright
 // steps don't collide.
 func writePlaywrightHarness(workdir string) (string, error) {
-	dir := filepath.Join(workdir, ".pkthunder")
+	dir := filepath.Join(workdir, ".pkspec")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

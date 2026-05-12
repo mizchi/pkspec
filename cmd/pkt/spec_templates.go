@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/mizchi/pkthunder/internal/spec"
+	"github.com/mizchi/pkspec/internal/spec"
 )
 
 // specTemplate returns a Pkl skeleton for one of the canonical
@@ -93,7 +93,7 @@ new Goal {
 }
 `
 
-const moduleTemplate = `// pkthunder Spec module — minimum starting structure.
+const moduleTemplate = `// pkspec Spec module — minimum starting structure.
 //
 //   pkt spec --check --discover            CI gate
 //   pkt spec --next --discover             "what to work on next"
@@ -103,7 +103,7 @@ const moduleTemplate = `// pkthunder Spec module — minimum starting structure.
 //
 // See docs/notes/authoring-guide.md for full walkthrough.
 
-amends "PATH/TO/pkthunder/pkl/Spec.pkl"
+amends "PATH/TO/pkspec/pkl/Spec.pkl"
 
 feature = "replace-with-feature-name"
 

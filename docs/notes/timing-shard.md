@@ -1,13 +1,13 @@
 # Timing history + shard balancing + total-timeout + rerun-failed
 
 Phase 30 adds four cooperating features built on a single new artifact:
-a per-suite `.pkthunder/timings.jsonl` that accumulates wall-clock
+a per-suite `.pkspec/timings.jsonl` that accumulates wall-clock
 duration observations across runs.
 
 ## What it does
 
 - **timing recorder** — every `pkt exec` run appends one record per
-  test to `.pkthunder/timings.jsonl` (next to the `Test.pkl` module).
+  test to `.pkspec/timings.jsonl` (next to the `Test.pkl` module).
   Default-on; opt out via `--no-record-timings`.
 - **`--shard=K/N`** — split the test set into N bins via
   Longest-Processing-Time (LPT) using the recorded median, run the
@@ -93,10 +93,10 @@ whole run.
 
 ## File location & gitignore
 
-The default path is `<workdir>/.pkthunder/timings.jsonl` where
+The default path is `<workdir>/.pkspec/timings.jsonl` where
 `<workdir>` is the directory containing the Pkl module. The
-repo-root `.gitignore` lists `.pkthunder/timings.jsonl` so history
-stays local (snapshots under `.pkthunder/snapshots/` are still
+repo-root `.gitignore` lists `.pkspec/timings.jsonl` so history
+stays local (snapshots under `.pkspec/snapshots/` are still
 committed). Override the path with `--timings-file`.
 
 ## Inspection: `pkt timings`
@@ -143,8 +143,8 @@ jobs:
         with:
           workflow: test.yml
           branch: main
-          name: pkthunder-timings
-          path: .pkthunder/
+          name: pkspec-timings
+          path: .pkspec/
           if_no_artifact_found: warn
 
       - run: PKT_TIMING_ENV=ci-linux pkt exec -f tests/all.pkl --shard=${{ matrix.shard }}/4
@@ -153,8 +153,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pkthunder-timings-shard-${{ matrix.shard }}
-          path: examples/.../.pkthunder/timings.jsonl
+          name: pkspec-timings-shard-${{ matrix.shard }}
+          path: examples/.../.pkspec/timings.jsonl
 
   merge-timings:
     needs: test
@@ -163,7 +163,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: pkthunder-timings-shard-*
+          pattern: pkspec-timings-shard-*
           merge-multiple: true
           path: timings-by-shard/
       - run: |
@@ -171,7 +171,7 @@ jobs:
           cat timings-by-shard/timings.jsonl* > merged/timings.jsonl
       - uses: actions/upload-artifact@v4
         with:
-          name: pkthunder-timings
+          name: pkspec-timings
           path: merged/timings.jsonl
           retention-days: 30
 ```

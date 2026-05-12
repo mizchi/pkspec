@@ -5,16 +5,16 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mizchi/pkthunder/internal/config"
-	"github.com/mizchi/pkthunder/internal/executor"
-	"github.com/mizchi/pkthunder/internal/timing"
+	"github.com/mizchi/pkspec/internal/config"
+	"github.com/mizchi/pkspec/internal/executor"
+	"github.com/mizchi/pkspec/internal/timing"
 )
 
 // defaultTimingsPath returns the per-suite default for --timings-file:
-// .pkthunder/timings.jsonl living next to the Test.pkl module. Each
+// .pkspec/timings.jsonl living next to the Test.pkl module. Each
 // repo (or each suite directory) gets its own history file.
 func defaultTimingsPath(sourceAbs string) string {
-	return filepath.Join(filepath.Dir(sourceAbs), ".pkthunder", "timings.jsonl")
+	return filepath.Join(filepath.Dir(sourceAbs), ".pkspec", "timings.jsonl")
 }
 
 // envTag is the bucket the run will be tagged under. PKT_TIMING_ENV

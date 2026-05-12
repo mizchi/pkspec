@@ -75,7 +75,7 @@ inputs {
 ## Adding `BoolInput` six months later
 
 1. Add `class BoolInput extends Input {}` in `pkl/Test.pkl`.
-2. Add Go struct + a `RegisterMapping("pkthunder.Test#RenderedBoolInput", BoolInput{})`.
+2. Add Go struct + a `RegisterMapping("pkspec.Test#RenderedBoolInput", BoolInput{})`.
 3. Add a generation case + a (trivial) shrink case in the
    runner's type switch (the `false → true` shrink is one-step).
 4. Author tests use `["FLAG"] = new BoolInput {}` inside the
@@ -104,8 +104,8 @@ per entry. Two paths:
    time it instantiates the right Go type based on the Pkl
    value's class name. Concretely the registry would look like:
    ```go
-   pkl.RegisterMapping("pkthunder.Test#RenderedIntInput", IntInput{})
-   pkl.RegisterMapping("pkthunder.Test#RenderedStringInput", StringInput{})
+   pkl.RegisterMapping("pkspec.Test#RenderedIntInput", IntInput{})
+   pkl.RegisterMapping("pkspec.Test#RenderedStringInput", StringInput{})
    // etc.
    ```
    Whether the resulting Go value lands as `IntInput` or
@@ -129,7 +129,7 @@ per entry. Two paths:
 Path 1 is the canonical pkl-go answer for an abstract class
 collection. The friction is that `RegisterMapping` is global
 state — multi-tenant scenarios (test fixtures from different
-projects in one process) could interfere, but pkthunder is
+projects in one process) could interfere, but pkspec is
 single-tenant so this is fine.
 
 ## Runner shape

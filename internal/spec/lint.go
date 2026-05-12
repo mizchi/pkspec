@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/mizchi/pkthunder/internal/config"
+	"github.com/mizchi/pkspec/internal/config"
 )
 
 // LintLevel ranks issues by severity. Sort order in output is

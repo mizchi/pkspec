@@ -160,7 +160,7 @@ strategy for each kind is hard-coded against its concrete type.
 
 **Weaknesses.**
 - **Schema widens monotonically.** Every new input type adds a
-  field to `Test`. A pkthunder user inspecting `Test`'s
+  field to `Test`. A pkspec user inspecting `Test`'s
   schema sees `intInputs / stringInputs / listIntInputs /
   mapInputs / boolInputs / ...` even if their fixture uses
   only one of them. Cognitive cost grows with the catalogue.

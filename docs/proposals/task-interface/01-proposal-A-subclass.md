@@ -143,7 +143,7 @@ To add a `GrpcTask`:
 
 1. Author a new `class GrpcTask extends Task { kind = "grpc"; ... }`
    in your project (or in a separate Pkl module the user `amends`).
-2. Register a Go runner for `kind = "grpc"` via the pkthunder Go API
+2. Register a Go runner for `kind = "grpc"` via the pkspec Go API
    (an executor option, not a CLI flag).
 3. Author tests using `new GrpcTask { ... }`.
 
@@ -165,7 +165,7 @@ Two patterns work:
 1. Decode each task into a `map[string]any`, read `kind`, then
    manually deserialise into the concrete Go type. Loses the typed
    field validation pkl-go normally gives.
-2. Register each subclass with `pkl.RegisterMapping("pkthunder.Test#ShellTask", ShellTask{})`
+2. Register each subclass with `pkl.RegisterMapping("pkspec.Test#ShellTask", ShellTask{})`
    etc., and decode into a Go interface; pkl-go will pick the right
    type based on the class. This is the path Apple's pkl-go intends
    (`Mapping` of arbitrary class names → concrete Go types) but the

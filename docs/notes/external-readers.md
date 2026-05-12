@@ -45,7 +45,7 @@ A correct helper:
 4. Lives for the duration of one `pkl` evaluation; Pkl manages the
    process lifecycle.
 
-## Why this matters for pkthunder
+## Why this matters for pkspec
 
 Without external readers, the design is:
 
@@ -74,7 +74,7 @@ type:
 | `read("env:HOME")` | bare `String` (no `.text`!) |
 | `read("prop:my.key")` | bare `String` (set with `-p my.key=…`) |
 
-When designing pkthunder's `cmd:` scheme we should pick one and
+When designing pkspec's `cmd:` scheme we should pick one and
 stick with it. Returning a `Resource`-shaped value (with `.text`,
 `.exitCode`, `.stderr`) would let users write
 `read("cmd:foo").exitCode == 0` symmetrically with `file:` reads.

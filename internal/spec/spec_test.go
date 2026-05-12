@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mizchi/pkthunder/internal/config"
+	"github.com/mizchi/pkspec/internal/config"
 )
 
 func strPtr(s string) *string { return &s }
