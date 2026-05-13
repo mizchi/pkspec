@@ -7,10 +7,10 @@ branding:
 inputs:
   version:
     description: |
-      pkspec version to install. Accepts a release tag such as `v0.1.5`,
-      a bare semver `0.1.5`, the floating major `v0`, or `latest`.
+      pkspec version to install. Accepts a release tag such as `v0.1.6`,
+      a bare semver `0.1.6`, the floating major `v0`, or `latest`.
       When empty, the action reads its own ref (so pinning via
-      `mizchi/pkspec@v0.1.5` or `@v0` just works) and falls back to the
+      `mizchi/pkspec@v0.1.6` or `@v0` just works) and falls back to the
       latest published release.
     required: false
     default: ""

@@ -11,7 +11,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        version = "0.1.5";
+        version = "0.1.6";
         pklNative = pkgs.callPackage ./nix/pkl-native.nix { };
         pkspec = pkgs.buildGoModule {
           pname = "pkspec";

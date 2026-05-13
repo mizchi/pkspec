@@ -291,9 +291,9 @@ Beyond the per-test plumbing:
 ### Nix (recommended)
 
 ```sh
-nix run github:mizchi/pkspec/v0.1.5 -- init --dir pkspec
-nix run github:mizchi/pkspec/v0.1.5 -- exec -f path/to/Test.pkl
-nix profile install github:mizchi/pkspec/v0.1.5
+nix run github:mizchi/pkspec/v0.1.6 -- init --dir pkspec
+nix run github:mizchi/pkspec/v0.1.6 -- exec -f path/to/Test.pkl
+nix profile install github:mizchi/pkspec/v0.1.6
 ```
 
 The flake builds the `pkspec` binary and wraps it so the bundled Pkl
@@ -307,7 +307,7 @@ In a home-manager flake:
 
 ```nix
 {
-  inputs.pkspec.url = "github:mizchi/pkspec/v0.1.5";
+  inputs.pkspec.url = "github:mizchi/pkspec/v0.1.6";
   inputs.pkspec.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = { self, nixpkgs, home-manager, pkspec, ... }:
@@ -336,7 +336,7 @@ you only want the wrapped `pkspec` binary and do not want a standalone
 ### Go
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/pkspec@v0.1.5
+go install github.com/mizchi/pkspec/cmd/pkspec@v0.1.6
 pkspec init --dir pkspec
 ```
 
@@ -367,7 +367,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: mizchi/pkspec@v0.1.5
+      - uses: mizchi/pkspec@v0.1.6
         with:
           init-schema-dir: pkspec
       - run: pkspec exec -f Test.pkl
@@ -382,7 +382,7 @@ Inputs:
 
 | Input | Default | Notes |
 | --- | --- | --- |
-| `version` | the action ref, falling back to latest release | Accepts `v0.1.5`, `0.1.5`, `v0`, or `latest`. |
+| `version` | the action ref, falling back to latest release | Accepts `v0.1.6`, `0.1.6`, `v0`, or `latest`. |
 | `pkl-version` | `0.31.1` | Set to `none` to skip Pkl install. |
 | `setup-go` | `true` | Uses this action's `go.mod` to install the Go toolchain needed for `go install`. |
 | `install-dir` | `${{ runner.temp }}/pkspec-bin` | Added to `PATH`. |
@@ -457,7 +457,7 @@ pkf run release-check
 push a release tag after `release-check` passes:
 
 ```sh
-pkf run tag --version=0.1.5
+pkf run tag --version=0.1.6
 ```
 
 Pushing `v*.*.*` tags triggers the Release workflow. It validates the
