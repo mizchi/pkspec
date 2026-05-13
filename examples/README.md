@@ -1,8 +1,8 @@
 # Examples
 
-Each subdirectory is a self-contained `pkspec exec` target. The
-naming convention is `<kind-or-feature>-<aspect>`, and every
-example follows the same shape:
+Most subdirectories are self-contained `pkspec exec` targets. The
+naming convention is `<kind-or-feature>-<aspect>`, and runtime
+examples follow the same shape:
 
 ```
 examples/<name>/
@@ -17,6 +17,19 @@ Run any example with:
 
 ```sh
 pkspec exec -f examples/<name>/Test.pkl
+```
+
+Most adapter DSL examples are schema-only for now. They use
+`Adapter.pkl` instead of `Test.pkl` and validate with:
+
+```sh
+pkl eval examples/<adapter-name>/Adapter.pkl
+```
+
+The protocol smoke example is executable:
+
+```sh
+pkspec adapter -f examples/adapter-protocol-smoke/Adapter.pkl
 ```
 
 ## Index
@@ -49,6 +62,24 @@ pkspec exec -f examples/<name>/Test.pkl
 
 - [`playwright-test-suite`](playwright-test-suite/) — `npx
   playwright test` with `--grep` filter, JUnit aggregation
+
+### Adapter DSL
+
+- [`adapter-protocol-smoke`](adapter-protocol-smoke/) — runnable
+  external adapter with discovery, manifest run, JSONL events, and
+  coverage collector output
+- [`adapter-vitest`](adapter-vitest/) — built-in Vitest adapter
+  subclass with discovered-case overlays
+- [`adapter-playwright`](adapter-playwright/) — built-in Playwright
+  adapter subclass with explicit generated cases
+- [`adapter-node-test`](adapter-node-test/) — `node --test` adapter
+  configuration
+- [`adapter-go-test`](adapter-go-test/) — `go test` adapter
+  configuration
+- [`adapter-moon-test`](adapter-moon-test/) — MoonBit `moon test`
+  adapter configuration
+- [`adapter-external`](adapter-external/) — custom external adapter
+  speaking `pkspec.adapter.v1`
 
 ### SQL
 
@@ -96,8 +127,7 @@ pkspec exec -f examples/<name>/Test.pkl
 
 ## What no example demonstrates
 
-- Multi-fixture orchestration (a single `pkspec exec` runs one
-  module).
+- Multi-fixture orchestration beyond the adapter planning sketch.
 - CI integration patterns — see [`docs/notes/junit.md`](../docs/notes/junit.md).
 - Authoring conventions for project-level reuse — these belong
   in user docs, not in pkspec's example tree.

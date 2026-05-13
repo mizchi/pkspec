@@ -1,0 +1,25 @@
+amends "../../pkl/Adapter.pkl"
+
+import "../../pkl/adapters/NodeTest.pkl" as NodeTest
+
+local class NodeUnit extends NodeTest.NodeTest {
+  testPaths = new {
+    "test/**/*.test.mjs"
+    "src/**/*.test.mjs"
+  }
+  testNamePattern = "^(parser|codec)"
+}
+
+suites {
+  new {
+    name = "node-test"
+    adapter = new NodeUnit {}
+    workdir = "../.."
+    overlays {
+      ["test/parser.test.mjs::parser accepts empty input"] = new CaseOverlay {
+        specRef { "parser.empty" }
+        tags { "unit"; "node" }
+      }
+    }
+  }
+}

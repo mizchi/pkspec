@@ -59,6 +59,14 @@ goals {
     rationale = "Bash chains and per-ecosystem runners both break at the seams of cross-language projects. The schema lives above the language."
   }
   new Goal {
+    id = "goal.adapter-dsl"
+    name = "native runners are adapter-defined"
+    priority = 75
+    reviewStatus = "review"
+    description = "Whole native runners such as Vitest, Playwright, node:test, go test, and moon test are described by Pkl adapter modules instead of being hard-coded as Go executors."
+    rationale = "pkspec cannot register every ecosystem runner in core. The extensibility point should be Pkl data plus a small process protocol."
+  }
+  new Goal {
     id = "goal.spec-driven"
     name = "specs and tests cross-reference"
     priority = 85
@@ -305,6 +313,92 @@ scenarios {
     contributes { "goal.lang-independent" }
     implementedBy = "doc"
     implementedAt = "docs/notes/runner-design.md"
+  }
+
+  // ── goal.adapter-dsl ────────────────────────────────────────────
+
+  new {
+    id = "adapter.dsl"
+    name = "adapter_protocol_is_pkl_data"
+    description = "`pkl/Adapter.pkl` defines AdapterSuite, Adapter, Discover, Plan, Run, CaseOverlay, and AdapterCase as Pkl values. The rendered output contains command argv, protocol, data formats, batch hints, overlays, and explicit generated cases; no runner-specific Go registry is needed for authoring."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "review"
+    contributes { "goal.adapter-dsl"; "goal.lang-independent" }
+    implementedBy = "code"
+    implementedAt = "pkl/Adapter.pkl"
+  }
+  new {
+    id = "adapter.extends-builtins"
+    name = "built_in_adapters_are_selected_with_extends"
+    description = "Vitest, Playwright, node:test, go test, and moon test are exposed as Pkl adapter subclasses under `pkl/adapters/`. Projects specialize them with normal Pkl `extends` instead of selecting from a Go-side registry."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "review"
+    dependsOn { "adapter.dsl" }
+    contributes { "goal.adapter-dsl"; "goal.lang-independent" }
+    implementedBy = "code"
+    implementedAt = "pkl/adapters/Vitest.pkl"
+  }
+  new {
+    id = "adapter.overlays-and-cases"
+    name = "adapter_suites_support_overlays_and_explicit_cases"
+    description = "`overlays` attach specRef/tags/pending/timeout to native runner-discovered cases, while `cases` lets pkspec own generated native test registration via sourceModule/exportName/params."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "review"
+    dependsOn { "adapter.dsl" }
+    contributes { "goal.adapter-dsl"; "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "pkl/Adapter.test.pkl"
+  }
+  new {
+    id = "adapter.examples"
+    name = "adapter_examples_cover_builtin_and_external_runners"
+    description = "Examples cover Vitest, Playwright, node:test, go test, moon test, an arbitrary external protocol adapter, and a runnable protocol smoke adapter. Schema examples validate with `pkl eval`; the smoke example runs with `pkspec adapter`."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "review"
+    dependsOn { "adapter.dsl"; "adapter.extends-builtins" }
+    contributes { "goal.adapter-dsl" }
+    implementedBy = "doc"
+    implementedAt = "docs/notes/adapters.md"
+  }
+  new {
+    id = "adapter.protocol-runtime"
+    name = "adapter_protocol_runtime_runs_discover_manifest_and_events"
+    description = "`pkspec adapter -f Adapter.pkl` loads the rendered adapter plan, runs `discover.command`, merges explicit `cases` and `overlays`, writes a JSON manifest for `run.command`, parses `pkspec-events-jsonl`, and exits non-zero on failed / errored / skipped adapter cases."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "review"
+    dependsOn { "adapter.dsl"; "adapter.overlays-and-cases" }
+    contributes { "goal.adapter-dsl"; "goal.ci-trustworthy" }
+    implementedBy = "code"
+    implementedAt = "internal/adapter/adapter.go"
+  }
+  new {
+    id = "adapter.coverage-collectors"
+    name = "coverage_collectors_share_the_adapter_command_protocol"
+    description = "`ReportCollector` attaches post-run report commands to an AdapterSuite. The first runnable format is `PkspecCoverageJson` with metrics `{name, covered, total}`; the CLI prints normalized coverage summaries independent of the source runner. Lcov and Cobertura are declared as future parser targets."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "review"
+    dependsOn { "adapter.dsl"; "adapter.protocol-runtime" }
+    contributes { "goal.adapter-dsl"; "goal.lang-independent" }
+    implementedBy = "code"
+    implementedAt = "pkl/Adapter.pkl"
+  }
+  new {
+    id = "adapter.init-embedded"
+    name = "pkspec_init_writes_adapter_schema_modules"
+    description = "`pkspec init --dir` materializes `Adapter.pkl` and the built-in `adapters/*.pkl` modules alongside Test/Spec/QuickCheck so installed binaries can author adapter suites without a source checkout."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "review"
+    dependsOn { "adapter.dsl"; "adapter.extends-builtins" }
+    contributes { "goal.adapter-dsl" }
+    implementedBy = "code"
+    implementedAt = "cmd/pkspec/init_cmd.go"
   }
 
   // ── goal.spec-driven ─────────────────────────────────────────────

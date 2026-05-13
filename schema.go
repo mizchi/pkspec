@@ -6,5 +6,5 @@ import "embed"
 
 // SchemaFS contains the public Pkl authoring schemas.
 //
-//go:embed pkl/Test.pkl pkl/Spec.pkl pkl/QuickCheck.pkl
+//go:embed pkl/Test.pkl pkl/Spec.pkl pkl/QuickCheck.pkl pkl/Adapter.pkl pkl/adapters/*.pkl
 var SchemaFS embed.FS

@@ -1,0 +1,142 @@
+/// Schema-level tests for the adapter DSL. Run with
+/// `pkl test pkl/Adapter.test.pkl`.
+amends "pkl:test"
+
+import "Adapter.pkl" as Adapter
+import "adapters/GoTest.pkl" as GoTest
+import "adapters/MoonTest.pkl" as MoonTest
+import "adapters/NodeTest.pkl" as NodeTest
+import "adapters/Playwright.pkl" as Playwright
+import "adapters/Vitest.pkl" as Vitest
+
+local class WebVitest extends Vitest.Vitest {
+  configPath = "packages/web/vitest.config.ts"
+  include = new {
+    "src/**/*.test.ts"
+  }
+}
+
+local class ChromiumE2E extends Playwright.Playwright {
+  configPath = "playwright.config.ts"
+  projects = new {
+    "chromium"
+  }
+}
+
+local class CurrentPackageGoTest extends GoTest.GoTest {
+  packages = new {
+    "./..."
+  }
+}
+
+local class StdlibNodeTest extends NodeTest.NodeTest {
+  testPaths = new {
+    "test/**/*.test.mjs"
+  }
+}
+
+local class CurrentMoonTest extends MoonTest.MoonTest {
+  packages = new {
+    "."
+  }
+}
+
+local vitestSuite = new Adapter.AdapterSuite {
+  name = "web-unit"
+  adapter = new WebVitest {}
+  overlays {
+    ["src/parser.test.ts::empty input"] = new Adapter.CaseOverlay {
+      specRef { "parser.empty" }
+      tags { "unit" }
+    }
+  }
+  collectors {
+    new Adapter.ReportCollector {
+      name = "coverage"
+      command = new Adapter.Command {
+        argv { "pkspec-adapter-vitest"; "coverage" }
+      }
+      output = new Adapter.PkspecCoverageJson {}
+    }
+  }
+}
+
+local explicitCaseSuite = new Adapter.AdapterSuite {
+  name = "generated-browser-cases"
+  adapter = new ChromiumE2E {}
+  cases {
+    new Adapter.AdapterCase {
+      id = "ui.login-form"
+      name = "login form renders"
+      sourceModule = "tests/ui/login.case.ts"
+      exportName = "loginForm"
+      specRef { "auth.login-form" }
+      params {
+        ["baseURL"] = "http://127.0.0.1:3000"
+      }
+    }
+  }
+}
+
+facts {
+  ["vitest adapter is authored entirely as Pkl data"] {
+    vitestSuite.adapter.id == "builtin.vitest"
+    vitestSuite.adapter.protocol == "pkspec.adapter.v1"
+    vitestSuite.adapter.discover.command.argv.contains("pkspec-adapter-vitest")
+    vitestSuite.adapter.discover.command.argv.contains("--include")
+    vitestSuite.adapter.run.command.argv.contains("$PKSPEC_CASE_MANIFEST")
+    vitestSuite.adapter.plan.batchBy.contains("config.configPath")
+  }
+
+  ["case overlays attach pkspec metadata to discovered native tests"] {
+    let (overlay = vitestSuite.overlays["src/parser.test.ts::empty input"])
+    overlay.specRef.contains("parser.empty") && overlay.tags.contains("unit")
+  }
+
+  ["explicit cases support generated native test registration"] {
+    let (c = explicitCaseSuite.cases[0])
+    c.id == "ui.login-form" &&
+      c.sourceModule == "tests/ui/login.case.ts" &&
+      c.exportName == "loginForm" &&
+      c.params["baseURL"] == "http://127.0.0.1:3000"
+  }
+
+  ["built-in adapters are selected by extends, not a Go registry"] {
+    new CurrentPackageGoTest {}.id == "builtin.go-test" &&
+      new StdlibNodeTest {}.id == "builtin.node-test" &&
+      new CurrentMoonTest {}.id == "builtin.moon-test" &&
+      new ChromiumE2E {}.id == "builtin.playwright"
+  }
+
+  ["coverage collectors use the same command plus output-format shape"] {
+    let (c = vitestSuite.collectors[0])
+    c.name == "coverage" &&
+      c.command.argv == new Listing { "pkspec-adapter-vitest"; "coverage" } &&
+      c.output.kind == "pkspec-coverage-json"
+  }
+
+  ["bad adapter ids are rejected"] {
+    module.catch(() -> (new Adapter.ExternalProtocolAdapter {
+      id = "bad id with spaces"
+      baseCommand { "custom-adapter" }
+    }).id) != null
+  }
+
+  ["case ids use the same stable-id shape as specRef"] {
+    module.catch(() -> (new Adapter.AdapterCase {
+      id = " bad"
+      sourceModule = "x.ts"
+      exportName = "case"
+    }).id) != null
+  }
+}
+
+examples {
+  ["vitest suite with discovered cases and overlays"] {
+    vitestSuite
+  }
+
+  ["playwright suite with explicit generated case"] {
+    explicitCaseSuite
+  }
+}

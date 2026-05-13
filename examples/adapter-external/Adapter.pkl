@@ -1,0 +1,24 @@
+amends "../../pkl/Adapter.pkl"
+
+local class CustomPytest extends ExternalProtocolAdapter {
+  id = "custom.pytest"
+  baseCommand {
+    "uv"
+    "run"
+    "pkspec-adapter-pytest"
+  }
+}
+
+suites {
+  new {
+    name = "pytest-through-external-adapter"
+    adapter = new CustomPytest {}
+    workdir = "../.."
+    overlays {
+      ["tests/test_parser.py::test_empty_input"] = new CaseOverlay {
+        specRef { "parser.empty" }
+        tags { "unit"; "python" }
+      }
+    }
+  }
+}

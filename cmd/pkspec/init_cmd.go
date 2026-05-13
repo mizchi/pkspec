@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 
 	pkspec "github.com/mizchi/pkspec"
@@ -14,6 +15,12 @@ var initSchemaFiles = []string{
 	"Test.pkl",
 	"Spec.pkl",
 	"QuickCheck.pkl",
+	"Adapter.pkl",
+	"adapters/Vitest.pkl",
+	"adapters/Playwright.pkl",
+	"adapters/NodeTest.pkl",
+	"adapters/GoTest.pkl",
+	"adapters/MoonTest.pkl",
 }
 
 func cmdInit(args []string, stdout, _ io.Writer) error {
@@ -37,7 +44,7 @@ func cmdInit(args []string, stdout, _ io.Writer) error {
 	}
 	if !*force {
 		for _, name := range initSchemaFiles {
-			dst := filepath.Join(abs, name)
+			dst := filepath.Join(abs, filepath.FromSlash(name))
 			if _, err := os.Stat(dst); err == nil {
 				return fmt.Errorf("%s already exists (use --force to overwrite)", dst)
 			} else if !os.IsNotExist(err) {
@@ -48,11 +55,14 @@ func cmdInit(args []string, stdout, _ io.Writer) error {
 
 	written := 0
 	for _, name := range initSchemaFiles {
-		body, err := pkspec.SchemaFS.ReadFile(filepath.Join("pkl", name))
+		body, err := pkspec.SchemaFS.ReadFile(path.Join("pkl", name))
 		if err != nil {
 			return fmt.Errorf("read embedded %s: %w", name, err)
 		}
-		dst := filepath.Join(abs, name)
+		dst := filepath.Join(abs, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return fmt.Errorf("create schema subdir for %s: %w", dst, err)
+		}
 		if err := os.WriteFile(dst, body, 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", dst, err)
 		}

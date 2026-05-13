@@ -1,0 +1,41 @@
+amends "../../pkl/Adapter.pkl"
+
+import "../../pkl/adapters/Playwright.pkl" as Playwright
+
+local class ChromiumE2E extends Playwright.Playwright {
+  configPath = "playwright.config.ts"
+  specDir = "tests/e2e"
+  projects = new {
+    "chromium"
+  }
+  workers = 4
+}
+
+suites {
+  new {
+    name = "browser-generated-cases"
+    adapter = new ChromiumE2E {}
+    workdir = "../.."
+    cases {
+      new AdapterCase {
+        id = "ui.login-form"
+        name = "login form renders"
+        sourceModule = "tests/e2e/login.case.ts"
+        exportName = "loginForm"
+        specRef { "auth.login-form" }
+        tags { "e2e"; "ui" }
+        params {
+          ["baseURL"] = "http://127.0.0.1:3000"
+        }
+      }
+      new AdapterCase {
+        id = "ui.account-menu"
+        name = "account menu opens"
+        sourceModule = "tests/e2e/account.case.ts"
+        exportName = "accountMenu"
+        specRef { "auth.account-menu" }
+        tags { "e2e"; "ui" }
+      }
+    }
+  }
+}

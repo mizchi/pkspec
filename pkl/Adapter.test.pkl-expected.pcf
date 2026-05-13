@@ -1,0 +1,242 @@
+examples {
+  ["vitest suite with discovered cases and overlays"] {
+    new {
+      name = "web-unit"
+      adapter {
+        id = "builtin.vitest"
+        protocol = "pkspec.adapter.v1"
+        config {
+          ["configPath"] = "packages/web/vitest.config.ts"
+          ["include"] {
+            "src/**/*.test.ts"
+          }
+          ["exclude"] {}
+          ["pool"] = null
+        }
+        capabilities {
+          discover = true
+          plan = true
+          runBatch = true
+          updateSnapshots = true
+          artifacts = true
+        }
+        discover {
+          command {
+            argv {
+              "pkspec-adapter-vitest"
+              "discover"
+              "--config"
+              "packages/web/vitest.config.ts"
+              "--include"
+              "src/**/*.test.ts"
+            }
+            env {}
+            workdir = null
+            timeoutSec = 300
+          }
+          output {
+            kind = "pkspec-cases-json"
+            options {}
+          }
+        }
+        plan {
+          batchBy {
+            "adapter.id"
+            "workdir"
+            "config.configPath"
+            "config.pool"
+          }
+          maxBatchSize = null
+          parallelSafe = true
+        }
+        run {
+          command {
+            argv {
+              "pkspec-adapter-vitest"
+              "run"
+              "--config"
+              "packages/web/vitest.config.ts"
+              "--manifest"
+              "$PKSPEC_CASE_MANIFEST"
+            }
+            env {}
+            workdir = null
+            timeoutSec = 300
+          }
+          input {
+            kind = "manifest-file"
+            options {
+              ["envVar"] = "PKSPEC_CASE_MANIFEST"
+            }
+            envVar = "PKSPEC_CASE_MANIFEST"
+          }
+          output {
+            kind = "pkspec-events-jsonl"
+            options {}
+          }
+        }
+        adapterCommand {
+          "pkspec-adapter-vitest"
+        }
+        configPath = "packages/web/vitest.config.ts"
+        include {
+          "src/**/*.test.ts"
+        }
+        exclude {}
+        pool = null
+        updateSnapshots = false
+      }
+      workdir = null
+      env {}
+      overlays {
+        ["src/parser.test.ts::empty input"] {
+          specRef {
+            "parser.empty"
+          }
+          tags {
+            "unit"
+          }
+          pending = false
+          timeoutSec = null
+        }
+      }
+      cases {}
+      collectors {
+        new {
+          name = "coverage"
+          command {
+            argv {
+              "pkspec-adapter-vitest"
+              "coverage"
+            }
+            env {}
+            workdir = null
+            timeoutSec = 300
+          }
+          output {
+            kind = "pkspec-coverage-json"
+            options {}
+          }
+        }
+      }
+    }
+  }
+  ["playwright suite with explicit generated case"] {
+    new {
+      name = "generated-browser-cases"
+      adapter {
+        id = "builtin.playwright"
+        protocol = "pkspec.adapter.v1"
+        config {
+          ["configPath"] = "playwright.config.ts"
+          ["specDir"] = "tests"
+          ["projects"] {
+            "chromium"
+          }
+          ["grep"] = null
+          ["workers"] = null
+        }
+        capabilities {
+          discover = true
+          plan = true
+          runBatch = true
+          updateSnapshots = true
+          artifacts = true
+        }
+        discover {
+          command {
+            argv {
+              "pkspec-adapter-playwright"
+              "discover"
+              "--config"
+              "playwright.config.ts"
+              "--spec-dir"
+              "tests"
+              "--project"
+              "chromium"
+            }
+            env {}
+            workdir = null
+            timeoutSec = 300
+          }
+          output {
+            kind = "pkspec-cases-json"
+            options {}
+          }
+        }
+        plan {
+          batchBy {
+            "adapter.id"
+            "workdir"
+            "config.configPath"
+            "config.projects"
+            "config.grep"
+          }
+          maxBatchSize = null
+          parallelSafe = false
+        }
+        run {
+          command {
+            argv {
+              "pkspec-adapter-playwright"
+              "run"
+              "--config"
+              "playwright.config.ts"
+              "--manifest"
+              "$PKSPEC_CASE_MANIFEST"
+              "--project"
+              "chromium"
+            }
+            env {}
+            workdir = null
+            timeoutSec = 300
+          }
+          input {
+            kind = "manifest-file"
+            options {
+              ["envVar"] = "PKSPEC_CASE_MANIFEST"
+            }
+            envVar = "PKSPEC_CASE_MANIFEST"
+          }
+          output {
+            kind = "pkspec-events-jsonl"
+            options {}
+          }
+        }
+        adapterCommand {
+          "pkspec-adapter-playwright"
+        }
+        configPath = "playwright.config.ts"
+        specDir = "tests"
+        projects {
+          "chromium"
+        }
+        grep = null
+        workers = null
+        updateSnapshots = false
+      }
+      workdir = null
+      env {}
+      overlays {}
+      cases {
+        new {
+          id = "ui.login-form"
+          name = "login form renders"
+          sourceModule = "tests/ui/login.case.ts"
+          exportName = "loginForm"
+          selector {}
+          params {
+            ["baseURL"] = "http://127.0.0.1:3000"
+          }
+          specRef {
+            "auth.login-form"
+          }
+          tags {}
+          pending = false
+          timeoutSec = null
+        }
+      }
+      collectors {}
+    }
+  }
+}

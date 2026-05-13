@@ -58,6 +58,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return cmdRun(args[1:], stdout, stderr)
 	case "exec":
 		return cmdExec(args[1:], stdout, stderr)
+	case "adapter":
+		return cmdAdapter(args[1:], stdout, stderr)
 	case "spec":
 		return cmdSpec(args[1:], stdout, stderr)
 	case "timings":
@@ -82,7 +84,8 @@ usage:
 commands:
   init [--dir pkspec] [--force]
                               write the embedded Pkl authoring schemas
-                              (Test.pkl, Spec.pkl, QuickCheck.pkl) into
+                              (Test.pkl, Spec.pkl, QuickCheck.pkl,
+                              Adapter.pkl, adapters/*.pkl) into
                               a project so Go/Nix-installed binaries can
                               be used without a source checkout.
   run [--allow-cmd] [pkl-test args...]
@@ -95,6 +98,9 @@ commands:
   exec -f Test.pkl            load a Test schema module via pkl-go and
                               execute each declared Test as a subprocess;
                               asserts exit code + literal stdout/stderr
+  adapter -f Adapter.pkl      load an Adapter schema module, run its
+                              discover/run commands, and aggregate
+                              pkspec adapter protocol events
   spec [--tag X]... <path>... render a Markdown SPEC.md from one or more
                               Test.pkl modules (filesystem-hierarchical;
                               groups by source directory; --output to
@@ -736,7 +742,7 @@ func discoverSpecFiles(root string) ([]string, error) {
 				return filepath.SkipDir
 			}
 			// The `pkl/` directory holds pkspec's own schema modules
-			// (Test.pkl, Spec.pkl, QuickCheck.pkl). They are amended by
+			// (Test.pkl, Spec.pkl, QuickCheck.pkl, Adapter.pkl). They are amended by
 			// users, not loaded directly as a Plan.
 			if base == "pkl" {
 				return filepath.SkipDir

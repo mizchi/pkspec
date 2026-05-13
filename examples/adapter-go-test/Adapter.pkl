@@ -1,0 +1,36 @@
+amends "../../pkl/Adapter.pkl"
+
+import "../../pkl/adapters/GoTest.pkl" as GoTest
+
+local class RepoGoTest extends GoTest.GoTest {
+  packages = new {
+    "./..."
+  }
+  count = 1
+}
+
+suites {
+  new {
+    name = "go-test"
+    adapter = new RepoGoTest {}
+    workdir = "../.."
+    overlays {
+      ["./internal/spec::TestCoverageReport"] = new CaseOverlay {
+        specRef { "spec.coverage" }
+        tags { "unit"; "go" }
+      }
+      ["./internal/executor::TestRunCmdShellOutputContractAssertionsPass"] = new CaseOverlay {
+        specRef { "runner.shell.stdout-patterns" }
+        tags { "unit"; "go" }
+      }
+    }
+    collectors {
+      new ReportCollector {
+        name = "coverage"
+        command = new Command {
+          argv { "pkspec-adapter-go-test"; "coverage"; "--coverprofile"; "coverage.out" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+amends "../../pkl/Adapter.pkl"
+
+import "../../pkl/adapters/MoonTest.pkl" as MoonTest
+
+local class MoonbitPackages extends MoonTest.MoonTest {
+  packages = new {
+    "."
+    "lib/parser"
+  }
+  target = "js"
+}
+
+suites {
+  new {
+    name = "moon-test"
+    adapter = new MoonbitPackages {}
+    workdir = "../.."
+    overlays {
+      ["lib/parser::test_empty_input"] = new CaseOverlay {
+        specRef { "parser.empty" }
+        tags { "unit"; "moonbit" }
+      }
+    }
+  }
+}

@@ -18,8 +18,8 @@ func TestCmdInitWritesEmbeddedSchema(t *testing.T) {
 		t.Fatalf("cmdInit() error = %v", err)
 	}
 
-	for _, name := range []string{"Test.pkl", "Spec.pkl", "QuickCheck.pkl"} {
-		got, err := os.ReadFile(filepath.Join(dir, name))
+	for _, name := range initSchemaFiles {
+		got, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
 		if err != nil {
 			t.Fatalf("read initialized %s: %v", name, err)
 		}
@@ -31,7 +31,7 @@ func TestCmdInitWritesEmbeddedSchema(t *testing.T) {
 			t.Fatalf("%s content mismatch", name)
 		}
 	}
-	if !strings.Contains(stdout.String(), "wrote 3 schema file(s)") {
+	if !strings.Contains(stdout.String(), "wrote 9 schema file(s)") {
 		t.Fatalf("stdout = %q, want write summary", stdout.String())
 	}
 	if stderr.Len() != 0 {

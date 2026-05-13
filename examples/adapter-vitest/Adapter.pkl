@@ -1,0 +1,41 @@
+amends "../../pkl/Adapter.pkl"
+
+import "../../pkl/adapters/Vitest.pkl" as Vitest
+
+local class WebVitest extends Vitest.Vitest {
+  configPath = "packages/web/vitest.config.ts"
+  include = new {
+    "src/**/*.test.ts"
+    "src/**/*.spec.ts"
+  }
+  exclude = new {
+    "src/**/*.slow.test.ts"
+  }
+  pool = "threads"
+}
+
+suites {
+  new {
+    name = "web-unit"
+    adapter = new WebVitest {}
+    workdir = "../.."
+    overlays {
+      ["src/parser.test.ts::empty input"] = new CaseOverlay {
+        specRef { "parser.empty" }
+        tags { "unit" }
+      }
+      ["src/auth/session.test.ts::expires stale session"] = new CaseOverlay {
+        specRef { "auth.session-expiry" }
+        tags { "unit"; "auth" }
+      }
+    }
+    collectors {
+      new ReportCollector {
+        name = "coverage"
+        command = new Command {
+          argv { "pnpm"; "exec"; "pkspec-coverage-vitest"; "--summary" }
+        }
+      }
+    }
+  }
+}

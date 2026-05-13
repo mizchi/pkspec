@@ -52,9 +52,10 @@ schema:
   across scenarios, parameterize it via Pkl `import`, generate it
   from a property-based input.
 - **Language-independent**: the schema lives in `pkl/`, the runner
-  in Go (`cmd/pkspec/`). A new test kind is a new Pkl class plus a
-  new Go executor — the authoring surface and the runtime stay
-  decoupled.
+  in Go (`cmd/pkspec/`). Low-level step kinds can still be Go
+  executors, while whole native runners are described by the Pkl
+  adapter DSL so every ecosystem does not become a hard-coded core
+  dependency.
 - **Reusable with `pkl test`**: pkspec rendered output is a Pkl
   module; Pkl's own facts / examples / snapshot machinery still
   applies, and `pkspec run` wraps `pkl test` so its unreliable exit
@@ -92,7 +93,7 @@ including the GitHub Actions matrix recipe.
 | `playwrightTest` | `Step.playwrightTest`  | wrap `@playwright/test` — fixtures, traces, JUnit roundtrip    |
 | `sql`            | `Step.sql`             | embedded SQLite (`modernc.org/sqlite`) — read + DML            |
 
-A new kind is three things:
+A new low-level `Step` kind is three things:
 
 1. a Pkl class on the `Step` (`<Kind>Spec`)
 2. a Go executor under `internal/executor/<kind>.go`
@@ -107,6 +108,51 @@ for the architectural sketch, and the per-kind notes:
 [cassettes](./docs/notes/cassettes.md) /
 [sql](./docs/notes/sql.md) /
 [shell output assertions](./docs/notes/shell-output-assertions.md).
+
+## Adapter suites
+
+For existing native runners, prefer the Pkl adapter DSL over adding
+one Go executor per ecosystem. `pkl/Adapter.pkl` defines an abstract
+`Adapter`, and built-ins are ordinary Pkl subclasses:
+
+- `pkl/adapters/Vitest.pkl`
+- `pkl/adapters/Playwright.pkl`
+- `pkl/adapters/NodeTest.pkl`
+- `pkl/adapters/GoTest.pkl`
+- `pkl/adapters/MoonTest.pkl`
+
+Projects select and specialize adapters with `extends`:
+
+```pkl
+amends "./pkspec/Adapter.pkl"
+
+import "./pkspec/adapters/Vitest.pkl" as Vitest
+
+local class WebVitest extends Vitest.Vitest {
+  configPath = "packages/web/vitest.config.ts"
+  include = new { "src/**/*.test.ts" }
+}
+
+suites {
+  new {
+    name = "web-unit"
+    adapter = new WebVitest {}
+    overlays {
+      ["src/parser.test.ts::empty input"] = new CaseOverlay {
+        specRef { "parser.empty" }
+      }
+    }
+  }
+}
+```
+
+Run adapter modules with `pkspec adapter -f Adapter.pkl`. The current
+runtime executes the generic protocol (`discover` JSON, manifest
+`run`, JSONL events) and post-run coverage collectors. Full
+Vitest/Playwright/node/go/moon shim commands are still future work,
+but [`examples/adapter-protocol-smoke`](./examples/adapter-protocol-smoke/)
+is executable end-to-end.
+See [`docs/notes/adapters.md`](./docs/notes/adapters.md).
 
 ## Spec-driven authoring
 
@@ -329,7 +375,8 @@ jobs:
 
 The action installs `pkspec` and the Pkl CLI, then adds both to
 `PATH`. `init-schema-dir` is optional; set it when the workflow should
-materialize local `Test.pkl` / `Spec.pkl` / `QuickCheck.pkl` schemas.
+materialize local `Test.pkl` / `Spec.pkl` / `QuickCheck.pkl` /
+`Adapter.pkl` schemas and built-in adapter modules.
 
 Inputs:
 
@@ -348,7 +395,7 @@ Inputs:
 ## CLI
 
 ```
-pkspec init --dir pkspec                  write Test.pkl / Spec.pkl / QuickCheck.pkl schemas
+pkspec init --dir pkspec                  write Test.pkl / Spec.pkl / QuickCheck.pkl / Adapter.pkl schemas
 
 pkspec exec -f Test.pkl                    run all tests in a module
 pkspec exec -f Test.pkl --tag spec         filter by Test.tags (repeatable, OR)
@@ -359,6 +406,9 @@ pkspec exec -f Test.pkl --total-timeout=5m abort run after wall-clock cap
 pkspec exec -f Test.pkl --junit-reports DIR write JUnit XML
 
 pkspec run [pkl test args...]              wrap `pkl test` with a trustworthy exit code
+
+pkspec adapter -f Adapter.pkl              run adapter discover/run protocol and collectors
+pkspec adapter -f Adapter.pkl --dry-run    discover and print merged adapter cases
 
 pkspec spec tests/**/*.pkl                 render Markdown SPEC.md from Scenario tags
 pkspec spec tests/**/*.pkl --output SPEC.md
