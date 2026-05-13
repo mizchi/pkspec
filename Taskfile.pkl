@@ -135,7 +135,7 @@ local releaseCheck: Task = new {
 
 local tag: Task = new {
   name = "tag"
-  description = "Run release-check, create and push a v<version> tag"
+  description = "Run release-check and push a v<version> tag; CI publishes the GitHub release"
   cmd = """
     set -euo pipefail
     git diff --exit-code

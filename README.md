@@ -404,6 +404,11 @@ push a release tag after `release-check` passes:
 pkf run tag --version=0.1.5
 ```
 
+Pushing `v*.*.*` tags triggers the Release workflow. It validates the
+Nix package on Linux and macOS, smoke-tests the wrapped `pkl`, then
+creates or updates the GitHub Release so `latest` resolves to the new
+tag.
+
 ## Status
 
 Active development, frequent API churn. `v0.1.x` is the first
