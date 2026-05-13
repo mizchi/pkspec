@@ -5,7 +5,7 @@ kind. The schema landed in 18 (`PlaywrightSpec` + `ScreenshotSnapshot`);
 this note covers what's now actually running and how to author a
 test against it.
 
-> Looking for retry / trace / pixel diff / fixtures? Use
+> Looking for retry / trace / fixtures? Use
 > `playwrightTest` instead (Phase 19) — see
 > `docs/notes/playwright-test.md`. This note describes the lightweight
 > "one script, one page, one screenshot" path.

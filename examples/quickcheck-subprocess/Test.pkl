@@ -7,6 +7,7 @@ tests {
     name = "addition_is_associative"
     description = "property: integer addition is associative for any 3 seed-derived integers"
     tags { "unit" }
+    specRef { "pbt.iterations" }
     iterations = 50
     iterationSeed = 20260512
     cmd = """

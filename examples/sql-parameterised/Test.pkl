@@ -5,6 +5,7 @@ tests {
     name = "bound_args"
     description = "? placeholders + $VAR binding; injection-safety probe"
     tags { "unit" }
+    specRef { "kind.sql"; "runner.steps.sequential" }
     env { ["TARGET_EMAIL"] = "alice@x.test" }
     steps {
       new {

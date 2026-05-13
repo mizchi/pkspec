@@ -1,0 +1,41 @@
+/// Schema-level tests for QuickCheck.pkl.
+amends "pkl:test"
+
+import "QuickCheck.pkl" as QC
+
+facts {
+  ["deterministic seed stream"] {
+    QC.seedAt(12345, 0) == 12345
+    QC.seedAt(12345, 1) == 3336926330
+    QC.seedAt(12345, 2) == 1697253807
+  }
+
+  ["intCases length and inclusive bounds"] {
+    let (cs = QC.intCases(20260511, 50, 3, 9))
+      cs.length == 50 && cs.toList().every((c) ->
+        c.value >= 3 && c.value <= 9
+      )
+  }
+
+  ["checkAll returns passed=true when predicate holds for every case"] {
+    let (cs = QC.intCases(1, 10, 0, 0))
+    let (r = QC.checkAll("trivial", cs, (c) -> c.value == 0))
+      r.passed && r.failure == null
+  }
+
+  ["shrinkIntValue narrows a failing integer toward lo"] {
+    let (r = QC.shrinkIntValue(10, 0, 32, (v) -> v < 7))
+      r.value == 7 &&
+      r.attempts > 0 &&
+      r.steps.length == 3
+  }
+
+  ["checkAllInt reports a shrunk counterexample"] {
+    let (r = QC.checkAllInt("below seven", 10, 1, 0, 20, 32, (v) -> v < 7))
+      !r.passed &&
+      r.failure != null &&
+      r.failure!!.originalValue == 10 &&
+      r.failure!!.value == 7 &&
+      r.failure!!.shrinks.length == 3
+  }
+}

@@ -23,8 +23,8 @@ facts {
   ["empty cmd is rejected"] {
     module.catch(() -> (new Schema.Test { name = "x"; cmd = "" }).cmd) != null
   }
-  ["bad name characters are rejected"] {
-    module.catch(() -> (new Schema.Test { name = "1leading-digit"; cmd = "x" }).name) != null
+  ["bad leading name characters are rejected"] {
+    module.catch(() -> (new Schema.Test { name = "-leading-dash"; cmd = "x" }).name) != null
   }
   ["non-positive timeout is rejected"] {
     module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; timeoutSec = 0 }).timeoutSec) != null

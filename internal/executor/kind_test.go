@@ -94,6 +94,24 @@ func TestValidateStepKindHttpRejectsShellFields(t *testing.T) {
 			want: "shell-only",
 		},
 		{
+			name: "http with stdout contains",
+			step: config.Step{
+				Kind:                 "http",
+				Http:                 &config.HttpRequest{Method: "GET", URL: "http://x"},
+				ExpectStdoutContains: []string{"ok"},
+			},
+			want: "shell-only",
+		},
+		{
+			name: "http with stdout jsonpath",
+			step: config.Step{
+				Kind:                 "http",
+				Http:                 &config.HttpRequest{Method: "GET", URL: "http://x"},
+				ExpectStdoutJsonPath: map[string]any{"ok": true},
+			},
+			want: "shell-only",
+		},
+		{
 			name: "http clean",
 			step: config.Step{
 				Kind:         "http",

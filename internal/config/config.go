@@ -49,9 +49,7 @@ type ConsoleAssertion struct {
 }
 
 // PlaywrightSpec mirrors `pkspec.Test#RenderedPlaywrightSpec`.
-// Implementation lands in a later phase; today the executor returns
-// an errored Step result with "not yet implemented" when this slot
-// is set.
+// The executor dispatches it through the embedded Node harness.
 type PlaywrightSpec struct {
 	Script           string              `pkl:"script"`
 	Browser          string              `pkl:"browser"`
@@ -118,28 +116,34 @@ type SqlSpec struct {
 // Step mirrors `pkspec.Test#RenderedStep`. Exactly one of `Cmd`,
 // `Http`, or `Playwright` is set; the executor dispatches on `Kind`.
 type Step struct {
-	Name            *string           `pkl:"name"`
-	Kind            string            `pkl:"kind"`
-	Cmd             *string           `pkl:"cmd"`
-	Shell           string            `pkl:"shell"`
-	Stdin           *string           `pkl:"stdin"`
-	Http            *HttpRequest        `pkl:"http"`
-	Playwright      *PlaywrightSpec     `pkl:"playwright"`
-	PlaywrightTest  *PlaywrightTestSpec `pkl:"playwrightTest"`
-	Sql             *SqlSpec            `pkl:"sql"`
-	Env             map[string]string   `pkl:"env"`
-	Workdir         *string           `pkl:"workdir"`
-	TimeoutSec      int               `pkl:"timeoutSec"`
+	Name           *string             `pkl:"name"`
+	Kind           string              `pkl:"kind"`
+	Cmd            *string             `pkl:"cmd"`
+	Shell          string              `pkl:"shell"`
+	Stdin          *string             `pkl:"stdin"`
+	Http           *HttpRequest        `pkl:"http"`
+	Playwright     *PlaywrightSpec     `pkl:"playwright"`
+	PlaywrightTest *PlaywrightTestSpec `pkl:"playwrightTest"`
+	Sql            *SqlSpec            `pkl:"sql"`
+	Env            map[string]string   `pkl:"env"`
+	Workdir        *string             `pkl:"workdir"`
+	TimeoutSec     int                 `pkl:"timeoutSec"`
 
-	ExpectExitCode int     `pkl:"expectExitCode"`
-	ExpectStdout   *string `pkl:"expectStdout"`
-	ExpectStderr   *string `pkl:"expectStderr"`
-	InlineStdout     *string           `pkl:"inlineStdout"`
-	InlineHttpBody   *string           `pkl:"inlineHttpBody"`
-	InlineJsonPath   map[string]string `pkl:"inlineJsonPath"`
-	InlineHeaders    map[string]string `pkl:"inlineHeaders"`
-	InlineSqlRows    map[string]string `pkl:"inlineSqlRows"`
-	InlineConsoleLog *string           `pkl:"inlineConsoleLog"`
+	ExpectExitCode       int               `pkl:"expectExitCode"`
+	ExpectStdout         *string           `pkl:"expectStdout"`
+	ExpectStderr         *string           `pkl:"expectStderr"`
+	ExpectStdoutContains []string          `pkl:"expectStdoutContains"`
+	ExpectStderrContains []string          `pkl:"expectStderrContains"`
+	ExpectStdoutMatches  []string          `pkl:"expectStdoutMatches"`
+	ExpectStderrMatches  []string          `pkl:"expectStderrMatches"`
+	ExpectStdoutJsonPath map[string]any    `pkl:"expectStdoutJsonPath"`
+	ExpectStderrJsonPath map[string]any    `pkl:"expectStderrJsonPath"`
+	InlineStdout         *string           `pkl:"inlineStdout"`
+	InlineHttpBody       *string           `pkl:"inlineHttpBody"`
+	InlineJsonPath       map[string]string `pkl:"inlineJsonPath"`
+	InlineHeaders        map[string]string `pkl:"inlineHeaders"`
+	InlineSqlRows        map[string]string `pkl:"inlineSqlRows"`
+	InlineConsoleLog     *string           `pkl:"inlineConsoleLog"`
 
 	ExpectStatus        *int              `pkl:"expectStatus"`
 	ExpectStatusBetween []int             `pkl:"expectStatusBetween"`
@@ -186,28 +190,34 @@ type Background struct {
 
 // Test mirrors `pkspec.Test#RenderedTest`.
 type Test struct {
-	Description     *string           `pkl:"description"`
-	Tags            []string          `pkl:"tags"`
-	SpecRef         []string          `pkl:"specRef"`
+	Description      *string           `pkl:"description"`
+	Tags             []string          `pkl:"tags"`
+	SpecRef          []string          `pkl:"specRef"`
 	Shell            string            `pkl:"shell"`
 	Env              map[string]string `pkl:"env"`
 	Workdir          *string           `pkl:"workdir"`
 	EphemeralWorkdir bool              `pkl:"ephemeralWorkdir"`
 	TimeoutSec       int               `pkl:"timeoutSec"`
 	Retries          int               `pkl:"retries"`
-	FlakyAcceptable bool              `pkl:"flakyAcceptable"`
-	Pending         bool              `pkl:"pending"`
-	Iterations      int                  `pkl:"iterations"`
-	IterationSeed   int                  `pkl:"iterationSeed"`
-	Shrink          bool                 `pkl:"shrink"`
-	ShrinkAttempts  int                  `pkl:"shrinkAttempts"`
-	Inputs          map[string]Input     `pkl:"inputs"`
+	FlakyAcceptable  bool              `pkl:"flakyAcceptable"`
+	Pending          bool              `pkl:"pending"`
+	Iterations       int               `pkl:"iterations"`
+	IterationSeed    int               `pkl:"iterationSeed"`
+	Shrink           bool              `pkl:"shrink"`
+	ShrinkAttempts   int               `pkl:"shrinkAttempts"`
+	Inputs           map[string]Input  `pkl:"inputs"`
 
 	Cmd                  *string            `pkl:"cmd"`
 	Stdin                *string            `pkl:"stdin"`
 	ExpectExitCode       int                `pkl:"expectExitCode"`
 	ExpectStdout         *string            `pkl:"expectStdout"`
 	ExpectStderr         *string            `pkl:"expectStderr"`
+	ExpectStdoutContains []string           `pkl:"expectStdoutContains"`
+	ExpectStderrContains []string           `pkl:"expectStderrContains"`
+	ExpectStdoutMatches  []string           `pkl:"expectStdoutMatches"`
+	ExpectStderrMatches  []string           `pkl:"expectStderrMatches"`
+	ExpectStdoutJsonPath map[string]any     `pkl:"expectStdoutJsonPath"`
+	ExpectStderrJsonPath map[string]any     `pkl:"expectStderrJsonPath"`
 	ExpectStdoutSnapshot *ReferenceSnapshot `pkl:"expectStdoutSnapshot"`
 	ExpectStderrSnapshot *ReferenceSnapshot `pkl:"expectStderrSnapshot"`
 	InlineStdout         *string            `pkl:"inlineStdout"`

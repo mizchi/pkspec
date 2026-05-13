@@ -6,6 +6,7 @@ tests {
     name = "sequential"
     description = "3 sleep steps, one at a time"
     tags { "unit" }
+    specRef { "runner.steps.sequential"; "kind.shell" }
     steps {
       new { name = "s1"; cmd = "sleep 0.2" }
       new { name = "s2"; cmd = "sleep 0.2" }

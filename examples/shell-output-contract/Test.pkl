@@ -1,0 +1,32 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "top_level_stdout_contract"
+    description = "top-level shell command with contains, regex, and JSONPath assertions"
+    tags { "unit" }
+    specRef { "runner.shell.stdout-patterns"; "runner.shell.stdout-jsonpath" }
+    cmd = "printf '%s\n' '{\"tasks\":[{\"name\":\"check\"},{\"name\":\"test\"}],\"ok\":true}'"
+    expectStdoutContains { "\"tasks\""; "\"check\"" }
+    expectStdoutMatches { #""name"\s*:\s*"test""# }
+    expectStdoutJsonPath {
+      ["tasks.0.name"] = "check"
+      ["ok"] = true
+    }
+  }
+
+  new {
+    name = "step_stdout_contract"
+    description = "shell step contract for graph-shaped CLI output"
+    tags { "unit" }
+    specRef { "runner.shell.stdout-patterns" }
+    steps {
+      new {
+        name = "graph_edge"
+        cmd = "printf '%s\n' 'spec_check --> check'"
+        expectStdoutContains { "spec_check --> check" }
+        expectStdoutMatches { #"(?m)^spec_check\s+-->\s+check$"# }
+      }
+    }
+  }
+}

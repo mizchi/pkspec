@@ -31,14 +31,19 @@ local goImpl = new Test {
   cmd = "go run ./impl-go -- --format json input.txt"
 }
 
+local goSnapshot = new ReferenceSnapshot {
+  name = "impl-json"
+  generator = goImpl
+}
+
 local portTests: Listing<Test> = new {
   new Test {
     cmd = "target/release/impl-rs --format json input.txt"
-    expectStdoutMatches = goImpl   // reference resolved at runtime
+    expectStdoutSnapshot = goSnapshot
   }
   new Test {
     cmd = "node impl-ts/cli.js --format json input.txt"
-    expectStdoutMatches = goImpl
+    expectStdoutSnapshot = goSnapshot
   }
 }
 ```
@@ -86,7 +91,7 @@ local snapshot = new ReferenceSnapshot {
 
 local portTest = new Test {
   cmd = "target/release/impl-rs --format json input.txt"
-  expectStdoutMatches = snapshot
+  expectStdoutSnapshot = snapshot
 }
 ```
 
@@ -160,9 +165,9 @@ gives the simplest mental model.
 
 The fields below cover all three target use cases. `retries` /
 `flakyAcceptable` come from the playwright-replacement story;
-`expectStdoutMatches` accepts either a literal `String|Regex` or
-another `Test` / `ReferenceSnapshot` for the reference-implementation
-flow.
+`expectStdout` accepts an exact literal, `expectStdoutMatches` accepts
+regexp strings, and `expectStdoutSnapshot` points at a
+`ReferenceSnapshot` for the reference-implementation flow.
 
 ```pkl
 amends "package://pkg.pkl-lang.org/mizchi/pkspec/pkspec@0.0.1#/Test.pkl"
@@ -185,8 +190,12 @@ class Test {
   flakyAcceptable: Boolean = false
 
   expectExitCode: Int = 0
-  expectStdout: (String|Regex|Test|ReferenceSnapshot)? = null
-  expectStderr: (String|Regex|Test|ReferenceSnapshot)? = null
+  expectStdout: String? = null
+  expectStdoutMatches: Listing<String> = new {}
+  expectStdoutSnapshot: ReferenceSnapshot? = null
+  expectStderr: String? = null
+  expectStderrMatches: Listing<String> = new {}
+  expectStderrSnapshot: ReferenceSnapshot? = null
 }
 
 class ReferenceSnapshot {

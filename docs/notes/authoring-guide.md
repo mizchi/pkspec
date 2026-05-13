@@ -239,6 +239,9 @@ That single line catches:
 Add `--coverage` to the same job (without `set -e`) for a trend
 metric, and `--goals` / `--next` for human review.
 
+For a non-pkspec project that wants to wrap an existing task runner
+with local gate contracts, see [`project-gates.md`](./project-gates.md).
+
 ## Reference card
 
 ```

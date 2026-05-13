@@ -5,6 +5,7 @@ tests {
     name = "console_clean"
     description = "page logs the init breadcrumb; no errors / pageerrors"
     tags { "unit" }
+    specRef { "kind.playwright"; "runner.playwright.console-assertions" }
     steps {
       new {
         name = "load"

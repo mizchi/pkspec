@@ -5,13 +5,14 @@ tests {
     name = "capture_and_chain"
     description = "sequential shell steps with captureStdout + $VAR"
     tags { "unit" }
+    specRef { "runner.steps.sequential"; "runner.shell.capture-stdout"; "diff.inline-snapshot" }
     steps {
       new {
         name = "generate_id"
         // Deterministic seed so the captured value is stable across
         // runs; in a real fixture this might be `date +%s` (then
-        // expectStdout / inlineStdout would need a regex-style
-        // assertion the runner doesn't yet offer).
+        // downstream output should use expectStdoutMatches instead
+        // of an inline byte-exact assertion).
         cmd = "echo evt-abc123"
         captureStdout = "EVENT_ID"
       }

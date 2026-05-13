@@ -86,7 +86,7 @@ including the GitHub Actions matrix recipe.
 
 | kind             | schema class           | what it does                                                   |
 | ---------------- | ---------------------- | -------------------------------------------------------------- |
-| `shell`          | `Step.cmd`             | spawn a subprocess; assert exit / stdout / stderr / snapshot   |
+| `shell`          | `Step.cmd`             | spawn a subprocess; assert exit / stdout / stderr / contains / regex / JSONPath / snapshot |
 | `http`           | `Step.http`            | HTTP request; assert status / headers / body / jsonpath / cassette |
 | `playwright`     | `Step.playwright`      | embedded Node harness — single page, pixel diff, console asserts |
 | `playwrightTest` | `Step.playwrightTest`  | wrap `@playwright/test` — fixtures, traces, JUnit roundtrip    |
@@ -105,7 +105,8 @@ for the architectural sketch, and the per-kind notes:
 [playwright-test](./docs/notes/playwright-test.md) /
 [http-dsl](./docs/notes/http-dsl.md) /
 [cassettes](./docs/notes/cassettes.md) /
-[sql](./docs/notes/sql.md).
+[sql](./docs/notes/sql.md) /
+[shell output assertions](./docs/notes/shell-output-assertions.md).
 
 ## Spec-driven authoring
 
@@ -201,7 +202,9 @@ Shared setup across scenarios uses the top-level `prelude`
 [`docs/notes/ai-assertion.md`](./docs/notes/ai-assertion.md) /
 [`docs/notes/spec-id.md`](./docs/notes/spec-id.md) /
 [`docs/notes/spec-graph.md`](./docs/notes/spec-graph.md) and
-[`examples/spec-graph/`](./examples/spec-graph/).
+[`examples/spec-graph/`](./examples/spec-graph/). For project-level
+local gates and task-runner contracts, see
+[`docs/notes/project-gates.md`](./docs/notes/project-gates.md).
 
 ## Property-based testing, fuzzing, differential testing
 
@@ -383,6 +386,9 @@ pkspec timings -f Test.pkl --shard=K/N     preview which tests would land in sha
 `PKSPEC_TIMING_ENV=ci-linux pkspec exec ...` tags timing records with an
 explicit environment so CI history doesn't poison local-machine
 shard balancing (or vice-versa).
+
+For JUnit report semantics and CI publishing notes, see
+[`docs/notes/junit.md`](./docs/notes/junit.md).
 
 ## Development
 

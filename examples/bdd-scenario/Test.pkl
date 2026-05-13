@@ -2,6 +2,7 @@ amends "../../pkl/Spec.pkl"
 
 scenarios {
   new {
+    id = "example.bdd.admin-dashboard"
     name = "admin_dashboard_renders"
     description = "an admin user sees the admin dashboard after login"
     tags { "spec"; "regression" }

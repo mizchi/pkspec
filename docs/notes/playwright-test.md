@@ -13,7 +13,7 @@ than the lightweight one-script-one-page driver in `playwright`.
 | --- | --- | --- |
 | script lives in | a `.mjs` exporting default `async ({page, ctx})` | `*.spec.ts` files using `test(...)` |
 | user-facing API | playwright Page only | full `@playwright/test` (fixtures, projects, hooks) |
-| pixel diff | byte-exact (TODO) | `toHaveScreenshot()` with threshold |
+| pixel diff | `ScreenshotSnapshot.thresholdPct` via `pixelmatch` / `pngjs` | `toHaveScreenshot()` with threshold |
 | retry / trace / video | not yet | yes (configure via `playwright.config.ts`) |
 | parallelism | one browser per Step | playwright-test workers (one config away) |
 | reporter detail | per-Step | per-inner-test (aggregated into one Step result) |
@@ -146,7 +146,7 @@ new Test {
         script = "scripts/cart.mjs"
         expectScreenshot = new ScreenshotSnapshot {
           name = "cart"
-          thresholdPct = 0.5  // schema honoured, runner byte-exact today
+          thresholdPct = 0.5
         }
       }
     }
@@ -178,7 +178,8 @@ test('cart renders', async ({page}) => {
 });
 ```
 
-The `playwrightTest` version gets you pixel diff, retry (configurable
-in `playwright.config.ts`), and trace on failure for free. The
-`playwright` version is one Pkl literal and one short `.mjs`. Pick
-based on how much of `@playwright/test`'s machinery you actually want.
+Both versions can do pixel diff. The `playwrightTest` version also
+gets retry (configurable in `playwright.config.ts`) and trace on
+failure for free. The `playwright` version is one Pkl literal and one
+short `.mjs`. Pick based on how much of `@playwright/test`'s machinery
+you actually want.

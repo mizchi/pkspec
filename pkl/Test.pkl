@@ -106,6 +106,23 @@ class Step {
   expectStdout: String? = null
   expectStderr: String? = null
 
+  /// Every listed substring must appear in the shell stdout/stderr.
+  /// Use this for CLI contracts where exact output would be brittle
+  /// but a task name, graph edge, or warning token is load-bearing.
+  expectStdoutContains: Listing<String> = new {}
+  expectStderrContains: Listing<String> = new {}
+
+  /// Every listed regular expression must match the shell stream.
+  /// Patterns are Go regexp strings evaluated by the runner.
+  expectStdoutMatches: Listing<String> = new {}
+  expectStderrMatches: Listing<String> = new {}
+
+  /// Map of JSON path → expected value, evaluated against the stream
+  /// parsed as JSON. Same gjson path syntax as `expectBodyJsonPath`.
+  /// The stream must be valid JSON when this map is non-empty.
+  expectStdoutJsonPath: Mapping<String, Any> = new {}
+  expectStderrJsonPath: Mapping<String, Any> = new {}
+
   /// Inline snapshot of step stdout. Same semantics as
   /// `Test.inlineStdout`: opt in by setting to `""` (or any string),
   /// run with `--update-inline-snapshots` to populate, subsequent
@@ -274,9 +291,10 @@ class AiAssertion {
   /// also carries at least one deterministic expectation
   /// (`expectStatus`, `expectBodyEquals`, `expectBodyContains`,
   /// `expectBodyJsonPath`, `expectHeaderEquals`, `expectStatusBetween`,
-  /// `inlineStdout`). Reaching the AI phase implies those checks
-  /// have already passed, so the verdict is mechanically determined
-  /// and there is no reason to spend an LLM call to confirm it.
+  /// shell stdout/stderr assertions, `inlineStdout`). Reaching the AI
+  /// phase implies those checks have already passed, so the verdict is
+  /// mechanically determined and there is no reason to spend an LLM
+  /// call to confirm it.
   ///
   /// The mental model: expectAi is a scaffold — write it while the
   /// spec is fuzzy, leave it in the source as living documentation,
@@ -303,12 +321,9 @@ class Eventually {
 /// script a `{page, ctx}` argument; the script's return value
 /// becomes the task output bytes (typically `{screenshot: Buffer}`
 /// for visual tests, or a JSON-serialisable object for non-visual
-/// playwright checks).
-///
-/// Out of scope for the phase 18 schema-only landing: the actual
-/// Node harness, screenshot diffing, and console-stream capture.
-/// Authoring with `playwright = new { ... }` today returns an
-/// errored Step result with a clear "not yet implemented" reason.
+/// playwright checks). Screenshot assertions use pixel diff when
+/// `pixelmatch` + `pngjs` are installed, falling back to byte-exact
+/// comparison otherwise.
 class PlaywrightSpec {
   script: String(length > 0)
   browser: String(matches(Regex(#"^(chromium|firefox|webkit)$"#))) = "chromium"
@@ -711,6 +726,20 @@ class Test {
   expectExitCode: Int = 0
   expectStdout: String? = null
   expectStderr: String? = null
+  /// Every listed substring must appear in stdout/stderr.
+  expectStdoutContains: Listing<String> = new {}
+  expectStderrContains: Listing<String> = new {}
+
+  /// Every listed Go regexp pattern must match stdout/stderr.
+  expectStdoutMatches: Listing<String> = new {}
+  expectStderrMatches: Listing<String> = new {}
+
+  /// JSONPath assertions against stdout/stderr when the stream is
+  /// valid JSON. Same path syntax and value comparison semantics as
+  /// `expectBodyJsonPath`.
+  expectStdoutJsonPath: Mapping<String, Any> = new {}
+  expectStderrJsonPath: Mapping<String, Any> = new {}
+
   /// Match captured stdout against a committed snapshot file.
   /// Composes with `expectStdout`; both checks must pass when both set.
   expectStdoutSnapshot: ReferenceSnapshot? = null
@@ -865,6 +894,12 @@ class RenderedStep {
   expectExitCode: Int
   expectStdout: String?
   expectStderr: String?
+  expectStdoutContains: Listing<String>
+  expectStderrContains: Listing<String>
+  expectStdoutMatches: Listing<String>
+  expectStderrMatches: Listing<String>
+  expectStdoutJsonPath: Mapping<String, Any>
+  expectStderrJsonPath: Mapping<String, Any>
   inlineStdout: String?
   inlineHttpBody: String?
   inlineJsonPath: Mapping<String, String>
@@ -930,6 +965,12 @@ class RenderedTest {
   expectExitCode: Int
   expectStdout: String?
   expectStderr: String?
+  expectStdoutContains: Listing<String>
+  expectStderrContains: Listing<String>
+  expectStdoutMatches: Listing<String>
+  expectStderrMatches: Listing<String>
+  expectStdoutJsonPath: Mapping<String, Any>
+  expectStderrJsonPath: Mapping<String, Any>
   expectStdoutSnapshot: RenderedSnapshot?
   expectStderrSnapshot: RenderedSnapshot?
   inlineStdout: String?
@@ -1111,6 +1152,12 @@ local function renderStep(s: Step): RenderedStep = new {
   expectExitCode = s.expectExitCode
   expectStdout = s.expectStdout
   expectStderr = s.expectStderr
+  expectStdoutContains = s.expectStdoutContains
+  expectStderrContains = s.expectStderrContains
+  expectStdoutMatches = s.expectStdoutMatches
+  expectStderrMatches = s.expectStderrMatches
+  expectStdoutJsonPath = s.expectStdoutJsonPath
+  expectStderrJsonPath = s.expectStderrJsonPath
   inlineStdout = s.inlineStdout
   inlineHttpBody = s.inlineHttpBody
   inlineJsonPath = s.inlineJsonPath
@@ -1189,6 +1236,12 @@ local function renderTest(t: Test): RenderedTest = new {
   expectExitCode = t.expectExitCode
   expectStdout = t.expectStdout
   expectStderr = t.expectStderr
+  expectStdoutContains = t.expectStdoutContains
+  expectStderrContains = t.expectStderrContains
+  expectStdoutMatches = t.expectStdoutMatches
+  expectStderrMatches = t.expectStderrMatches
+  expectStdoutJsonPath = t.expectStdoutJsonPath
+  expectStderrJsonPath = t.expectStderrJsonPath
   expectStdoutSnapshot =
     if (t.expectStdoutSnapshot == null) null
     else renderSnapshot(t.expectStdoutSnapshot)

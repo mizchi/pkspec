@@ -75,9 +75,9 @@ doesn't (hashed-seed derivations get no benefit).
 - The body is **expensive** (browser launch, large DB seed).
   50 chromium launches at ~250ms each is 12.5s; consider
   `iterations = 5` and accept the smaller coverage.
-- You need **input shrinking** (smaller failing input → easier
-  debug). Not implemented today; the reported seed is the
-  smallest information unit. For now, narrow by hand.
+- You need **typed input shrinking** and can express the inputs as
+  named integers. Use `inputs { ["X"] = new IntInput { ... } }`
+  instead; see `examples/quickcheck-input-space`.
 
 See `docs/notes/quickcheck.md` for the full design, the Pkl-
 internal alternative (`pkl/QuickCheck.pkl` + `pkl test`), and

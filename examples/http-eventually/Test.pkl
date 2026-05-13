@@ -5,6 +5,7 @@ tests {
     name = "poll_until_ready"
     description = "server returns 503 for ~1s, then 200; eventually polls until pass"
     tags { "unit" }
+    specRef { "parallel.background"; "runner.eventually"; "kind.http" }
     background {
       new {
         name = "server"

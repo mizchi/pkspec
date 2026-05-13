@@ -24,6 +24,8 @@ pkspec exec -f examples/<name>/Test.pkl
 ### Shell
 
 - [`shell-smoke`](shell-smoke/) — one-line `cmd` with `inlineStdout`
+- [`shell-output-contract`](shell-output-contract/) — stdout
+  contains / regex / JSONPath assertions without `grep` or `jq`
 - [`shell-steps-capture`](shell-steps-capture/) — sequential
   steps, `captureStdout`, `$VAR` interpolation
 
@@ -96,6 +98,6 @@ pkspec exec -f examples/<name>/Test.pkl
 
 - Multi-fixture orchestration (a single `pkspec exec` runs one
   module).
-- CI integration patterns — see `docs/notes/junit.md` (planned).
+- CI integration patterns — see [`docs/notes/junit.md`](../docs/notes/junit.md).
 - Authoring conventions for project-level reuse — these belong
   in user docs, not in pkspec's example tree.

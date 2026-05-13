@@ -35,4 +35,12 @@ facts {
     sorted(List(1, 2, 3)) == true
     sorted(List()) == true
   }
+
+  ["checkAllInt shrinks value-only failures"] {
+    let (r = QC.checkAllInt("below_seven", 10, 1, 0, 20, 32, (v) -> v < 7))
+      !r.passed &&
+      r.failure != null &&
+      r.failure!!.originalValue == 10 &&
+      r.failure!!.value == 7
+  }
 }

@@ -31,6 +31,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -203,11 +204,11 @@ func (e *Executor) snapshotPath(name string) string {
 //
 //   - matched         → ok=true, reason=""
 //   - missing file    → write the snapshot bytes (from the generator
-//                       if `s.Generator` is set, otherwise from `actual`),
-//                       return ok=false with a "first run, commit it"
-//                       reason.
+//     if `s.Generator` is set, otherwise from `actual`),
+//     return ok=false with a "first run, commit it"
+//     reason.
 //   - mismatched      → write `*.actual` next to the expected file,
-//                       return ok=false with an inline diff.
+//     return ok=false with an inline diff.
 //
 // When RefreshSnapshots is set, the file is overwritten unconditionally
 // (using the generator when present) and ok=true is returned.
@@ -935,12 +936,18 @@ func (e *Executor) runCmd(ctx context.Context, name string, res *Result, t *conf
 		res.Reasons = append(res.Reasons,
 			fmt.Sprintf("expected exit code %d, got %d", t.ExpectExitCode, out.ExitCode))
 	}
-	if t.ExpectStdout != nil && out.Stdout != *t.ExpectStdout {
-		res.Reasons = append(res.Reasons, fmt.Sprintf("stdout mismatch:\n%s", diff(*t.ExpectStdout, out.Stdout)))
-	}
-	if t.ExpectStderr != nil && out.Stderr != *t.ExpectStderr {
-		res.Reasons = append(res.Reasons, fmt.Sprintf("stderr mismatch:\n%s", diff(*t.ExpectStderr, out.Stderr)))
-	}
+	res.Reasons = append(res.Reasons, assertShellStream("stdout", out.Stdout, shellStreamAssertions{
+		Exact:    t.ExpectStdout,
+		Contains: t.ExpectStdoutContains,
+		Matches:  t.ExpectStdoutMatches,
+		JsonPath: t.ExpectStdoutJsonPath,
+	})...)
+	res.Reasons = append(res.Reasons, assertShellStream("stderr", out.Stderr, shellStreamAssertions{
+		Exact:    t.ExpectStderr,
+		Contains: t.ExpectStderrContains,
+		Matches:  t.ExpectStderrMatches,
+		JsonPath: t.ExpectStderrJsonPath,
+	})...)
 	if ok, reason := e.checkSnapshot(ctx, t.ExpectStdoutSnapshot, out.Stdout, defaults); !ok {
 		res.Reasons = append(res.Reasons, "stdout "+reason)
 	}
@@ -958,6 +965,65 @@ func (e *Executor) runCmd(ctx context.Context, name string, res *Result, t *conf
 	} else {
 		res.Outcome = OutcomePassed
 	}
+}
+
+type shellStreamAssertions struct {
+	Exact    *string
+	Contains []string
+	Matches  []string
+	JsonPath map[string]any
+}
+
+func assertShellStream(name, actual string, a shellStreamAssertions) []string {
+	var reasons []string
+	if a.Exact != nil && actual != *a.Exact {
+		reasons = append(reasons, fmt.Sprintf("%s mismatch:\n%s", name, diff(*a.Exact, actual)))
+	}
+	for _, needle := range a.Contains {
+		if !strings.Contains(actual, needle) {
+			reasons = append(reasons, fmt.Sprintf("%s does not contain %q", name, needle))
+		}
+	}
+	for _, pattern := range a.Matches {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			reasons = append(reasons, fmt.Sprintf("%s regex %q is invalid: %v", name, pattern, err))
+			continue
+		}
+		if !re.MatchString(actual) {
+			reasons = append(reasons, fmt.Sprintf("%s regex %q did not match", name, pattern))
+		}
+	}
+	if len(a.JsonPath) == 0 {
+		return reasons
+	}
+	if !gjson.Valid(actual) {
+		for _, path := range sortedAnyMapKeys(a.JsonPath) {
+			reasons = append(reasons, fmt.Sprintf("%s is not valid JSON for jsonpath %q", name, path))
+		}
+		return reasons
+	}
+	for _, path := range sortedAnyMapKeys(a.JsonPath) {
+		expected := a.JsonPath[path]
+		result := jsonPathLookup([]byte(actual), path)
+		if !result.Exists() {
+			reasons = append(reasons, fmt.Sprintf("%s jsonpath %q: not found", name, path))
+			continue
+		}
+		if !jsonValuesEqual(result, expected) {
+			reasons = append(reasons, fmt.Sprintf("%s jsonpath %q expected %v, got %s", name, path, expected, result.Raw))
+		}
+	}
+	return reasons
+}
+
+func sortedAnyMapKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (e *Executor) runSteps(ctx context.Context, res *Result, t *config.Test, defaults *config.Defaults, extraEnv map[string]string) {
@@ -1169,7 +1235,7 @@ func validateStepKind(step *config.Step) string {
 		}
 	case "http":
 		if hasShellFields(step) {
-			return "http step has shell-only expectation/capture set (expectStdout, expectStderr, inlineStdout, captureStdout, captureExitCode) — http steps assert on response body, not stdout"
+			return "http step has shell-only expectation/capture set (expectStdout*, expectStderr*, inlineStdout, captureStdout, captureExitCode) — http steps assert on response body, not stdout"
 		}
 	case "playwright":
 		if hasHttpFields(step) || hasShellFields(step) {
@@ -1211,6 +1277,12 @@ func hasHttpFields(step *config.Step) bool {
 func hasShellFields(step *config.Step) bool {
 	return step.ExpectStdout != nil ||
 		step.ExpectStderr != nil ||
+		len(step.ExpectStdoutContains) > 0 ||
+		len(step.ExpectStderrContains) > 0 ||
+		len(step.ExpectStdoutMatches) > 0 ||
+		len(step.ExpectStderrMatches) > 0 ||
+		len(step.ExpectStdoutJsonPath) > 0 ||
+		len(step.ExpectStderrJsonPath) > 0 ||
 		step.InlineStdout != nil ||
 		step.CaptureStdout != nil ||
 		step.CaptureExitCode != nil
@@ -1336,12 +1408,18 @@ func (e *Executor) runShellStep(ctx context.Context, step *config.Step, t *confi
 		sr.Reasons = append(sr.Reasons,
 			fmt.Sprintf("expected exit code %d, got %d", step.ExpectExitCode, out.ExitCode))
 	}
-	if step.ExpectStdout != nil && out.Stdout != *step.ExpectStdout {
-		sr.Reasons = append(sr.Reasons, fmt.Sprintf("stdout mismatch:\n%s", diff(*step.ExpectStdout, out.Stdout)))
-	}
-	if step.ExpectStderr != nil && out.Stderr != *step.ExpectStderr {
-		sr.Reasons = append(sr.Reasons, fmt.Sprintf("stderr mismatch:\n%s", diff(*step.ExpectStderr, out.Stderr)))
-	}
+	sr.Reasons = append(sr.Reasons, assertShellStream("stdout", out.Stdout, shellStreamAssertions{
+		Exact:    step.ExpectStdout,
+		Contains: step.ExpectStdoutContains,
+		Matches:  step.ExpectStdoutMatches,
+		JsonPath: step.ExpectStdoutJsonPath,
+	})...)
+	sr.Reasons = append(sr.Reasons, assertShellStream("stderr", out.Stderr, shellStreamAssertions{
+		Exact:    step.ExpectStderr,
+		Contains: step.ExpectStderrContains,
+		Matches:  step.ExpectStderrMatches,
+		JsonPath: step.ExpectStderrJsonPath,
+	})...)
 	if step.Name != nil && *step.Name != "" {
 		if reason := e.checkInline(*step.Name, "inlineStdout", step.InlineStdout, out.Stdout); reason != "" {
 			sr.Reasons = append(sr.Reasons, reason)
@@ -2231,6 +2309,15 @@ func (e *Executor) aiSnapshotPath(name string) string {
 // reliable signal of intent.
 func stepHasDeterministicAssertion(s *config.Step) bool {
 	if s.ExpectStdout != nil || s.ExpectStderr != nil {
+		return true
+	}
+	if len(s.ExpectStdoutContains) > 0 || len(s.ExpectStderrContains) > 0 {
+		return true
+	}
+	if len(s.ExpectStdoutMatches) > 0 || len(s.ExpectStderrMatches) > 0 {
+		return true
+	}
+	if len(s.ExpectStdoutJsonPath) > 0 || len(s.ExpectStderrJsonPath) > 0 {
 		return true
 	}
 	if s.InlineStdout != nil {

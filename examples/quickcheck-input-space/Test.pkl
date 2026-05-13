@@ -25,6 +25,7 @@ tests {
   // never accumulates.
   new {
     name = "01_steps_mode_demo"
+    specRef { "pbt.iterations"; "pbt.inputs"; "pbt.steps-mode" }
     iterations = 5
     iterationSeed = 99
     inputs {

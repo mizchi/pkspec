@@ -26,13 +26,9 @@ import (
 //
 // First-run / mismatch / refresh semantics mirror byte snapshots:
 //   - missing file       → write actual, return Failed with "review and commit"
-//   - byte mismatch      → write actual to `.actual.png`, return Failed
-//   - byte match         → Passed
+//   - pixel diff > threshold → write actual to `.actual` and diff to `.diff`
+//   - pixel diff <= threshold or byte match → Passed
 //   - --refresh-snapshots → overwrite the file unconditionally, Passed
-//
-// Pixel-level diff with `thresholdPct` is not yet implemented; today
-// the threshold value is surfaced in the mismatch reason so the
-// operator knows what was *intended* but acts on byte-exact match.
 func (e *Executor) runPlaywrightStep(ctx context.Context, step *config.Step, t *config.Test, defaults *config.Defaults, state map[string]string) StepResult {
 	name := stepDisplayName(step)
 	sr := StepResult{Name: name}
@@ -145,16 +141,13 @@ func (e *Executor) runPlaywrightStep(ctx context.Context, step *config.Step, t *
 		Status string `json:"status"`
 		Error  string `json:"error"`
 		Output struct {
-			ScreenshotBase64 string   `json:"screenshotBase64"`
-			Text             string   `json:"text"`
-			Console          []string `json:"console"`
-			DiffPct          *float64 `json:"diffPct"`
-			DiffPng          string   `json:"diffPng"`
-			DiffError        string   `json:"diffError"`
-			DiffSizeMismatch *struct {
-				Baseline struct{ W, H int } `json:"baseline"`
-				Actual   struct{ W, H int } `json:"actual"`
-			} `json:"diffSizeMismatch"`
+			ScreenshotBase64 string                  `json:"screenshotBase64"`
+			Text             string                  `json:"text"`
+			Console          []string                `json:"console"`
+			DiffPct          *float64                `json:"diffPct"`
+			DiffPng          string                  `json:"diffPng"`
+			DiffError        string                  `json:"diffError"`
+			DiffSizeMismatch *screenshotSizeMismatch `json:"diffSizeMismatch"`
 		} `json:"output"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
@@ -195,7 +188,13 @@ func (e *Executor) runPlaywrightStep(ctx context.Context, step *config.Step, t *
 		if resp.Output.DiffPng != "" {
 			diffPng, _ = base64.StdEncoding.DecodeString(resp.Output.DiffPng)
 		}
-		ok, reason := e.checkScreenshot(pw.ExpectScreenshot, shotBytes, resp.Output.DiffPct, diffPng)
+		diff := screenshotDiff{
+			Pct:          resp.Output.DiffPct,
+			PNG:          diffPng,
+			Error:        resp.Output.DiffError,
+			SizeMismatch: resp.Output.DiffSizeMismatch,
+		}
+		ok, reason := e.checkScreenshot(pw.ExpectScreenshot, shotBytes, diff)
 		if !ok {
 			sr.Outcome = OutcomeFailed
 			sr.Reasons = append(sr.Reasons, reason)
@@ -274,12 +273,30 @@ func firstContains(haystacks []string, needle string) (int, string) {
 	return -1, ""
 }
 
+type screenshotSize struct {
+	W int `json:"w"`
+	H int `json:"h"`
+}
+
+type screenshotSizeMismatch struct {
+	Baseline screenshotSize `json:"baseline"`
+	Actual   screenshotSize `json:"actual"`
+}
+
+type screenshotDiff struct {
+	Pct          *float64
+	PNG          []byte
+	Error        string
+	SizeMismatch *screenshotSizeMismatch
+}
+
 // checkScreenshot compares the screenshot bytes captured this run
 // against the committed PNG. When the harness sent back a `diffPct`
 // (computed via pixelmatch in the user's project), it is compared
-// against `thresholdPct`. Without pixelmatch the runner falls back
-// to byte-exact compare — same behaviour as the phase 18.1 ship.
-func (e *Executor) checkScreenshot(s *config.ScreenshotSnapshot, actual []byte, diffPct *float64, diffPng []byte) (bool, string) {
+// against `thresholdPct`. Without pixelmatch or when pixel diffing
+// fails, the runner falls back to byte-exact compare and includes the
+// diff error in the mismatch reason.
+func (e *Executor) checkScreenshot(s *config.ScreenshotSnapshot, actual []byte, diff screenshotDiff) (bool, string) {
 	dir := filepath.Join(e.opts.Workdir, ".pkspec", "screenshots")
 	path := filepath.Join(dir, s.Name+".png")
 
@@ -302,24 +319,34 @@ func (e *Executor) checkScreenshot(s *config.ScreenshotSnapshot, actual []byte, 
 	}
 
 	// Path A: pixelmatch ran in the harness.
-	if diffPct != nil {
-		if *diffPct <= s.ThresholdPct {
+	if diff.Pct != nil {
+		if *diff.Pct <= s.ThresholdPct {
 			return true, ""
 		}
 		actualPath := path + ".actual"
 		_ = os.WriteFile(actualPath, actual, 0o644)
 		diffPath := ""
-		if len(diffPng) > 0 {
+		if len(diff.PNG) > 0 {
 			diffPath = path + ".diff"
-			_ = os.WriteFile(diffPath, diffPng, 0o644)
+			_ = os.WriteFile(diffPath, diff.PNG, 0o644)
 		}
 		hint := ""
 		if diffPath != "" {
 			hint = fmt.Sprintf(", diff visualisation at %s", diffPath)
 		}
+		sizeHint := ""
+		if diff.SizeMismatch != nil {
+			sizeHint = fmt.Sprintf(
+				"; size mismatch baseline=%dx%d actual=%dx%d",
+				diff.SizeMismatch.Baseline.W,
+				diff.SizeMismatch.Baseline.H,
+				diff.SizeMismatch.Actual.W,
+				diff.SizeMismatch.Actual.H,
+			)
+		}
 		return false, fmt.Sprintf(
-			"screenshot %q diff %.2f%% exceeds threshold %.2f%% (actual at %s%s)",
-			s.Name, *diffPct, s.ThresholdPct, actualPath, hint,
+			"screenshot %q diff %.2f%% exceeds threshold %.2f%%%s (actual at %s%s)",
+			s.Name, *diff.Pct, s.ThresholdPct, sizeHint, actualPath, hint,
 		)
 	}
 
@@ -329,9 +356,13 @@ func (e *Executor) checkScreenshot(s *config.ScreenshotSnapshot, actual []byte, 
 	}
 	actualPath := path + ".actual"
 	_ = os.WriteFile(actualPath, actual, 0o644)
+	diffHint := ""
+	if diff.Error != "" {
+		diffHint = fmt.Sprintf("; pixel diff unavailable: %s", diff.Error)
+	}
 	return false, fmt.Sprintf(
-		"screenshot %q mismatch (actual saved at %s); byte-exact compare (install pixelmatch + pngjs in the user project to enable pixel diff against threshold %.2f%%)",
-		s.Name, actualPath, s.ThresholdPct,
+		"screenshot %q mismatch (actual saved at %s); byte-exact compare%s (install pixelmatch + pngjs in the user project to enable pixel diff against threshold %.2f%%)",
+		s.Name, actualPath, diffHint, s.ThresholdPct,
 	)
 }
 

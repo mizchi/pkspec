@@ -23,6 +23,7 @@ tests {
     name = "auth_login_only"
     description = "--grep filter forwarded to playwright-test"
     tags { "unit" }
+    specRef { "kind.playwright-test"; "runner.playwright-test.grep-filter" }
     steps {
       new {
         name = "run"

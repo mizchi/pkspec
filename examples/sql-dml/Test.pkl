@@ -5,6 +5,7 @@ tests {
     name = "dml_sequence"
     description = "Create → Insert → Verify → Update → Verify → Delete → Verify empty"
     tags { "unit" }
+    specRef { "kind.sql"; "runner.steps.sequential" }
     steps {
       new {
         name = "create"

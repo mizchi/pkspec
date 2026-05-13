@@ -6,7 +6,7 @@ discovered on one side can be re-investigated on the other.
 
 | Surface | What's tested | Runner | Generator |
 | --- | --- | --- | --- |
-| Pkl-internal | a Pkl function / algorithm | `pkspec run` (= `pkl test`) | `QuickCheck.intCases` |
+| Pkl-internal | a Pkl function / algorithm | `pkspec run` (= `pkl test`) | `QuickCheck.intCases`, `QuickCheck.checkAllInt` |
 | Subprocess | shell / http / playwright / sql | `pkspec exec` | `Test.iterations` + `$PKSPEC_SEED` |
 
 ## The seed stream
@@ -49,9 +49,47 @@ or fails based on `r.passed`; `checkAll` surfaces the first
 counterexample's `seed` / `index` / `value` so a failing case
 can be reproduced.
 
+For value-only integer properties, use `checkAllInt` to get Pkl-side
+shrinking:
+
+```pkl
+facts {
+  ["value stays below seven"] {
+    let (r = QC.checkAllInt(
+      "below_seven",
+      10,     // seed
+      1,      // count
+      0,      // lo
+      20,     // hi
+      32,     // shrinkAttempts
+      (v) -> v < 7,
+    ))
+      r.passed
+  }
+}
+```
+
+On failure, `r.failure!!.originalValue` is the generated value and
+`r.failure!!.value` is the shrunk value. `r.failure!!.shrinks` records
+the adopted shrink steps.
+
 Note: Pkl `function` calls are positional only — write
 `QC.intCases(seed, count, lo, hi)`, not
 `QC.intCases(seed = ...)`.
+
+## Pkl-internal integer shrinking
+
+`QC.shrinkIntValue(value, lo, attempts, pred)` is the Pkl-side
+counterpart of the executor's `IntInput` shrinker. `pred` returns true
+for passing values; the initial `value` is assumed to fail. Candidates
+are tried as `[lo, lo + (value-lo)/2, value-1]`, the first still-failing
+candidate is adopted, and the loop recurses until no candidate fails or
+the attempt budget is exhausted.
+
+Use `checkAllInt` when the property is a direct predicate over the
+generated integer value. Use plain `checkAll` when the property depends
+on `Case.seed` or builds a complex structure from the seed; value-only
+shrinking would be misleading there.
 
 ## Subprocess iteration
 
