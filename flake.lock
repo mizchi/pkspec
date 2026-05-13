@@ -74,16 +74,16 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1778510448,
-        "narHash": "sha256-QXlw2QLoUF7qXUxBfLh71QbITyUT15kmC5Tu1NR5N10=",
+        "lastModified": 1778657623,
+        "narHash": "sha256-5KpLwcsTtcIre1WiwwND4kSo5FdX404qI6+6dW9sFvk=",
         "owner": "mizchi",
         "repo": "pkfire",
-        "rev": "45a60a4e81638506f7c12d88fdd1251a56e64b22",
+        "rev": "77aa9899658d328eaa4280cc944c4aaa4422d3a9",
         "type": "github"
       },
       "original": {
         "owner": "mizchi",
-        "ref": "v0.6.0",
+        "ref": "v0.9.0",
         "repo": "pkfire",
         "type": "github"
       }

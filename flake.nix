@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    pkfire.url = "github:mizchi/pkfire/v0.6.0";
+    pkfire.url = "github:mizchi/pkfire/v0.9.0";
   };
 
   outputs = { self, nixpkgs, flake-utils, pkfire }:
