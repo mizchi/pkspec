@@ -1,0 +1,48 @@
+amends "../../pkl/Adapter.pkl"
+
+import "../../pkl/adapters/Playwright.pkl" as Playwright
+import "../../pkl/adapters/Vitest.pkl" as Vitest
+import "CoveragePresets.pkl" as Coverage
+
+local class WebVitest extends Vitest.Vitest {
+  configPath = "packages/web/vitest.config.ts"
+  include = new {
+    "src/**/*.test.ts"
+  }
+}
+
+local class ChromiumE2E extends Playwright.Playwright {
+  configPath = "playwright.config.ts"
+  projects = new {
+    "chromium"
+  }
+}
+
+suites {
+  new {
+    name = "experimental-vitest-coverage"
+    adapter = new WebVitest {}
+    collectors {
+      Coverage.vitestCoverage(
+        "packages/web/vitest.config.ts",
+        "packages/web/coverage",
+        null,
+        "json-summary",
+      )
+    }
+  }
+  new {
+    name = "experimental-playwright-js-css-coverage"
+    adapter = new ChromiumE2E {}
+    collectors {
+      Coverage.playwrightCoverage(
+        "playwright.config.ts",
+        "coverage/playwright",
+        new Listing<String> { "js"; "css" },
+        new Listing<String> { "chromium" },
+        null,
+        "json-summary",
+      )
+    }
+  }
+}

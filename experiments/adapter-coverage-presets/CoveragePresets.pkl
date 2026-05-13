@@ -1,0 +1,72 @@
+/// Experimental coverage collector presets for adapter suites.
+///
+/// These are deliberately outside `pkl/adapters/` until the shape is
+/// proven by real Vitest / Playwright shims. The functions return
+/// ordinary `ReportCollector` values, so no core schema subclassing is
+/// needed.
+@ModuleInfo { minPklVersion = "0.31.0" }
+open module pkspec.experiments.AdapterCoveragePresets
+
+import "../../pkl/Adapter.pkl" as adapter
+
+function vitestCoverage(
+  configPath: String,
+  coverageDir: String,
+  provider: String?,
+  reporter: String,
+): adapter.ReportCollector = new adapter.ReportCollector {
+  name = "coverage"
+  command = new adapter.Command {
+    argv {
+      "pkspec-adapter-vitest"
+      "coverage"
+      "--config"
+      configPath
+      "--coverage-dir"
+      coverageDir
+      "--reporter"
+      reporter
+      when (provider != null) {
+        "--provider"
+        provider!!
+      }
+    }
+  }
+  output = new adapter.PkspecCoverageJson {}
+}
+
+function playwrightCoverage(
+  configPath: String,
+  coverageDir: String,
+  coverageKinds: Listing<String(matches(Regex(#"^(js|css)$"#)))>,
+  projects: Listing<String>,
+  grep: String?,
+  reporter: String,
+): adapter.ReportCollector = new adapter.ReportCollector {
+  name = "coverage"
+  command = new adapter.Command {
+    argv {
+      "pkspec-adapter-playwright"
+      "coverage"
+      "--config"
+      configPath
+      "--coverage-dir"
+      coverageDir
+      for (k in coverageKinds) {
+        "--coverage-kind"
+        k
+      }
+      "--reporter"
+      reporter
+      for (p in projects) {
+        "--project"
+        p
+      }
+      when (grep != null) {
+        "--grep"
+        grep!!
+      }
+    }
+  }
+  output = new adapter.PkspecCoverageJson {}
+}
