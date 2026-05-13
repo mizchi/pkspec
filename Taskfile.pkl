@@ -28,6 +28,7 @@ local ciSources: Listing<String> = new {
   ".github/workflows/**"
   "flake.nix"
   "flake.lock"
+  "nix/**"
 }
 
 local default: Task = new {

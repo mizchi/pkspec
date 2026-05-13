@@ -248,8 +248,9 @@ nix profile install github:mizchi/pkspec/v0.1.3
 ```
 
 The flake builds the `pkspec` binary and wraps it so the bundled Pkl
-CLI is on `PATH` automatically. The Nix workflow on every push to
-`main` and every PR builds the flake on `aarch64-darwin` and
+CLI is on `PATH` automatically. That Pkl CLI is the upstream native
+binary, not the Java/JAR build from nixpkgs. The Nix workflow on every
+push to `main` and every PR builds the flake on `aarch64-darwin` and
 `x86_64-linux`; the badge above tracks its status. The Go workflow
 also runs `go test ./...` and a `go install` smoke on both platforms.
 
@@ -258,16 +259,30 @@ In a home-manager flake:
 ```nix
 {
   inputs.pkspec.url = "github:mizchi/pkspec/v0.1.3";
+  inputs.pkspec.inputs.nixpkgs.follows = "nixpkgs";
 
-  outputs = { self, nixpkgs, home-manager, pkspec, ... }: {
+  outputs = { self, nixpkgs, home-manager, pkspec, ... }:
+  let
+    system = "aarch64-darwin";
+    pkgs = import nixpkgs { inherit system; };
+  in {
     homeConfigurations.example = home-manager.lib.homeManagerConfiguration {
-      modules = [{
-        home.packages = [ pkspec.packages.${pkgs.system}.default ];
-      }];
+      inherit pkgs;
+      modules = [
+        pkspec.homeManagerModules.default
+        {
+          programs.pkspec.enable = true;
+        }
+      ];
     };
   };
 }
 ```
+
+`programs.pkspec.enable = true` installs both `pkspec` and
+`pkl-native` by default. Set `programs.pkspec.installPkl = false` if
+you only want the wrapped `pkspec` binary and do not want a standalone
+`pkl` command in `home.packages`.
 
 ### Go
 

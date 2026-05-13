@@ -11,6 +11,7 @@ on:
       - "cmd/**"
       - "internal/**"
       - "pkl/**"
+      - "nix/**"
       - "Taskfile.pkl"
       - ".github/workflows/nix.yml"
   pull_request:
@@ -22,6 +23,7 @@ on:
       - "cmd/**"
       - "internal/**"
       - "pkl/**"
+      - "nix/**"
       - "Taskfile.pkl"
       - ".github/workflows/nix.yml"
   workflow_dispatch:

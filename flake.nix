@@ -12,6 +12,7 @@
       let
         pkgs = import nixpkgs { inherit system; };
         version = "0.1.3";
+        pklNative = pkgs.callPackage ./nix/pkl-native.nix { };
         pkspec = pkgs.buildGoModule {
           pname = "pkspec";
           inherit version;
@@ -30,11 +31,11 @@
           # `pkspec` shells out to `pkl` (via pkl-go) for evaluation, and
           # `pkspec run --reader-helper` re-invokes itself, so PATH needs both.
           # Wrapping ensures users who installed pkspec via Nix get a
-          # working `pkl` without a separate install step.
+          # working native `pkl` without a separate install step.
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''
             wrapProgram $out/bin/pkspec \
-              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.pkl ]}
+              --prefix PATH : ${pkgs.lib.makeBinPath [ pklNative ]}
           '';
 
           meta = with pkgs.lib; {
@@ -45,10 +46,32 @@
             platforms = platforms.unix;
           };
         };
+        pklNativeClosure = pkgs.closureInfo {
+          rootPaths = [ pklNative ];
+        };
+        pkspecClosure = pkgs.closureInfo {
+          rootPaths = [ pkspec ];
+        };
+        homeManagerModuleEval = pkgs.lib.evalModules {
+          specialArgs = { inherit pkgs; };
+          modules = [
+            {
+              options.home.packages = pkgs.lib.mkOption {
+                type = pkgs.lib.types.listOf pkgs.lib.types.package;
+                default = [ ];
+              };
+            }
+            self.homeManagerModules.default
+            {
+              config.programs.pkspec.enable = true;
+            }
+          ];
+        };
       in {
         packages = {
           default = pkspec;
           pkspec = pkspec;
+          pkl-native = pklNative;
         };
 
         apps.default = {
@@ -57,15 +80,55 @@
           meta = pkspec.meta;
         };
 
+        checks = {
+          native-pkl = pkgs.runCommand "pkl-native-check" { } ''
+            ${pklNative}/bin/pkl --version > version.txt
+            if ! grep -E -i 'native' version.txt; then
+              echo "pkl-native did not report a native runtime" >&2
+              exit 1
+            fi
+            if grep -E -i -- '-(temurin|openjdk|jdk|jre)' ${pklNativeClosure}/store-paths; then
+              echo "pkl-native closure unexpectedly contains a Java runtime" >&2
+              exit 1
+            fi
+            cp version.txt "$out"
+          '';
+
+          pkspec-no-java-closure = pkgs.runCommand "pkspec-no-java-closure-check" { } ''
+            ${pkspec}/bin/pkspec version > version.txt
+            if grep -E -i -- '-(temurin|openjdk|jdk|jre)' ${pkspecClosure}/store-paths; then
+              echo "pkspec closure unexpectedly contains a Java runtime" >&2
+              exit 1
+            fi
+            cp version.txt "$out"
+          '';
+
+          home-manager-module = pkgs.runCommand "pkspec-home-manager-module-check" { } ''
+            packages="${toString homeManagerModuleEval.config.home.packages}"
+            case "$packages" in
+              *pkspec* ) ;;
+              * ) echo "home-manager module did not install pkspec" >&2; exit 1 ;;
+            esac
+            case "$packages" in
+              *pkl-native* ) ;;
+              * ) echo "home-manager module did not install native pkl" >&2; exit 1 ;;
+            esac
+            touch "$out"
+          '';
+        };
+
         # `nix develop` for working on pkspec itself.
         devShells.default = pkgs.mkShell {
           packages = [
             pkfire.packages.${system}.default
           ] ++ (with pkgs; [
             go
-            pkl
+            pklNative
             gopls
           ]);
         };
-      });
+      }) // {
+        homeManagerModules.default = import ./nix/home-manager.nix { inherit self; };
+        homeManagerModules.pkspec = self.homeManagerModules.default;
+      };
 }
