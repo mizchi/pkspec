@@ -33,6 +33,7 @@
           # Wrapping ensures users who installed pkspec via Nix get a
           # working native `pkl` without a separate install step.
           nativeBuildInputs = [ pkgs.makeWrapper ];
+          nativeCheckInputs = [ pklNative ];
           postInstall = ''
             wrapProgram $out/bin/pkspec \
               --prefix PATH : ${pkgs.lib.makeBinPath [ pklNative ]}

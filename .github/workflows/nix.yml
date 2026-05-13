@@ -11,8 +11,11 @@ on:
       - "cmd/**"
       - "internal/**"
       - "pkl/**"
+      - "examples/**"
+      - "experiments/**"
       - "nix/**"
       - "Taskfile.pkl"
+      - "SPEC.pkl"
       - ".github/workflows/nix.yml"
   pull_request:
     paths:
@@ -23,8 +26,11 @@ on:
       - "cmd/**"
       - "internal/**"
       - "pkl/**"
+      - "examples/**"
+      - "experiments/**"
       - "nix/**"
       - "Taskfile.pkl"
+      - "SPEC.pkl"
       - ".github/workflows/nix.yml"
   workflow_dispatch:
 
@@ -56,3 +62,4 @@ jobs:
         run: |
           ./result/bin/pkspec version
           ./result/bin/pkspec help
+          ./result/bin/pkspec adapter -f examples/adapter-protocol-smoke/Adapter.pkl

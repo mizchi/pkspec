@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestCmdAdapterRunsProtocolSmoke(t *testing.T) {
+	requirePklCLI(t)
+
 	var stdout, stderr bytes.Buffer
 	path := filepath.Join("..", "..", "examples", "adapter-protocol-smoke", "Adapter.pkl")
 	if err := cmdAdapter([]string{"-f", path}, &stdout, &stderr); err != nil {
@@ -25,6 +28,8 @@ func TestCmdAdapterRunsProtocolSmoke(t *testing.T) {
 }
 
 func TestCmdAdapterDryRunPrintsCases(t *testing.T) {
+	requirePklCLI(t)
+
 	var stdout, stderr bytes.Buffer
 	path := filepath.Join("..", "..", "examples", "adapter-protocol-smoke", "Adapter.pkl")
 	if err := cmdAdapter([]string{"-f", path, "--dry-run"}, &stdout, &stderr); err != nil {
@@ -36,5 +41,12 @@ func TestCmdAdapterDryRunPrintsCases(t *testing.T) {
 	}
 	if !strings.Contains(got, "generated.case (verifies adapter.overlays-and-cases)") {
 		t.Fatalf("stdout = %q, want explicit generated case", got)
+	}
+}
+
+func requirePklCLI(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("pkl"); err != nil {
+		t.Skipf("pkl CLI not found in PATH: %v", err)
 	}
 }
