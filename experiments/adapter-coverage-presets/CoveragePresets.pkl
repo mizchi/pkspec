@@ -36,8 +36,10 @@ function vitestCoverage(
 }
 
 function playwrightCoverage(
+  shimCommand: Listing<String>,
   configPath: String,
   coverageDir: String,
+  url: String,
   coverageKinds: Listing<String(matches(Regex(#"^(js|css)$"#)))>,
   projects: Listing<String>,
   grep: String?,
@@ -46,12 +48,14 @@ function playwrightCoverage(
   name = "coverage"
   command = new adapter.Command {
     argv {
-      "pkspec-adapter-playwright"
+      ...shimCommand
       "coverage"
       "--config"
       configPath
       "--coverage-dir"
       coverageDir
+      "--url"
+      url
       for (k in coverageKinds) {
         "--coverage-kind"
         k

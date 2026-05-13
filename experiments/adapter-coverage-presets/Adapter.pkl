@@ -36,8 +36,10 @@ suites {
     adapter = new ChromiumE2E {}
     collectors {
       Coverage.playwrightCoverage(
+        new Listing<String> { "node"; "scripts/pkspec-adapter-playwright.mjs" },
         "playwright.config.ts",
         "coverage/playwright",
+        "http://127.0.0.1:3000",
         new Listing<String> { "js"; "css" },
         new Listing<String> { "chromium" },
         null,
