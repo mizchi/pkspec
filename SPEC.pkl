@@ -641,6 +641,44 @@ scenarios {
     implementedAt = "docs/notes/authoring-guide.md"
   }
   new {
+    id = "docs.quick-start"
+    name = "quick_start_introduces_pkspec"
+    description = "A quick-start document introduces what pkspec is, the author's intent (Pkl-backed robustness, language neutrality, structured flow-to-test mapping, and spec-driven documentation), installation, the first Test.pkl, the first Spec.pkl, where to go next, and pkfire as the sibling task runner for cached project tasks rather than presenting caching as a pkspec responsibility."
+    tags { "spec"; "docs" }
+    audience { "developer"; "pm"; "non-engineer" }
+    userDescription = "New readers can understand what pkspec is and run a minimal example before reading the full authoring guide."
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/quick-start.md"
+  }
+  new {
+    id = "docs.quick-start-ja"
+    name = "japanese_quick_start_introduces_pkspec"
+    description = "A Japanese quick-start document covers the same introductory path as the English quick-start: concept, author intent, installation, first Test.pkl, first Spec.pkl, common commands, next documents, and the pkfire boundary for cached project tasks."
+    tags { "spec"; "docs"; "lang:ja" }
+    audience { "developer"; "pm"; "non-engineer" }
+    userDescription = "Japanese readers can understand what pkspec is and run a minimal example before reading detailed references."
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/quick-start-ja.md"
+  }
+  new {
+    id = "docs.pkfire-boundary"
+    name = "pkfire_boundary_is_documented"
+    description = "Introductory docs make the responsibility boundary explicit: pkspec focuses on typed tests, spec links, and review/CI reporting; pkfire is the sibling task runner for cached project tasks and build-style workflows."
+    tags { "spec"; "docs" }
+    audience { "developer" }
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/quick-start.md"
+  }
+  new {
     id = "docs.project-gates"
     name = "project_gate_authoring_note_exists"
     description = "Docs describe a recommended layout for using pkspec as a local gate and task-runner contract layer in another repository, including specs/, rendered docs, and executable Test.pkl files."

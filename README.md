@@ -12,6 +12,11 @@
 > spec-driven authoring, property-based testing, fuzzing, snapshot,
 > and differential testing across language implementations.
 
+Start with the quick-start guide:
+
+- [Quick Start](./docs/quick-start.md)
+- [クイックスタート](./docs/quick-start-ja.md)
+
 ```pkl
 amends "./pkspec/Test.pkl"
 
