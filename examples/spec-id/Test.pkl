@@ -17,5 +17,5 @@ tests {
     inlineStdout = "409\n"
   }
   // SIGNUP-003 deliberately has no implementing test —
-  // `pkspec spec --check` should surface it as unimplemented.
+  // `pkspec check` should surface it as unimplemented.
 }

@@ -146,12 +146,13 @@ suites {
 }
 ```
 
-Run adapter modules with `pkspec adapter -f Adapter.pkl`. The current
-runtime executes the generic protocol (`discover` JSON, manifest
-`run`, JSONL events) and post-run coverage collectors. Full
-Vitest/Playwright/node/go/moon shim commands are still future work,
-but [`examples/adapter-protocol-smoke`](./examples/adapter-protocol-smoke/)
-is executable end-to-end.
+Run adapter modules with `pkspec adapter -f Adapter.pkl`. The runtime
+executes the generic protocol (`discover` JSON, manifest `run`, JSONL
+events) and post-run coverage collectors. Native shim commands are
+installed as `pkspec-adapter-vitest`, `pkspec-adapter-playwright`,
+`pkspec-adapter-node-test`, `pkspec-adapter-go-test`, and
+`pkspec-adapter-moon-test`; built-in adapters select those commands
+from Pkl instead of a Go registry.
 See [`docs/notes/adapters.md`](./docs/notes/adapters.md).
 
 ## Spec-driven authoring
@@ -189,17 +190,28 @@ append-only decision log, and a list of open questions. Goals are
 sibling user-value statements with no test of their own; scenarios
 point at them via `contributes`. `Test.pkl` implements scenarios
 via `specRef`. The runner prints `(verifies AUTH-001)` on each
-test line; `pkspec spec` grows six read-only modes:
+test line, and the default `pkspec spec` Markdown includes a
+per-spec implementation index so reviewers can scan `Scenario.id`
+back to active tests or `implementedAt` pointers. The review/CI
+surface is exposed as top-level commands:
 
-- `--check` — CI gate: exit 1 on any non-draft non-deprecated spec
+- `pkspec check` — CI gate: exit 1 on any non-draft non-deprecated spec
   without an implementing test
-- `--coverage` — declared vs implemented, broken down by severity
+- `pkspec coverage` — declared vs implemented, broken down by severity
   and review-status
-- `--graph` — graphviz `dot` of the knowledge graph
-- `--decisions` — newest-first Markdown decision log
-- `--goals` — Goals listed by priority with per-Goal coverage
-- `--next` — unimplemented specs ranked by Goal priority + severity
+- `pkspec graph` — graphviz `dot` of the knowledge graph, including
+  test/code/doc implementation backlinks
+- `pkspec decisions` — newest-first Markdown decision log
+- `pkspec goals` — Goals listed by priority with per-Goal coverage
+- `pkspec next` — unimplemented specs ranked by Goal priority + severity
   ("what to work on next")
+- `pkspec implementations` — the reverse index only: spec id → active
+  tests / code / doc pointers
+- `pkspec orphans` — active tests that still need a `specRef`
+- `pkspec lint` — broken/deprecated spec links and authoring invariants
+- `pkspec docs --audience X` — audience-specific Markdown projection
+  from `audience { "X" }` or `audience:X` tags, with implementation details
+  hidden by default
 
 ```pkl
 // Spec.pkl
@@ -296,12 +308,13 @@ nix run github:mizchi/pkspec/v0.1.6 -- exec -f path/to/Test.pkl
 nix profile install github:mizchi/pkspec/v0.1.6
 ```
 
-The flake builds the `pkspec` binary and wraps it so the bundled Pkl
-CLI is on `PATH` automatically. That Pkl CLI is the upstream native
-binary, not the Java/JAR build from nixpkgs. The Nix workflow on every
-push to `main` and every PR builds the flake on `aarch64-darwin` and
-`x86_64-linux`; the badge above tracks its status. The Go workflow
-also runs `go test ./...` and a `go install` smoke on both platforms.
+The flake builds `pkspec` plus the built-in adapter shim binaries and
+wraps them so the bundled Pkl CLI is on `PATH` automatically. That Pkl
+CLI is the upstream native binary, not the Java/JAR build from nixpkgs.
+The Nix workflow on every push to `main` and every PR builds the flake
+on `aarch64-darwin` and `x86_64-linux`; the badge above tracks its
+status. The Go workflow also runs `go test ./...` and a `go install`
+smoke on both platforms.
 
 In a home-manager flake:
 
@@ -336,7 +349,7 @@ you only want the wrapped `pkspec` binary and do not want a standalone
 ### Go
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/pkspec@v0.1.6
+go install github.com/mizchi/pkspec/cmd/...@v0.1.6
 pkspec init --dir pkspec
 ```
 
@@ -413,20 +426,23 @@ pkspec adapter -f Adapter.pkl --dry-run    discover and print merged adapter cas
 pkspec spec tests/**/*.pkl                 render Markdown SPEC.md from Scenario tags
 pkspec spec tests/**/*.pkl --output SPEC.md
 pkspec spec tests/**/*.pkl --tag spec
-pkspec spec --check Spec.pkl Test.pkl      CI gate: declared specs vs implementing tests
-pkspec spec --coverage Spec.pkl Test.pkl   coverage report by severity / review-status
-pkspec spec --graph Spec.pkl Test.pkl      graphviz dot of dependsOn / supersedes / replacedBy
-pkspec spec --decisions Spec.pkl Test.pkl  newest-first Markdown decision log
-pkspec spec --goals Spec.pkl Test.pkl      user-facing Goals + their contributing-spec coverage
-pkspec spec --next Spec.pkl Test.pkl       unimplemented specs ranked by Goal priority + severity
-pkspec spec --orphans Test.pkl...          active tests with no specRef (spec-link backlog)
-pkspec spec --lint Spec.pkl...             convention checks: broken refs, missing descriptions, ...
-pkspec spec --lint --lint-disable lint.X   suppress one or more rule ids (comma-separated)
+pkspec docs --audience pm Spec.pkl         render PM-facing docs from audience metadata
+pkspec docs --audience end-user --output docs/USER.md Spec.pkl
+pkspec check Spec.pkl Test.pkl             CI gate: declared specs vs implementing tests
+pkspec coverage Spec.pkl Test.pkl          coverage report by severity / review-status
+pkspec graph Spec.pkl Test.pkl             graphviz dot of spec edges + implementation backlinks
+pkspec decisions Spec.pkl Test.pkl         newest-first Markdown decision log
+pkspec goals Spec.pkl Test.pkl             user-facing Goals + their contributing-spec coverage
+pkspec next Spec.pkl Test.pkl              unimplemented specs ranked by Goal priority + severity
+pkspec implementations Spec.pkl Test.pkl   spec id -> tests/code/doc implementers
+pkspec orphans Test.pkl...                 active tests with no specRef (spec-link backlog)
+pkspec lint Spec.pkl Test.pkl...           convention checks: broken/deprecated refs, descriptions, ...
+pkspec lint --lint-disable lint.X          suppress one or more rule ids (comma-separated)
 pkspec spec --template scenario|goal|module  print a Pkl skeleton (no input files needed)
 pkspec spec --discover                     auto-walk for Spec.pkl / Test.pkl / specs/*.pkl
-pkspec spec --check --strict               verify implementedAt paths exist on disk
-pkspec spec --check --goal goal.X          filter every mode to one Goal
-pkspec spec --check --severity critical    filter every mode to one severity
+pkspec check --strict                      verify implementedAt paths exist on disk
+pkspec check --goal goal.X                 filter review commands to one Goal
+pkspec check --severity critical           filter review commands to one severity
 
 pkspec timings -f Test.pkl                 per-test runs / median / p90 / latest / kind
 pkspec timings -f Test.pkl --failing       only tests whose latest record is non-pass

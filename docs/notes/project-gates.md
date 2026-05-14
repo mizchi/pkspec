@@ -84,11 +84,11 @@ Render the review document and run the local gate:
 
 ```sh
 pkspec spec specs/project.pkl specs/gates.Test.pkl --output docs/SPEC.md
-pkspec spec --check --strict specs/project.pkl specs/gates.Test.pkl
+pkspec check --strict specs/project.pkl specs/gates.Test.pkl
 pkspec exec -f specs/gates.Test.pkl
 ```
 
-`--check` verifies that non-draft, non-deprecated scenarios are
+`pkspec check` verifies that non-draft, non-deprecated scenarios are
 implemented. `--strict` also verifies `implementedAt` paths for
 `implementedBy = "code"` or `"doc"` scenarios.
 

@@ -41,22 +41,22 @@ Seven scenarios with mixed lifecycle + parent/child edges:
 pkspec spec examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 
 # CI gate — only non-draft non-deprecated unimplementeds (AUTH-001a/b, AUTH-003)
-pkspec spec --check examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl   # exit 1
+pkspec check examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl   # exit 1
 
 # Coverage broken down by severity / status
-pkspec spec --coverage examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
+pkspec coverage examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 
-# Knowledge graph as graphviz dot
-pkspec spec --graph examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl | dot -Tsvg > graph.svg
+# Knowledge graph + implementation backlinks as graphviz dot
+pkspec graph examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl | dot -Tsvg > graph.svg
 
 # Decision log, newest-first
-pkspec spec --decisions examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
+pkspec decisions examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 
 # Goals (priority desc) with per-Goal coverage
-pkspec spec --goals examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
+pkspec goals examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 
 # Next actions: AUTH-001a/b first (critical + Goal p=90), then AUTH-003 (review + Goal p=90)
-pkspec spec --next examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
+pkspec next examples/spec-graph/Spec.pkl examples/spec-graph/Test.pkl
 ```
 
 See [`docs/notes/spec-graph.md`](../../docs/notes/spec-graph.md)

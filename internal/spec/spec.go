@@ -101,6 +101,10 @@ func Render(entries []Entry, root string) string {
 		writeTest(&b, e)
 	}
 
+	if index := implementationIndexFromEntries(entries); len(index) > 0 {
+		b.WriteString(formatImplementationIndex(index, root, "##"))
+	}
+
 	// Aggregate Outstanding Questions across every scenario that
 	// carries any. Renders at the document tail so reviewers can
 	// answer the open questions in one pass.
@@ -111,6 +115,584 @@ func Render(entries []Entry, root string) string {
 		}
 	}
 	return b.String()
+}
+
+// DocsOptions controls the audience-oriented Markdown projection used by
+// `pkspec docs`. Audience matches Scenario.audience or an
+// `audience:<name>` tag; Tags are additional filters that must also
+// match when present.
+type DocsOptions struct {
+	Audience           string
+	Tags               []string
+	HideImplementation bool
+}
+
+// CollectDocs flattens plans for audience docs. Unlike Collect's
+// OR-style tag filter, audience and tag filters compose: an entry must
+// match the requested audience and at least one requested --tag.
+func CollectDocs(plans []*config.Plan, opts DocsOptions) []Entry {
+	var out []Entry
+	for _, p := range plans {
+		for name, t := range p.Tests {
+			e := Entry{
+				SourcePath: p.SourcePath,
+				Name:       name,
+				Test:       t,
+			}
+			if sc, ok := p.Scenarios[name]; ok {
+				e.Scenario = sc
+			}
+			if !matchesDocsFilter(t.Tags, e.Scenario, opts) {
+				continue
+			}
+			out = append(out, e)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SourcePath != out[j].SourcePath {
+			return out[i].SourcePath < out[j].SourcePath
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func matchesDocsFilter(tags []string, sc *config.Scenario, opts DocsOptions) bool {
+	allTags := append([]string(nil), tags...)
+	if sc != nil {
+		allTags = append(allTags, sc.Tags...)
+	}
+	if opts.Audience != "" && !matchesDocsAudience(allTags, sc, opts.Audience) {
+		return false
+	}
+	if len(opts.Tags) > 0 && !matchesAnyTag(allTags, opts.Tags) {
+		return false
+	}
+	return true
+}
+
+func matchesDocsAudience(tags []string, sc *config.Scenario, audience string) bool {
+	if sc != nil {
+		for _, a := range sc.Audience {
+			if a == audience {
+				return true
+			}
+		}
+	}
+	return hasTag(tags, "audience:"+audience)
+}
+
+type docsProfile struct {
+	includeLifecycle     bool
+	includeGraph         bool
+	includeQuestions     bool
+	includeDecisions     bool
+	includeGoalRationale bool
+	includeTags          bool
+}
+
+func profileForAudience(audience string) docsProfile {
+	switch audience {
+	case "end-user", "non-engineer":
+		return docsProfile{}
+	case "developer", "api", "operator":
+		return docsProfile{
+			includeLifecycle: true,
+			includeGraph:     true,
+			includeQuestions: true,
+			includeDecisions: true,
+			includeTags:      true,
+		}
+	case "pm":
+		return docsProfile{
+			includeLifecycle:     true,
+			includeGraph:         true,
+			includeQuestions:     true,
+			includeDecisions:     true,
+			includeGoalRationale: true,
+		}
+	default:
+		return docsProfile{
+			includeLifecycle: true,
+			includeGraph:     true,
+			includeQuestions: true,
+			includeDecisions: true,
+		}
+	}
+}
+
+// RenderDocs writes an audience-oriented Markdown projection. It uses
+// scenario descriptions, Goal links, and prose step names, and hides
+// runner implementation details unless HideImplementation is false.
+func RenderDocs(entries []Entry, plans []*config.Plan, opts DocsOptions) string {
+	profile := profileForAudience(opts.Audience)
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s docs\n\n", docsAudienceTitle(opts.Audience))
+	if len(entries) == 0 {
+		b.WriteString("_No scenarios matched the filter._\n")
+		return b.String()
+	}
+	fmt.Fprintf(&b, "%d scenario(s)", len(entries))
+	if opts.Audience != "" {
+		fmt.Fprintf(&b, " for `audience:%s`", opts.Audience)
+	}
+	if len(opts.Tags) > 0 {
+		fmt.Fprintf(&b, " matching tag(s): %s", strings.Join(opts.Tags, ", "))
+	}
+	b.WriteString("\n\n")
+
+	goals := docsGoals(entries, plans)
+	if len(goals) > 0 {
+		b.WriteString("## Goals\n\n")
+		for _, g := range goals {
+			fmt.Fprintf(&b, "- **%s**", g.Name)
+			if g.ID != "" {
+				fmt.Fprintf(&b, " (`%s`)", g.ID)
+			}
+			if profile.includeLifecycle {
+				fmt.Fprintf(&b, " — priority %d, %s", g.Priority, g.ReviewStatus)
+			}
+			b.WriteString("\n")
+			if g.Description != nil && *g.Description != "" {
+				writeIndentedMarkdown(&b, *g.Description, "  ")
+			}
+			if profile.includeGoalRationale && g.Rationale != nil && *g.Rationale != "" {
+				writeIndentedMarkdown(&b, "Rationale: "+*g.Rationale, "  ")
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("## Scenarios\n\n")
+	for _, e := range entries {
+		fmt.Fprintf(&b, "### %s", e.Name)
+		if e.Scenario != nil && e.Scenario.ID != nil {
+			fmt.Fprintf(&b, " (`%s`)", *e.Scenario.ID)
+		}
+		b.WriteString("\n\n")
+
+		if desc := docsDescription(e, opts.Audience); desc != "" {
+			writeIndentedMarkdown(&b, desc, "")
+			b.WriteString("\n")
+		}
+		writeDocsMeta(&b, e, profile)
+		writeDocsBehavior(&b, e)
+		if !opts.HideImplementation {
+			writeDocsImplementation(&b, e)
+		}
+		writeDocsQuestions(&b, e, profile)
+		writeDocsDecisions(&b, e, profile)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func docsAudienceTitle(audience string) string {
+	switch audience {
+	case "":
+		return "Audience"
+	case "pm":
+		return "PM"
+	case "api":
+		return "API"
+	default:
+		words := strings.Fields(strings.ReplaceAll(audience, "-", " "))
+		for i, w := range words {
+			if w == "" {
+				continue
+			}
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+		return strings.Join(words, " ")
+	}
+}
+
+func docsDescription(e Entry, audience string) string {
+	if e.Scenario != nil {
+		for _, p := range docsDescriptionCandidates(e.Scenario, audience) {
+			if p != nil && strings.TrimSpace(*p) != "" {
+				return strings.TrimSpace(*p)
+			}
+		}
+	}
+	if e.Test != nil && e.Test.Description != nil {
+		return strings.TrimSpace(*e.Test.Description)
+	}
+	return ""
+}
+
+func docsDescriptionCandidates(sc *config.Scenario, audience string) []*string {
+	switch audience {
+	case "end-user", "non-engineer":
+		return []*string{sc.UserDescription, sc.Description}
+	case "pm":
+		return []*string{sc.PMNotes, sc.UserDescription, sc.Description}
+	case "api":
+		return []*string{sc.APINotes, sc.Description}
+	case "operator":
+		return []*string{sc.OperatorNotes, sc.Description}
+	default:
+		return []*string{sc.Description}
+	}
+}
+
+func docsGoals(entries []Entry, plans []*config.Plan) []*config.Goal {
+	wanted := map[string]struct{}{}
+	for _, e := range entries {
+		if e.Scenario == nil {
+			continue
+		}
+		for _, id := range e.Scenario.Contributes {
+			wanted[id] = struct{}{}
+		}
+	}
+	seen := map[string]*config.Goal{}
+	for _, p := range plans {
+		for id, g := range p.Goals {
+			if _, ok := wanted[id]; ok && !g.Deprecated {
+				seen[id] = g
+			}
+		}
+	}
+	out := make([]*config.Goal, 0, len(seen))
+	for _, g := range seen {
+		out = append(out, g)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Priority != out[j].Priority {
+			return out[i].Priority > out[j].Priority
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+func writeIndentedMarkdown(b *strings.Builder, text, indent string) {
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		fmt.Fprintf(b, "%s%s\n", indent, line)
+	}
+}
+
+func writeDocsMeta(b *strings.Builder, e Entry, profile docsProfile) {
+	sc := e.Scenario
+	if sc == nil {
+		return
+	}
+	var lines []string
+	if len(sc.Contributes) > 0 {
+		lines = append(lines, "contributes to: "+strings.Join(sc.Contributes, ", "))
+	}
+	if profile.includeLifecycle {
+		status := sc.ReviewStatus
+		if status == "" {
+			status = "draft"
+		}
+		lines = append(lines, fmt.Sprintf("status: %s, severity: %s", status, sc.Severity))
+	}
+	if profile.includeGraph {
+		if sc.Parent != nil {
+			lines = append(lines, "sub-spec of: "+*sc.Parent)
+		}
+		if len(sc.DependsOn) > 0 {
+			lines = append(lines, "depends on: "+strings.Join(sc.DependsOn, ", "))
+		}
+		if len(sc.Supersedes) > 0 {
+			lines = append(lines, "supersedes: "+strings.Join(sc.Supersedes, ", "))
+		}
+		if sc.ReplacedBy != nil {
+			lines = append(lines, "replaced by: "+*sc.ReplacedBy)
+		}
+		if sc.Deprecated && sc.DeprecatedReason != nil {
+			lines = append(lines, "deprecated: "+*sc.DeprecatedReason)
+		}
+	}
+	if profile.includeTags && len(sc.Tags) > 0 {
+		lines = append(lines, "tags: "+strings.Join(sc.Tags, ", "))
+	}
+	if len(lines) == 0 {
+		return
+	}
+	for _, line := range lines {
+		fmt.Fprintf(b, "- %s\n", line)
+	}
+	b.WriteString("\n")
+}
+
+func writeDocsBehavior(b *strings.Builder, e Entry) {
+	steps := docsStepNames(e.Test)
+	if len(steps) == 0 {
+		return
+	}
+	b.WriteString("#### Behavior\n\n")
+	for _, s := range steps {
+		fmt.Fprintf(b, "- %s\n", s)
+	}
+	b.WriteString("\n")
+}
+
+func docsStepNames(t *config.Test) []string {
+	if t == nil {
+		return nil
+	}
+	var out []string
+	for _, s := range t.Steps {
+		if s.Name != nil && *s.Name != "" {
+			out = append(out, *s.Name)
+		}
+	}
+	for _, s := range t.ParallelSteps {
+		if s.Name != nil && *s.Name != "" {
+			out = append(out, *s.Name)
+		}
+	}
+	return out
+}
+
+func writeDocsImplementation(b *strings.Builder, e Entry) {
+	expects := expectations(e.Test)
+	if len(expects) == 0 {
+		return
+	}
+	b.WriteString("#### Implementation\n\n")
+	for _, ex := range expects {
+		fmt.Fprintf(b, "- %s\n", ex)
+	}
+	b.WriteString("\n")
+}
+
+func writeDocsQuestions(b *strings.Builder, e Entry, profile docsProfile) {
+	if !profile.includeQuestions || e.Scenario == nil || len(e.Scenario.OpenQuestions) == 0 {
+		return
+	}
+	b.WriteString("#### Open questions\n\n")
+	for _, q := range e.Scenario.OpenQuestions {
+		fmt.Fprintf(b, "- %s\n", q)
+	}
+	b.WriteString("\n")
+}
+
+func writeDocsDecisions(b *strings.Builder, e Entry, profile docsProfile) {
+	if !profile.includeDecisions || e.Scenario == nil || len(e.Scenario.Decisions) == 0 {
+		return
+	}
+	decisions := append([]*config.Decision(nil), e.Scenario.Decisions...)
+	sort.Slice(decisions, func(i, j int) bool {
+		if decisions[i].Date != decisions[j].Date {
+			return decisions[i].Date > decisions[j].Date
+		}
+		return decisions[i].Summary < decisions[j].Summary
+	})
+	b.WriteString("#### Decisions\n\n")
+	for _, d := range decisions {
+		fmt.Fprintf(b, "- %s — %s\n", d.Date, d.Summary)
+	}
+	b.WriteString("\n")
+}
+
+// SpecImplementation is one row in the reverse implementation index:
+// a spec id and every active artefact that claims to implement it.
+type SpecImplementation struct {
+	SpecID       string
+	ScenarioName string
+	DeclaredIn   string
+	ReviewStatus string
+	Severity     string
+	Deprecated   bool
+	Refs         []ImplementationRef
+}
+
+// ImplementationRef is one implementation backlink. Kind is "test",
+// "code", or "doc"; test refs use Name + SourcePath, code/doc refs use
+// Target (Scenario.implementedAt).
+type ImplementationRef struct {
+	Kind       string
+	Name       string
+	SourcePath string
+	Target     string
+}
+
+// ImplementationIndex aggregates Scenario.id / Test.specRef in the
+// reverse direction: spec id -> active tests and code/doc pointers.
+func ImplementationIndex(plans []*config.Plan) []SpecImplementation {
+	b := newImplementationIndexBuilder()
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			b.addScenario(p.SourcePath, sc)
+		}
+		for name, t := range p.Tests {
+			b.addTest(p.SourcePath, name, t)
+		}
+	}
+	return b.build()
+}
+
+func implementationIndexFromEntries(entries []Entry) []SpecImplementation {
+	b := newImplementationIndexBuilder()
+	for _, e := range entries {
+		if e.Scenario != nil {
+			b.addScenario(e.SourcePath, e.Scenario)
+		}
+		b.addTest(e.SourcePath, e.Name, e.Test)
+	}
+	return b.build()
+}
+
+type implementationIndexBuilder struct {
+	byID map[string]*SpecImplementation
+	seen map[string]struct{}
+}
+
+func newImplementationIndexBuilder() *implementationIndexBuilder {
+	return &implementationIndexBuilder{
+		byID: map[string]*SpecImplementation{},
+		seen: map[string]struct{}{},
+	}
+}
+
+func (b *implementationIndexBuilder) ensure(id string) *SpecImplementation {
+	item, ok := b.byID[id]
+	if ok {
+		return item
+	}
+	item = &SpecImplementation{SpecID: id}
+	b.byID[id] = item
+	return item
+}
+
+func (b *implementationIndexBuilder) addScenario(sourcePath string, sc *config.Scenario) {
+	if sc == nil || sc.ID == nil {
+		return
+	}
+	item := b.ensure(*sc.ID)
+	if item.ScenarioName == "" {
+		item.ScenarioName = sc.Name
+		item.DeclaredIn = sourcePath
+		item.ReviewStatus = sc.ReviewStatus
+		item.Severity = sc.Severity
+		item.Deprecated = sc.Deprecated
+	}
+	if sc.ImplementedBy == "" || sc.ImplementedBy == "test" || sc.ImplementedAt == nil || *sc.ImplementedAt == "" {
+		return
+	}
+	b.addRef(*sc.ID, ImplementationRef{
+		Kind:   sc.ImplementedBy,
+		Target: *sc.ImplementedAt,
+	})
+}
+
+func (b *implementationIndexBuilder) addTest(sourcePath, name string, t *config.Test) {
+	if t == nil || isPending(t) {
+		return
+	}
+	for _, id := range t.SpecRef {
+		b.addRef(id, ImplementationRef{
+			Kind:       "test",
+			Name:       name,
+			SourcePath: sourcePath,
+		})
+	}
+}
+
+func (b *implementationIndexBuilder) addRef(id string, ref ImplementationRef) {
+	if id == "" || ref.Kind == "" {
+		return
+	}
+	b.ensure(id)
+	key := strings.Join([]string{id, ref.Kind, ref.Name, ref.SourcePath, ref.Target}, "\x00")
+	if _, ok := b.seen[key]; ok {
+		return
+	}
+	b.seen[key] = struct{}{}
+	b.byID[id].Refs = append(b.byID[id].Refs, ref)
+}
+
+func (b *implementationIndexBuilder) build() []SpecImplementation {
+	out := make([]SpecImplementation, 0, len(b.byID))
+	for _, item := range b.byID {
+		sort.Slice(item.Refs, func(i, j int) bool {
+			a, z := item.Refs[i], item.Refs[j]
+			if implementationKindRank(a.Kind) != implementationKindRank(z.Kind) {
+				return implementationKindRank(a.Kind) < implementationKindRank(z.Kind)
+			}
+			if a.SourcePath != z.SourcePath {
+				return a.SourcePath < z.SourcePath
+			}
+			if a.Name != z.Name {
+				return a.Name < z.Name
+			}
+			return a.Target < z.Target
+		})
+		out = append(out, *item)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SpecID < out[j].SpecID })
+	return out
+}
+
+func implementationKindRank(kind string) int {
+	switch kind {
+	case "test":
+		return 0
+	case "code":
+		return 1
+	case "doc":
+		return 2
+	default:
+		return 3
+	}
+}
+
+// FormatImplementationIndex renders reverse links from spec ids to
+// their active implementing tests and code/doc pointers.
+func FormatImplementationIndex(index []SpecImplementation, root string) string {
+	return formatImplementationIndex(index, root, "#")
+}
+
+func formatImplementationIndex(index []SpecImplementation, root, heading string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s Spec implementation index\n\n", heading)
+	if len(index) == 0 {
+		b.WriteString("_No spec implementation links found._\n")
+		return b.String()
+	}
+	for _, item := range index {
+		fmt.Fprintf(&b, "- **%s**", item.SpecID)
+		if item.ScenarioName != "" {
+			fmt.Fprintf(&b, " — %s", item.ScenarioName)
+		}
+		if item.Deprecated {
+			b.WriteString(" ⊘ deprecated")
+		}
+		b.WriteString("\n")
+		if len(item.Refs) == 0 {
+			b.WriteString("  - _No active implementation._\n")
+			continue
+		}
+		for _, ref := range item.Refs {
+			switch ref.Kind {
+			case "test":
+				fmt.Fprintf(&b, "  - test: `%s` — %s\n",
+					displayPath(ref.SourcePath, root), ref.Name)
+			case "code", "doc":
+				fmt.Fprintf(&b, "  - %s: `%s`\n", ref.Kind, ref.Target)
+			default:
+				fmt.Fprintf(&b, "  - %s: `%s`\n", ref.Kind, ref.Target)
+			}
+		}
+	}
+	return b.String()
+}
+
+func displayPath(path, root string) string {
+	if path == "" {
+		return ""
+	}
+	out := path
+	if root != "" {
+		if rel, err := filepath.Rel(root, path); err == nil {
+			out = rel
+		}
+	}
+	return filepath.ToSlash(out)
 }
 
 func collectOpenQuestions(entries []Entry) []string {
@@ -244,7 +826,7 @@ type SpecIssue struct {
 // CheckUnimplemented walks every test in every plan and returns a
 // per-spec-id summary. A spec is "unimplemented" when no active test
 // references it via `specRef`; that is the condition
-// `pkspec spec --check` reports. When Plan.Scenarios is populated (the
+// `pkspec check` reports. When Plan.Scenarios is populated (the
 // plan came from Spec.pkl), declarations are read from there with
 // `draft` / `deprecated` ignored. Otherwise the legacy heuristic
 // applies: a pending test with `specRef` counts as the declaration.
@@ -495,60 +1077,132 @@ func FormatCoverage(rep CoverageReport) string {
 
 // Graph produces a graphviz `dot` document covering every Scenario
 // with an id. Edges: dependsOn (solid arrow), supersedes (dashed),
-// replacedBy (dotted). Node colour encodes severity; deprecated
-// nodes use a dashed border.
-func Graph(plans []*config.Plan) string {
+// replacedBy (dotted), and implementation backlinks from active tests
+// / code / doc artefacts to the spec id they verify. Node colour
+// encodes severity; deprecated nodes use a dashed border.
+func Graph(plans []*config.Plan, root string) string {
 	var b strings.Builder
 	b.WriteString("digraph specs {\n")
 	b.WriteString("  rankdir=LR;\n")
 	b.WriteString("  node [shape=box, style=rounded];\n\n")
 
-	for _, p := range plans {
-		for _, sc := range p.Scenarios {
-			if sc.ID == nil {
-				continue
-			}
-			color := "black"
-			switch sc.Severity {
-			case "critical":
-				color = "red"
-			case "major":
-				color = "orange"
-			case "minor":
-				color = "gray"
-			}
-			style := "rounded"
-			if sc.Deprecated {
-				style = "rounded,dashed"
-			}
-			label := *sc.ID + "\\n" + sc.Name
-			fmt.Fprintf(&b, "  %q [label=%q, color=%s, style=%q];\n",
-				*sc.ID, label, color, style)
+	scenarios := graphScenarios(plans)
+	for _, sc := range scenarios {
+		color := "black"
+		switch sc.Severity {
+		case "critical":
+			color = "red"
+		case "major":
+			color = "orange"
+		case "minor":
+			color = "gray"
 		}
+		style := "rounded"
+		if sc.Deprecated {
+			style = "rounded,dashed"
+		}
+		label := *sc.ID + "\\n" + sc.Name
+		fmt.Fprintf(&b, "  %q [label=%q, color=%s, style=%q];\n",
+			*sc.ID, label, color, style)
 	}
+
+	impls := ImplementationIndex(plans)
+	writeImplementationGraphNodes(&b, impls, root)
 	b.WriteString("\n")
 
-	for _, p := range plans {
-		for _, sc := range p.Scenarios {
-			if sc.ID == nil {
-				continue
-			}
-			for _, dep := range sc.DependsOn {
-				fmt.Fprintf(&b, "  %q -> %q;\n", *sc.ID, dep)
-			}
-			for _, sup := range sc.Supersedes {
-				fmt.Fprintf(&b, "  %q -> %q [style=dashed, label=%q];\n",
-					*sc.ID, sup, "supersedes")
-			}
-			if sc.ReplacedBy != nil {
-				fmt.Fprintf(&b, "  %q -> %q [style=dotted, label=%q];\n",
-					*sc.ID, *sc.ReplacedBy, "replaced by")
-			}
+	for _, sc := range scenarios {
+		for _, dep := range sc.DependsOn {
+			fmt.Fprintf(&b, "  %q -> %q;\n", *sc.ID, dep)
+		}
+		for _, sup := range sc.Supersedes {
+			fmt.Fprintf(&b, "  %q -> %q [style=dashed, label=%q];\n",
+				*sc.ID, sup, "supersedes")
+		}
+		if sc.ReplacedBy != nil {
+			fmt.Fprintf(&b, "  %q -> %q [style=dotted, label=%q];\n",
+				*sc.ID, *sc.ReplacedBy, "replaced by")
 		}
 	}
+	writeImplementationGraphEdges(&b, impls)
 
 	b.WriteString("}\n")
 	return b.String()
+}
+
+func graphScenarios(plans []*config.Plan) []*config.Scenario {
+	var out []*config.Scenario
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID == nil {
+				continue
+			}
+			out = append(out, sc)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if *out[i].ID != *out[j].ID {
+			return *out[i].ID < *out[j].ID
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func writeImplementationGraphNodes(b *strings.Builder, impls []SpecImplementation, root string) {
+	refsByID := map[string]ImplementationRef{}
+	for _, item := range impls {
+		for _, ref := range item.Refs {
+			refsByID[implementationGraphNodeID(ref)] = ref
+		}
+	}
+	ids := make([]string, 0, len(refsByID))
+	for id := range refsByID {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		ref := refsByID[id]
+		fmt.Fprintf(b, "  %q [label=%q, shape=%s, color=blue, style=filled, fillcolor=%q];\n",
+			id, implementationGraphLabel(ref, root), implementationGraphShape(ref.Kind), "#eef6ff")
+	}
+}
+
+func writeImplementationGraphEdges(b *strings.Builder, impls []SpecImplementation) {
+	for _, item := range impls {
+		for _, ref := range item.Refs {
+			label := "implements"
+			if ref.Kind == "test" {
+				label = "verifies"
+			}
+			fmt.Fprintf(b, "  %q -> %q [color=blue, label=%q];\n",
+				implementationGraphNodeID(ref), item.SpecID, label)
+		}
+	}
+}
+
+func implementationGraphNodeID(ref ImplementationRef) string {
+	if ref.Kind == "test" {
+		return "impl:test:" + ref.SourcePath + ":" + ref.Name
+	}
+	return "impl:" + ref.Kind + ":" + ref.Target
+}
+
+func implementationGraphLabel(ref ImplementationRef, root string) string {
+	if ref.Kind == "test" {
+		return "test\n" + displayPath(ref.SourcePath, root) + "\n" + ref.Name
+	}
+	return ref.Kind + "\n" + ref.Target
+}
+
+func implementationGraphShape(kind string) string {
+	switch kind {
+	case "test":
+		return "note"
+	case "code", "doc":
+		return "component"
+	default:
+		return "box"
+	}
 }
 
 // DecisionEntry is one row in the project-wide decision log,
@@ -563,7 +1217,7 @@ type DecisionEntry struct {
 }
 
 // DecisionLog flattens every Scenario.Decisions into a single
-// newest-first slice. Useful for `pkspec spec --decisions`.
+// newest-first slice. Useful for `pkspec decisions`.
 func DecisionLog(plans []*config.Plan) []DecisionEntry {
 	var out []DecisionEntry
 	for _, p := range plans {
@@ -807,7 +1461,7 @@ func severityRank(s string) int {
 	return 0
 }
 
-// OrphanTest is one entry in the `pkspec spec --orphans` listing:
+// OrphanTest is one entry in the `pkspec orphans` listing:
 // an active Test (non-pending) that does not declare any specRef.
 // For projects transitioning to spec-driven, this is the backlog
 // of "tests that exist but verify nothing nameable."
@@ -870,7 +1524,7 @@ func FormatOrphans(orphans []OrphanTest) string {
 	return b.String()
 }
 
-// ImplIssue is one row of `pkspec spec --check --strict` output:
+// ImplIssue is one row of `pkspec check --strict` output:
 // a Scenario whose `implementedAt` path can't be resolved on disk.
 type ImplIssue struct {
 	SpecID string

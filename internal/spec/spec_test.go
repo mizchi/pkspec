@@ -149,3 +149,405 @@ func TestDeclaredSpecCountFromScenariosSkipsDraftAndDeprecated(t *testing.T) {
 		t.Fatalf("DeclaredSpecCount() = %d, want 2", got)
 	}
 }
+
+func TestImplementationIndexAggregatesBacklinksBySpecID(t *testing.T) {
+	specID := "auth.login"
+	codeID := "auth.password-policy"
+	missingID := "auth.audit-log"
+	unknownID := "auth.unknown"
+	codePtr := "internal/auth/policy.go:Validate"
+	cmd := "true"
+	plans := []*config.Plan{
+		{
+			SourcePath: "/repo/specs/Spec.pkl",
+			Scenarios: map[string]*config.Scenario{
+				"login works": {
+					Name:         "login works",
+					ID:           &specID,
+					ReviewStatus: "approved",
+				},
+				"password policy": {
+					Name:          "password policy",
+					ID:            &codeID,
+					ReviewStatus:  "approved",
+					ImplementedBy: "code",
+					ImplementedAt: &codePtr,
+				},
+				"audit log": {
+					Name:         "audit log",
+					ID:           &missingID,
+					ReviewStatus: "approved",
+				},
+			},
+		},
+		{
+			SourcePath: "/repo/tests/Test.pkl",
+			Tests: map[string]*config.Test{
+				"login_happy_path": {
+					Cmd:     &cmd,
+					SpecRef: []string{specID, unknownID},
+				},
+				"login_pending_placeholder": {
+					Pending: true,
+					SpecRef: []string{specID},
+				},
+			},
+		},
+	}
+
+	index := ImplementationIndex(plans)
+	if len(index) != 4 {
+		t.Fatalf("ImplementationIndex() length = %d, want 4: %#v", len(index), index)
+	}
+	codeEntry := implementationByID(t, index, codeID)
+	if codeEntry.ScenarioName != "password policy" {
+		t.Fatalf("code entry = %#v, want password policy scenario", codeEntry)
+	}
+	if len(codeEntry.Refs) != 1 || codeEntry.Refs[0].Kind != "code" || codeEntry.Refs[0].Target != codePtr {
+		t.Fatalf("code-backed spec refs = %#v, want code pointer", codeEntry.Refs)
+	}
+	missingEntry := implementationByID(t, index, missingID)
+	if len(missingEntry.Refs) != 0 {
+		t.Fatalf("missing implementation entry = %#v, want declared spec with no refs", missingEntry)
+	}
+	testEntry := implementationByID(t, index, specID)
+	if len(testEntry.Refs) != 1 {
+		t.Fatalf("test-backed spec entry = %#v, want one active test ref", testEntry)
+	}
+	if ref := testEntry.Refs[0]; ref.Kind != "test" || ref.Name != "login_happy_path" || ref.SourcePath != "/repo/tests/Test.pkl" {
+		t.Fatalf("test ref = %#v, want active test only", ref)
+	}
+	unknownEntry := implementationByID(t, index, unknownID)
+	if unknownEntry.ScenarioName != "" || len(unknownEntry.Refs) != 1 {
+		t.Fatalf("unknown referenced spec entry = %#v, want test-only backlink", unknownEntry)
+	}
+}
+
+func implementationByID(t *testing.T, index []SpecImplementation, id string) SpecImplementation {
+	t.Helper()
+	for _, item := range index {
+		if item.SpecID == id {
+			return item
+		}
+	}
+	t.Fatalf("ImplementationIndex() missing %s: %#v", id, index)
+	return SpecImplementation{}
+}
+
+func TestRenderIncludesSpecImplementationIndex(t *testing.T) {
+	specID := "auth.login"
+	codeID := "auth.password-policy"
+	codePtr := "internal/auth/policy.go:Validate"
+	cmd := "true"
+	plans := []*config.Plan{
+		{
+			SourcePath: "/repo/specs/Spec.pkl",
+			Tests: map[string]*config.Test{
+				"login works": {
+					Tags:    []string{"spec"},
+					SpecRef: []string{specID},
+				},
+				"password policy": {
+					Tags:    []string{"spec"},
+					SpecRef: []string{codeID},
+				},
+			},
+			Scenarios: map[string]*config.Scenario{
+				"login works": {
+					Name:         "login works",
+					ID:           &specID,
+					ReviewStatus: "approved",
+				},
+				"password policy": {
+					Name:          "password policy",
+					ID:            &codeID,
+					ReviewStatus:  "approved",
+					ImplementedBy: "code",
+					ImplementedAt: &codePtr,
+				},
+			},
+		},
+		{
+			SourcePath: "/repo/tests/Test.pkl",
+			Tests: map[string]*config.Test{
+				"login_happy_path": {
+					Cmd:     &cmd,
+					SpecRef: []string{specID},
+				},
+			},
+		},
+	}
+
+	out := Render(Collect(plans, nil), "/repo")
+	for _, want := range []string{
+		"## Spec implementation index",
+		"- **auth.login** — login works",
+		"  - test: `tests/Test.pkl` — login_happy_path",
+		"- **auth.password-policy** — password policy",
+		"  - code: `internal/auth/policy.go:Validate`",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rendered SPEC missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
+func TestCollectDocsFiltersAudienceAndTags(t *testing.T) {
+	cmd := "true"
+	plan := &config.Plan{
+		SourcePath: "/repo/specs/Spec.pkl",
+		Tests: map[string]*config.Test{
+			"pm upload": {
+				Tags: []string{"spec", "upload"},
+				Cmd:  &cmd,
+			},
+			"pm billing": {
+				Tags: []string{"spec", "audience:pm", "billing"},
+				Cmd:  &cmd,
+			},
+			"user upload": {
+				Tags: []string{"spec", "audience:end-user", "upload"},
+				Cmd:  &cmd,
+			},
+		},
+		Scenarios: map[string]*config.Scenario{
+			"pm upload": {
+				Name:     "pm upload",
+				Audience: []string{"pm"},
+				Tags:     []string{"spec", "upload"},
+			},
+		},
+	}
+
+	entries := CollectDocs([]*config.Plan{plan}, DocsOptions{
+		Audience: "pm",
+		Tags:     []string{"upload"},
+	})
+	if len(entries) != 1 || entries[0].Name != "pm upload" {
+		t.Fatalf("CollectDocs() = %#v, want only pm upload", entries)
+	}
+}
+
+func TestRenderDocsHidesImplementationDetailsByDefault(t *testing.T) {
+	specID := "upload.valid-media"
+	goalID := "goal.upload"
+	desc := "Users can upload a supported media file."
+	pmNotes := "PMs can ship the core upload path with image and video support."
+	pmQuestion := "Should HEIC be included in launch scope?"
+	cmd := "curl -X POST https://example.test/upload"
+	stepName := "When the user uploads a valid media file"
+	plans := []*config.Plan{
+		{
+			SourcePath: "/repo/specs/Spec.pkl",
+			Goals: map[string]*config.Goal{
+				goalID: {
+					ID:           goalID,
+					Name:         "users can upload media",
+					Description:  strPtr("Uploads are available from the product UI."),
+					Priority:     90,
+					ReviewStatus: "approved",
+					Rationale:    strPtr("Upload is the core creation path."),
+				},
+			},
+			Tests: map[string]*config.Test{
+				"uploads valid media": {
+					Description: &desc,
+					Tags:        []string{"spec", "audience:pm", "upload"},
+					SpecRef:     []string{specID},
+					Steps: []*config.Step{
+						{Name: &stepName, Cmd: &cmd},
+					},
+				},
+			},
+			Scenarios: map[string]*config.Scenario{
+				"uploads valid media": {
+					Name:          "uploads valid media",
+					ID:            &specID,
+					Description:   &desc,
+					PMNotes:       &pmNotes,
+					Tags:          []string{"spec", "audience:pm", "upload"},
+					Audience:      []string{"pm"},
+					Contributes:   []string{goalID},
+					ReviewStatus:  "review",
+					Severity:      "major",
+					OpenQuestions: []string{pmQuestion},
+					Decisions: []*config.Decision{
+						{Date: "2026-05-14", Summary: "Start with images and video"},
+					},
+				},
+			},
+		},
+	}
+
+	entries := CollectDocs(plans, DocsOptions{Audience: "pm", HideImplementation: true})
+	out := RenderDocs(entries, plans, DocsOptions{Audience: "pm", HideImplementation: true})
+	for _, want := range []string{
+		"# PM docs",
+		"## Goals",
+		"users can upload media",
+		"## Scenarios",
+		"### uploads valid media",
+		pmNotes,
+		"- contributes to: goal.upload",
+		"- status: review",
+		"#### Behavior",
+		"- When the user uploads a valid media file",
+		"#### Open questions",
+		pmQuestion,
+		"#### Decisions",
+		"2026-05-14 — Start with images and video",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("docs missing %q\n---\n%s", want, out)
+		}
+	}
+	for _, hidden := range []string{"curl -X POST", "body:", "Implementation"} {
+		if strings.Contains(out, hidden) {
+			t.Errorf("docs leaked implementation detail %q\n---\n%s", hidden, out)
+		}
+	}
+
+	withImpl := RenderDocs(entries, plans, DocsOptions{Audience: "pm", HideImplementation: false})
+	for _, want := range []string{
+		"#### Implementation",
+		"step 1 (shell) When the user uploads a valid media file `curl -X POST https://example.test/upload`",
+	} {
+		if !strings.Contains(withImpl, want) {
+			t.Errorf("docs with implementation missing %q\n---\n%s", want, withImpl)
+		}
+	}
+}
+
+func TestGraphIncludesImplementationBacklinks(t *testing.T) {
+	specID := "auth.login"
+	codeID := "auth.password-policy"
+	missingID := "auth.audit-log"
+	codePtr := "internal/auth/policy.go:Validate"
+	cmd := "true"
+	plans := []*config.Plan{
+		{
+			SourcePath: "/repo/specs/Spec.pkl",
+			Scenarios: map[string]*config.Scenario{
+				"login works": {
+					Name:         "login works",
+					ID:           &specID,
+					Severity:     "critical",
+					ReviewStatus: "approved",
+				},
+				"password policy": {
+					Name:          "password policy",
+					ID:            &codeID,
+					ReviewStatus:  "approved",
+					ImplementedBy: "code",
+					ImplementedAt: &codePtr,
+				},
+				"audit log": {
+					Name:         "audit log",
+					ID:           &missingID,
+					ReviewStatus: "approved",
+				},
+			},
+		},
+		{
+			SourcePath: "/repo/tests/Test.pkl",
+			Tests: map[string]*config.Test{
+				"login_happy_path": {
+					Cmd:     &cmd,
+					SpecRef: []string{specID},
+				},
+				"login_pending_placeholder": {
+					Pending: true,
+					SpecRef: []string{specID},
+				},
+			},
+		},
+	}
+
+	out := Graph(plans, "/repo")
+	for _, want := range []string{
+		`"impl:test:/repo/tests/Test.pkl:login_happy_path" [label="test\n` + `tests/Test.pkl\nlogin_happy_path", shape=note, color=blue, style=filled, fillcolor="#eef6ff"];`,
+		`"impl:test:/repo/tests/Test.pkl:login_happy_path" -> "auth.login" [color=blue, label="verifies"];`,
+		`"impl:code:internal/auth/policy.go:Validate" [label="code\ninternal/auth/policy.go:Validate", shape=component, color=blue, style=filled, fillcolor="#eef6ff"];`,
+		`"impl:code:internal/auth/policy.go:Validate" -> "auth.password-policy" [color=blue, label="implements"];`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("graph missing %q\n---\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "login_pending_placeholder") {
+		t.Fatalf("pending test should not appear as an implementation node:\n%s", out)
+	}
+}
+
+func TestLintReportsDeadAndDeprecatedSpecRefs(t *testing.T) {
+	activeID := "auth.login"
+	deprecatedID := "auth.old-login"
+	deadID := "auth.typo"
+	cmd := "true"
+	plans := []*config.Plan{
+		{
+			SourcePath: "/repo/specs/Spec.pkl",
+			Scenarios: map[string]*config.Scenario{
+				"login works": {
+					Name:         "login works",
+					ID:           &activeID,
+					ReviewStatus: "approved",
+				},
+				"old login": {
+					Name:         "old login",
+					ID:           &deprecatedID,
+					ReviewStatus: "approved",
+					Deprecated:   true,
+					ReplacedBy:   &activeID,
+				},
+			},
+		},
+		{
+			SourcePath: "/repo/tests/Test.pkl",
+			Tests: map[string]*config.Test{
+				"active_ref": {
+					Cmd:     &cmd,
+					SpecRef: []string{activeID},
+				},
+				"dead_ref": {
+					Cmd:     &cmd,
+					SpecRef: []string{deadID},
+				},
+				"deprecated_ref": {
+					Cmd:     &cmd,
+					SpecRef: []string{deprecatedID},
+				},
+				"pending_dead_ref": {
+					Pending: true,
+					SpecRef: []string{deadID},
+				},
+			},
+		},
+	}
+
+	issues := Lint(plans)
+	dead := lintIssueByRuleSubject(t, issues, "lint.dead-specRef", "Test.pkl:dead_ref")
+	if dead.Level != LintError || !strings.Contains(dead.Message, deadID) {
+		t.Fatalf("dead specRef issue = %#v, want error mentioning %s", dead, deadID)
+	}
+	deprecated := lintIssueByRuleSubject(t, issues, "lint.deprecated-specRef", "Test.pkl:deprecated_ref")
+	if deprecated.Level != LintWarn || !strings.Contains(deprecated.Message, deprecatedID) || !strings.Contains(deprecated.Fix, activeID) {
+		t.Fatalf("deprecated specRef issue = %#v, want warning with replacement hint", deprecated)
+	}
+	for _, iss := range issues {
+		if iss.Subject == "Test.pkl:active_ref" || iss.Subject == "Test.pkl:pending_dead_ref" {
+			t.Fatalf("unexpected issue for %s: %#v", iss.Subject, iss)
+		}
+	}
+}
+
+func lintIssueByRuleSubject(t *testing.T, issues []LintIssue, rule, subject string) LintIssue {
+	t.Helper()
+	for _, iss := range issues {
+		if iss.Rule == rule && iss.Subject == subject {
+			return iss
+		}
+	}
+	t.Fatalf("missing lint issue %s %s in %#v", rule, subject, issues)
+	return LintIssue{}
+}

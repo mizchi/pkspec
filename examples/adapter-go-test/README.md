@@ -1,7 +1,7 @@
 # adapter-go-test
 
-Pkl-only `go test` adapter configuration. It models `go test` as a
-generic adapter instead of a hard-coded Go-side runner.
+`go test` adapter configuration. It models `go test` as a generic
+adapter selected by Pkl instead of a Go-side registry.
 
 Validate the DSL shape:
 

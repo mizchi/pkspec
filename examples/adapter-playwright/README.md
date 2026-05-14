@@ -1,8 +1,9 @@
 # adapter-playwright
 
-Pkl-only Playwright adapter configuration with explicit pkspec-owned
-case registration. A future adapter runner can turn each `AdapterCase`
-into a generated Playwright `test(...)` while preserving `specRef`.
+Playwright adapter configuration with explicit pkspec-owned case
+registration. The suite uses `pkspec-adapter-playwright`, so pkspec
+can preserve `specRef` while Playwright owns fixtures, workers, and
+reporting.
 
 Validate the DSL shape:
 

@@ -51,13 +51,29 @@ local test: Task = new {
 
 local build: Task = new {
   name = "build"
-  description = "Build the pkspec binary"
-  cmd = "go build -trimpath -ldflags \"-s -w -X main.version=\(releaseVersion)\" -o ./bin/pkspec ./cmd/pkspec"
+  description = "Build the pkspec binaries"
+  cmd = """
+    set -euo pipefail
+    mkdir -p ./bin
+    go build -trimpath -ldflags "-s -w -X main.version=\(releaseVersion)" -o ./bin/pkspec ./cmd/pkspec
+    go build -trimpath -o ./bin/pkspec-adapter-vitest ./cmd/pkspec-adapter-vitest
+    go build -trimpath -o ./bin/pkspec-adapter-playwright ./cmd/pkspec-adapter-playwright
+    go build -trimpath -o ./bin/pkspec-adapter-node-test ./cmd/pkspec-adapter-node-test
+    go build -trimpath -o ./bin/pkspec-adapter-go-test ./cmd/pkspec-adapter-go-test
+    go build -trimpath -o ./bin/pkspec-adapter-moon-test ./cmd/pkspec-adapter-moon-test
+    """
   inputs {
     ...goSources
     ...schemaSources
   }
-  outputs { "bin/pkspec" }
+  outputs {
+    "bin/pkspec"
+    "bin/pkspec-adapter-vitest"
+    "bin/pkspec-adapter-playwright"
+    "bin/pkspec-adapter-node-test"
+    "bin/pkspec-adapter-go-test"
+    "bin/pkspec-adapter-moon-test"
+  }
 }
 
 local smoke: Task = new {

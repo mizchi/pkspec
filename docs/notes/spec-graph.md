@@ -4,15 +4,20 @@ Phase 32 turns `Spec.pkl` into a small knowledge graph: every
 scenario is a node with edges (`dependsOn`, `supersedes`,
 `replacedBy`), a lifecycle (`reviewStatus` × `deprecated`), a
 severity classification, an append-only decision log, and a set of
-open questions. `pkspec spec` grows four modes that read the graph
+open questions. `pkspec spec` has read-only modes that read the graph
 without running anything:
 
 ```
-pkspec spec MOD...                  default Markdown render
-pkspec spec --coverage MOD...       declared vs implemented + breakdown
-pkspec spec --graph MOD...          graphviz dot (pipe to `dot -Tsvg ...`)
-pkspec spec --decisions MOD...      newest-first Markdown decision log
-pkspec spec --check MOD...          CI gate: exits 1 on unimplemented
+pkspec spec MOD...                 default Markdown render
+pkspec coverage MOD...             declared vs implemented + breakdown
+pkspec graph MOD...                graphviz dot incl. implementation links
+pkspec decisions MOD...            newest-first Markdown decision log
+pkspec goals MOD...                Goals + contributing-spec coverage
+pkspec next MOD...                 ranked unimplemented specs
+pkspec implementations MOD...      spec id -> implementation backlinks
+pkspec orphans MOD...              active tests with no specRef
+pkspec check MOD...                CI gate: exits 1 on unimplemented
+pkspec docs --audience pm MOD...   audience-specific Markdown projection
 ```
 
 ## Schema
@@ -56,16 +61,16 @@ prelude: Listing<SpecStep> = new {}
 
 ## Lifecycle semantics
 
-| state                    | `--check` | `--coverage` | `--graph` | `--decisions` |
-| ------------------------ | --------- | ------------ | --------- | ------------- |
-| draft                    | skip      | include      | node      | include       |
-| review                   | fail      | include      | node      | include       |
-| approved (active)        | fail      | include      | node      | include       |
-| approved + deprecated    | skip      | exclude      | dashed    | include       |
+| state                    | `check` | `coverage` | `graph` | `decisions` |
+| ------------------------ | ------- | ---------- | ------- | ----------- |
+| draft                    | skip    | include    | node    | include     |
+| review                   | fail    | include    | node    | include     |
+| approved (active)        | fail    | include    | node    | include     |
+| approved + deprecated    | skip    | exclude    | dashed  | include     |
 
 - **`draft`** = sketched but not signed-off. CI shouldn't fail on
   draft specs being unimplemented; they're work-in-progress.
-- **`review`** = under stakeholder review. `--check` will fail on
+- **`review`** = under stakeholder review. `pkspec check` will fail on
   these, signalling "we agreed this needs an impl, the impl is
   missing." Use it as the gate that says "the spec is locked enough
   to require a test."
@@ -77,7 +82,9 @@ prelude: Listing<SpecStep> = new {}
 ## Knowledge-graph edges
 
 - **`dependsOn`** — "if X breaks, Y also fails." Render
-  `pkspec spec --graph | dot -Tsvg` to see the impact-analysis graph.
+  `pkspec graph | dot -Tsvg` to see the impact-analysis graph.
+  The graph also includes blue implementation nodes derived from
+  active `Test.specRef` entries or code/doc `implementedAt` pointers.
 - **`supersedes`** — "this spec replaces these older ids." The
   older specs should be `deprecated = true` with `replacedBy`
   pointing back. `pkspec spec` cross-renders both directions.
@@ -104,7 +111,7 @@ new Scenario {
 ## Decision log
 
 Append-only convention: don't edit past entries; add a new one.
-Each scenario carries its own decision list; `pkspec spec --decisions`
+Each scenario carries its own decision list; `pkspec decisions`
 flattens them across the project and sorts newest-first.
 
 ```pkl
@@ -154,24 +161,29 @@ in-progress spec into "implemented."
 
 `Test.pkl` in a sibling module references scenarios by id via the
 existing `Test.specRef` (Phase 31). The cross-reference is what
-makes `--check` and `--coverage` work — declared (in `Spec.pkl`)
+makes `pkspec check` and `pkspec coverage` work — declared (in `Spec.pkl`)
 vs implemented (in `Test.pkl` or anywhere active with matching
 specRef).
 
 A scenario with `id` set auto-populates `Test.specRef = { id }`,
 so an unimplemented scenario "verifies" its own id from the pending
 side. An active Test in `Test.pkl` then takes over the
-implementation marker.
+implementation marker. The default `pkspec spec` Markdown now
+collects the reverse view as a **Spec implementation index**:
+each spec id lists active Test implementers and any code/doc
+`implementedAt` pointer.
 
 ## CI integration
 
 Three gates worth running on every PR:
 
 ```yaml
-- run: pkspec spec --check specs/**/*.pkl tests/**/*.pkl    # gate: no missing impls
-- run: pkspec spec --coverage specs/**/*.pkl tests/**/*.pkl  # info: trend
+- run: pkspec check specs/**/*.pkl tests/**/*.pkl            # gate: no missing impls
+- run: pkspec coverage specs/**/*.pkl tests/**/*.pkl         # info: trend
 - run: pkspec spec --output SPEC.md specs/**/*.pkl tests/**/*.pkl &&
        git diff --exit-code SPEC.md                       # gate: SPEC stays in sync
+- run: pkspec docs --audience pm --output docs/PRODUCT.md specs/**/*.pkl &&
+       git diff --exit-code docs/PRODUCT.md               # gate: PM docs stay in sync
 ```
 
 For the graph: render it as part of `docs/SPEC-graph.svg` in CI
@@ -211,7 +223,7 @@ new Scenario {
 ```
 
 The rendered SPEC.md shows `sub-spec of: AUTH-001` next to each
-child. `pkspec spec --check` treats parent and child independently —
+child. `pkspec check` treats parent and child independently —
 either could have its own implementing test.
 
 ### Goals — user-facing value statements
@@ -252,10 +264,10 @@ new Scenario {
 
 Two new spec modes use this edge:
 
-- **`pkspec spec --goals`** lists Goals sorted by priority desc, with
+- **`pkspec goals`** lists Goals sorted by priority desc, with
   each Goal's contributing-scenario coverage. Unimplemented
   scenarios appear first within each Goal.
-- **`pkspec spec --next`** ranks unimplemented (non-draft,
+- **`pkspec next`** ranks unimplemented (non-draft,
   non-deprecated) scenarios by their best Goal's priority, then by
   severity. The top entry is "what to work on next" — the spec
   that would advance the highest-value Goal.
@@ -265,11 +277,11 @@ it only for relative ordering. Convention: 0-100 with 50 = default
 importance.
 
 A scenario can `contributes` to multiple Goals — the runner uses
-the **maximum** Goal priority for ranking in `--next`.
+the **maximum** Goal priority for ranking in `pkspec next`.
 
 A Goal can be `deprecated = true` to retire it without deleting it;
-deprecated Goals are excluded from `--goals` but their contributing
-scenarios still appear in coverage / check / next.
+deprecated Goals are excluded from `pkspec goals` but their contributing
+scenarios still appear in `pkspec coverage`, `pkspec check`, and `pkspec next`.
 
 ## ID naming convention (phase 35)
 
@@ -308,15 +320,15 @@ The previous convention was uppercase + counter (`SIGNUP-003`,
 `KIND-001`). It still parses — the regex hasn't changed — but new
 authoring should prefer dot-paths.
 
-## `--check --strict` (phase 35)
+## `pkspec check --strict` (phase 35)
 
 When a Scenario sets `implementedBy = "code"` and
 `implementedAt = "path/to/file.go:Symbol"`, the path part is
 referenced text only — rename the file and the spec quietly rots.
-`pkspec spec --check --strict` adds a verification pass:
+`pkspec check --strict` adds a verification pass:
 
 ```sh
-pkspec spec --check --strict --discover
+pkspec check --strict --discover
 ```
 
 For every Scenario whose `implementedAt` is set, the file portion
@@ -358,9 +370,9 @@ new Scenario {
 }
 ```
 
-- **`implementedBy = "test"`** (default) — `--check` requires a
+- **`implementedBy = "test"`** (default) — `pkspec check` requires a
   Test.pkl with matching `specRef`.
-- **`implementedBy = "code"`** — `--check` accepts the scenario as
+- **`implementedBy = "code"`** — `pkspec check` accepts the scenario as
   implemented when `implementedAt` is non-null. The pointer is
   free-form text ("path/file.go:Symbol", "internal/spec/spec.go:Graph").
   The runner doesn't verify the file exists — reviewers do.
@@ -370,13 +382,14 @@ new Scenario {
 This dissolves the friction surfaced in phase 33.1 dogfood:
 pkspec's own functions (CORE-001, SPEC-002, SHARD-003, ...) had
 no Test.pkl to verify them and showed up as 18 unimplemented in
-`--check`. With `implementedBy = "code"` + a pointer, they're
+`pkspec check`. With `implementedBy = "code"` + a pointer, they're
 accounted for.
 
 ## Filters: `--goal` and `--severity` (phase 34)
 
-Every `pkspec spec` mode (`--check / --coverage / --graph / --decisions
-/ --goals / --next / --orphans`) accepts:
+Every review command (`pkspec check`, `pkspec coverage`, `pkspec graph`,
+`pkspec decisions`, `pkspec goals`, `pkspec next`,
+`pkspec implementations`, `pkspec orphans`, `pkspec lint`) accepts:
 
 - `--goal GOAL-XYZ` — restrict to scenarios contributing to one Goal
 - `--severity critical|major|minor` — restrict to one severity bucket
@@ -389,10 +402,24 @@ The retained scenario-id set is computed across all plans first,
 then applied to every plan's Tests — so a Spec.pkl module and its
 sibling Test.pkl modules stay coherent under the filter.
 
-## Orphan tests: `--orphans` (phase 34)
+## Implementation index: `pkspec implementations`
 
 ```sh
-pkspec spec --orphans --discover
+pkspec implementations --discover
+```
+
+Prints only the reverse implementation index that the default
+Markdown SPEC embeds and that `pkspec graph` visualizes as blue
+implementation nodes: each spec id points back to active tests,
+`implementedBy = "code"` pointers, and `implementedBy = "doc"`
+pointers. Specs with no active implementation stay visible as
+`_No active implementation._`, which makes the output suitable for
+review comments or project dashboards.
+
+## Orphan tests: `pkspec orphans` (phase 34)
+
+```sh
+pkspec orphans --discover
 ```
 
 Lists active (non-pending) Tests whose `specRef` is empty. These
@@ -404,7 +431,7 @@ backlog.
 ## Auto-discovery: `--discover` (phase 34)
 
 ```sh
-pkspec spec --check --discover
+pkspec check --discover
 ```
 
 Walks the current directory and adds every `Spec.pkl` / `Test.pkl`
@@ -416,14 +443,15 @@ modules live under `specs/foo.pkl`; per-test schemas live as
 
 ## Known limits / future work
 
-- **No per-id severity in `--check`.** Today `--check` fails on
+- **No per-id severity in `pkspec check`.** Today `pkspec check` fails on
   any non-draft non-deprecated unimplemented spec, regardless of
-  severity. Could be split into `--check --severity=critical` for
+  severity. Could be split into `pkspec check --severity=critical` for
   staged rollout.
-- **No reverse impact analysis.** `--graph` shows dependsOn /
-  supersedes / replacedBy, but doesn't surface "implementations
-  that became orphaned because their spec was deprecated." A
-  follow-up pass could compute orphaned-test detection.
+- **No graph diagnostics.** `pkspec graph` visualizes implementation
+  backlinks, but it does not fail on references to unknown or
+  deprecated specs. Use `pkspec lint` (with Spec and Test modules loaded,
+  or `--discover`), `pkspec orphans`, and `pkspec check` for machine-enforced
+  diagnostics.
 - **Decisions are scenario-scoped.** There's no project-level
   "design ADR" channel — every decision attaches to one scenario.
   In practice that's fine; cross-cutting decisions tend to live in

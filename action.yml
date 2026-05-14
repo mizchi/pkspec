@@ -149,7 +149,16 @@ runs:
         set -euo pipefail
         dir="${{ inputs.install-dir }}"
         mkdir -p "$dir"
-        GOBIN="$dir" go install "github.com/mizchi/pkspec/cmd/pkspec@${{ steps.resolve.outputs.version }}"
+        for pkg in \
+          cmd/pkspec \
+          cmd/pkspec-adapter-vitest \
+          cmd/pkspec-adapter-playwright \
+          cmd/pkspec-adapter-node-test \
+          cmd/pkspec-adapter-go-test \
+          cmd/pkspec-adapter-moon-test
+        do
+          GOBIN="$dir" go install "github.com/mizchi/pkspec/$pkg@${{ steps.resolve.outputs.version }}"
+        done
         echo "$dir" >> "$GITHUB_PATH"
 
     - name: Install Pkl CLI
@@ -169,6 +178,7 @@ runs:
         set -euo pipefail
         export PATH="${{ inputs.install-dir }}:$PATH"
         pkspec version
+        pkspec-adapter-go-test help >/dev/null
         if [ "${{ inputs.pkl-version }}" != "none" ]; then
           pkl --version
         fi

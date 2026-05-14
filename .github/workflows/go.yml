@@ -49,6 +49,7 @@ jobs:
 
       - name: go install smoke
         run: |
-          GOBIN="$RUNNER_TEMP/bin" go install ./cmd/pkspec
+          GOBIN="$RUNNER_TEMP/bin" go install ./cmd/...
           "$RUNNER_TEMP/bin/pkspec" version
+          "$RUNNER_TEMP/bin/pkspec-adapter-go-test" help >/dev/null
           "$RUNNER_TEMP/bin/pkspec" init --dir "$RUNNER_TEMP/schema"

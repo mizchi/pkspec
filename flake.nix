@@ -20,7 +20,14 @@
 
           vendorHash = "sha256-XE5jU3X1tDVPiPbq6/yHjDzlxKpi+U9LKEil7kk238I=";
 
-          subPackages = [ "cmd/pkspec" ];
+          subPackages = [
+            "cmd/pkspec"
+            "cmd/pkspec-adapter-vitest"
+            "cmd/pkspec-adapter-playwright"
+            "cmd/pkspec-adapter-node-test"
+            "cmd/pkspec-adapter-go-test"
+            "cmd/pkspec-adapter-moon-test"
+          ];
 
           ldflags = [
             "-s"
@@ -35,8 +42,10 @@
           nativeBuildInputs = [ pkgs.makeWrapper ];
           nativeCheckInputs = [ pklNative ];
           postInstall = ''
-            wrapProgram $out/bin/pkspec \
-              --prefix PATH : ${pkgs.lib.makeBinPath [ pklNative ]}
+            for bin in $out/bin/pkspec*; do
+              wrapProgram "$bin" \
+                --prefix PATH : ${pkgs.lib.makeBinPath [ pklNative ]}
+            done
           '';
 
           meta = with pkgs.lib; {

@@ -34,7 +34,7 @@ func countLintErrors(issues []spec.LintIssue) int {
 	return n
 }
 
-const scenarioTemplate = `// One Scenario inside a `+"`scenarios { ... }`"+` Listing.
+const scenarioTemplate = `// One Scenario inside a ` + "`scenarios { ... }`" + ` Listing.
 new {
   // Stable identifier — dot-path convention: <domain>.<feature>[.<aspect>]
   // e.g. "auth.login.happy-path", "billing.invoice.tax-calc"
@@ -46,7 +46,7 @@ new {
   // One-paragraph behavioural claim — what passes / fails this spec.
   description = "Replace with the user-visible behaviour this scenario asserts."
 
-  // Authoring lifecycle. Default "draft" so --check ignores
+  // Authoring lifecycle. Default "draft" so pkspec check ignores
   // half-baked entries.
   reviewStatus = "draft"
 
@@ -55,7 +55,7 @@ new {
   severity = "major"
 
   // Goal ids this scenario advances. At least one is recommended
-  // for critical specs — otherwise --next can't rank it.
+  // for critical specs — otherwise pkspec next can't rank it.
   contributes { }
 
   // Other Scenario.id values this spec assumes are working.
@@ -63,14 +63,19 @@ new {
 
   // Tag conventions: "spec" = high-level behaviour, "unit" = small
   // deterministic check, "regression" = pinned around a fixed bug.
-  tags { "spec" }
+  // Add audience:<name> tags when this should appear in
+  // pkspec docs --audience <name> projections.
+  tags { "spec"; "audience:pm" }
+  audience { "pm" }
+  pmNotes = "PM-facing launch/readiness notes."
+  userDescription = "Plain-language user-facing behaviour."
 
   // Empty body + tags { "spec" } = auto-pending. Add steps later
   // (or a sibling Test.pkl with specRef pointing at this id).
 }
 `
 
-const goalTemplate = `// One Goal inside a `+"`goals { ... }`"+` Listing.
+const goalTemplate = `// One Goal inside a ` + "`goals { ... }`" + ` Listing.
 new Goal {
   // Stable id — convention is "goal.<area>" or "goal.<area>.<aspect>".
   id = "goal.replace-with-area"
@@ -79,7 +84,7 @@ new Goal {
   name = "replace with one-line user-value statement"
 
   // Higher = more important. No fixed scale; conventional range 0-100,
-  // 50 = default importance. --next ranks by this.
+  // 50 = default importance. pkspec next ranks by this.
   priority = 50
 
   // Lifecycle: draft / review / approved. Same semantics as Scenario.
@@ -95,11 +100,12 @@ new Goal {
 
 const moduleTemplate = `// pkspec Spec module — minimum starting structure.
 //
-//   pkspec spec --check --discover            CI gate
-//   pkspec spec --next --discover             "what to work on next"
-//   pkspec spec --coverage --discover         per-severity / -status %
-//   pkspec spec --lint --discover             convention checks
-//   pkspec spec --orphans --discover          tests without specRef
+//   pkspec check --discover                   CI gate
+//   pkspec next --discover                    "what to work on next"
+//   pkspec coverage --discover                per-severity / -status %
+//   pkspec docs --audience pm --discover      PM-facing projection
+//   pkspec lint --discover                    convention checks
+//   pkspec orphans --discover                 tests without specRef
 //
 // See docs/notes/authoring-guide.md for full walkthrough.
 
@@ -119,7 +125,7 @@ goals {
 }
 
 // Optional: steps prepended to every scenario's executed body —
-// Cucumber's `+"`Background:`"+` equivalent.
+// Cucumber's ` + "`Background:`" + ` equivalent.
 //
 // prelude {
 //   new SpecStep {
@@ -133,7 +139,9 @@ scenarios {
     id = "example.replace-me"
     name = "example_first_scenario"
     description = "Replace with the behaviour this scenario asserts."
-    tags { "spec" }
+    tags { "spec"; "audience:pm" }
+    audience { "pm" }
+    pmNotes = "Replace with reader-facing notes for PM documentation."
     severity = "major"
     reviewStatus = "draft"
     contributes { "goal.example" }

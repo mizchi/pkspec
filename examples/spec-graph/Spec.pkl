@@ -7,7 +7,7 @@ feature = "user authentication"
 
 // User-facing Goals — pieces of value the system should deliver.
 // Each Scenario contributes to one or more Goals. Priority ranks
-// "which Goal matters most"; the runner uses it for --next.
+// "which Goal matters most"; the runner uses it for pkspec next.
 goals {
   new Goal {
     id = "GOAL-SECURE-AUTH"

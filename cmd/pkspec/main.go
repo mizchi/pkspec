@@ -62,6 +62,26 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return cmdAdapter(args[1:], stdout, stderr)
 	case "spec":
 		return cmdSpec(args[1:], stdout, stderr)
+	case "docs":
+		return cmdDocs(args[1:], stdout, stderr)
+	case "check":
+		return cmdSpecMode("check", args[1:], stdout, stderr)
+	case "coverage":
+		return cmdSpecMode("coverage", args[1:], stdout, stderr)
+	case "graph":
+		return cmdSpecMode("graph", args[1:], stdout, stderr)
+	case "decisions":
+		return cmdSpecMode("decisions", args[1:], stdout, stderr)
+	case "goals":
+		return cmdSpecMode("goals", args[1:], stdout, stderr)
+	case "next":
+		return cmdSpecMode("next", args[1:], stdout, stderr)
+	case "implementations":
+		return cmdSpecMode("implementations", args[1:], stdout, stderr)
+	case "orphans":
+		return cmdSpecMode("orphans", args[1:], stdout, stderr)
+	case "lint":
+		return cmdLint(args[1:], stdout, stderr)
 	case "timings":
 		return cmdTimings(args[1:], stdout, stderr)
 	case "--reader-helper":
@@ -105,9 +125,22 @@ commands:
                               Test.pkl modules (filesystem-hierarchical;
                               groups by source directory; --output to
                               write to a file instead of stdout).
-                              --check cross-references Scenario.id with
-                              Test.specRef and exits non-zero on any
-                              declared spec without an implementing test.
+  docs --audience X [opts] <path>...
+                              render audience-specific Markdown from specs,
+                              hiding runner implementation details by default.
+  check [opts] <path>...      cross-reference Scenario.id with Test.specRef
+                              and exit non-zero on missing implementations.
+  coverage [opts] <path>...   print declared-vs-implemented coverage.
+  graph [opts] <path>...      output graphviz dot with spec + implementation edges.
+  decisions [opts] <path>...  print newest-first Markdown decision log.
+  goals [opts] <path>...      print Goals with contributing-spec coverage.
+  next [opts] <path>...       rank unimplemented specs by Goal priority.
+  lint [opts] <path>...       run structural spec lint: broken graph refs,
+                              dead/deprecated Test.specRef links, missing
+                              descriptions, and similar authoring mistakes.
+  implementations [opts] <path>...
+                              list spec ids with active test/code/doc implementers.
+  orphans [opts] <path>...    list active tests with no specRef.
   timings -f Test.pkl [opts]  inspect .pkspec/timings.jsonl —
                               per-test median / p90 / latest outcome.
                               --env / --failing / --shard=K/N (preview)
@@ -188,6 +221,83 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("invoke pkl: %w", pklErr)
 	}
 	return nil
+}
+
+func cmdLint(args []string, stdout, stderr io.Writer) error {
+	return cmdSpecMode("lint", args, stdout, stderr)
+}
+
+func cmdSpecMode(mode string, args []string, stdout, stderr io.Writer) error {
+	if wantsHelp(args) {
+		usageSpecMode(stdout, mode)
+		return nil
+	}
+	specArgs := make([]string, 0, len(args)+1)
+	specArgs = append(specArgs, "--"+mode)
+	specArgs = append(specArgs, args...)
+	return cmdSpec(specArgs, stdout, stderr)
+}
+
+func wantsHelp(args []string) bool {
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			return true
+		}
+	}
+	return false
+}
+
+func usageSpecMode(w io.Writer, mode string) {
+	descriptions := map[string]string{
+		"check":           "verify every non-draft, non-deprecated Scenario.id has an implementation",
+		"coverage":        "print declared-vs-implemented coverage by severity and review status",
+		"graph":           "emit graphviz dot for spec edges and implementation backlinks",
+		"decisions":       "print the newest-first Scenario decision log",
+		"goals":           "list Goals with contributing-spec coverage",
+		"next":            "rank unimplemented specs by Goal priority and severity",
+		"implementations": "list each spec id with active test/code/doc implementers",
+		"orphans":         "list active tests with no specRef",
+		"lint":            "run structural lint for broken refs and authoring mistakes",
+		"spec":            "render Markdown SPEC.md",
+	}
+	desc := descriptions[mode]
+	if desc == "" {
+		desc = "run a spec review mode"
+	}
+	fmt.Fprintf(w, "pkspec %s — %s\n\n", mode, desc)
+	fmt.Fprintf(w, "usage:\n  pkspec %s [opts] <Spec.pkl|Test.pkl>...\n\n", mode)
+	fmt.Fprint(w, `common opts:
+  --discover              auto-discover Spec.pkl / Test.pkl / SPEC.pkl / specs/*.pkl
+  --root DIR              make source paths relative to DIR
+  --goal ID               limit to scenarios contributing to Goal id
+  --severity LEVEL        limit to critical / major / minor
+`)
+	switch mode {
+	case "check":
+		fmt.Fprint(w, "  --strict               also verify implementedAt file paths\n")
+	case "lint":
+		fmt.Fprint(w, "  --lint-disable IDS     comma-separated lint rule ids to suppress\n")
+	case "spec":
+		fmt.Fprint(w, "  --output PATH          write Markdown SPEC to PATH\n")
+		fmt.Fprint(w, "  --tag TAG              include tests whose tags contain TAG\n")
+	}
+}
+
+func usageDocs(w io.Writer) {
+	fmt.Fprint(w, `pkspec docs — render audience-specific Markdown from specs
+
+usage:
+  pkspec docs --audience NAME [opts] <Spec.pkl|Test.pkl>...
+
+opts:
+  --audience NAME          filter to Scenario.audience or audience:NAME tags
+  --tag TAG                require an additional tag (repeatable; OR within tags)
+  --output PATH            write Markdown docs to PATH
+  --hide-implementation    omit runner steps and implementation details (default true)
+  --discover               auto-discover Spec.pkl / Test.pkl / SPEC.pkl / specs/*.pkl
+  --goal ID                limit to scenarios contributing to Goal id
+  --severity LEVEL         limit to critical / major / minor
+`)
 }
 
 func cmdExec(args []string, stdout, stderr io.Writer) error {
@@ -336,6 +446,87 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
+func cmdDocs(args []string, stdout, stderr io.Writer) error {
+	if wantsHelp(args) {
+		usageDocs(stdout)
+		return nil
+	}
+	fs := flag.NewFlagSet("pkspec docs", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	audience := fs.String("audience", "", "filter to Scenario.audience or audience:<name> tags")
+	output := fs.String("output", "", "write docs Markdown to this path (default: stdout)")
+	discover := fs.Bool("discover", false, "auto-discover Spec.pkl / Test.pkl / SPEC.pkl / specs/*.pkl files under the current directory (in addition to any positional args)")
+	hideImplementation := fs.Bool("hide-implementation", true, "omit runner implementation details from audience docs")
+	goalFilter := fs.String("goal", "", "limit docs to scenarios that contribute to this Goal id")
+	severityFilter := fs.String("severity", "", "limit docs to this severity (critical/major/minor)")
+	var tags multiString
+	fs.Var(&tags, "tag", "only include scenarios whose tags contain this exact value (repeatable; OR within tags)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*audience) == "" {
+		return fmt.Errorf("docs requires --audience")
+	}
+
+	positional := fs.Args()
+	if *discover {
+		found, err := discoverSpecFiles(".")
+		if err != nil {
+			return fmt.Errorf("discover spec files: %w", err)
+		}
+		positional = append(positional, found...)
+	}
+	if len(positional) == 0 {
+		if _, err := os.Stat("SPEC.pkl"); err == nil {
+			positional = []string{"SPEC.pkl"}
+		} else {
+			return fmt.Errorf("docs needs at least one Spec.pkl/Test.pkl path (or use --discover, or place a SPEC.pkl at the repo root)")
+		}
+	}
+
+	ctx := context.Background()
+	plans := make([]*config.Plan, 0, len(positional))
+	for _, p := range positional {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return err
+		}
+		plan, err := config.Load(ctx, abs)
+		if err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+		plans = append(plans, plan)
+	}
+
+	if *goalFilter != "" || *severityFilter != "" {
+		plans = spec.FilterPlansForSpec(plans, *goalFilter, *severityFilter)
+	}
+
+	opts := spec.DocsOptions{
+		Audience:           strings.TrimSpace(*audience),
+		Tags:               []string(tags),
+		HideImplementation: *hideImplementation,
+	}
+	entries := spec.CollectDocs(plans, opts)
+	doc := spec.RenderDocs(entries, plans, opts)
+	if *output == "" {
+		_, err := io.WriteString(stdout, doc)
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(*output), 0o755); err != nil {
+		return err
+	}
+	tmp := *output + ".tmp"
+	if err := os.WriteFile(tmp, []byte(doc), 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, *output); err != nil {
+		return err
+	}
+	fmt.Fprintf(stderr, "pkspec: wrote %s (%d scenario(s))\n", *output, len(entries))
+	return nil
+}
+
 // cmdSpec renders one or more Test.pkl modules to a Markdown SPEC.
 // Multiple positional args are accepted so a single command can index
 // an entire `tests/` tree (`pkspec spec tests/**/*.pkl`). Sections are
@@ -343,21 +534,26 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 // rearranging the file layout updates the document without code
 // changes.
 func cmdSpec(args []string, stdout, stderr io.Writer) error {
+	if wantsHelp(args) {
+		usageSpecMode(stdout, "spec")
+		return nil
+	}
 	fs := flag.NewFlagSet("pkspec spec", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	output := fs.String("output", "", "write the SPEC to this path (default: stdout)")
 	root := fs.String("root", "", "make source paths relative to this directory (default: current dir)")
 	check := fs.Bool("check", false, "instead of rendering, exit non-zero when any non-draft non-deprecated spec id has no implementing test")
-	strict := fs.Bool("strict", false, "with --check: also fail when any Scenario.implementedAt path does not exist on disk (verifies the file portion only, not the symbol)")
+	strict := fs.Bool("strict", false, "with check mode: also fail when any Scenario.implementedAt path does not exist on disk (verifies the file portion only, not the symbol)")
 	coverage := fs.Bool("coverage", false, "instead of rendering, print a coverage report (declared specs vs implementing tests, broken down by severity / review-status)")
 	graph := fs.Bool("graph", false, "instead of rendering, output a graphviz `dot` document of the spec knowledge graph (dependsOn / supersedes / replacedBy)")
 	decisions := fs.Bool("decisions", false, "instead of rendering, output a Markdown decision log flattened across every scenario (newest first)")
 	goalsFlag := fs.Bool("goals", false, "instead of rendering, list user-facing Goals with each Goal's contributing-scenario coverage (priority desc)")
 	next := fs.Bool("next", false, "instead of rendering, list unimplemented specs ranked by their Goal's priority then severity — the \"what to work on next\" view")
 	orphans := fs.Bool("orphans", false, "instead of rendering, list active tests whose `specRef` is empty (candidates for spec-linking)")
+	implementations := fs.Bool("implementations", false, "instead of rendering, list each spec id with active Test.specRef implementers and code/doc implementedAt pointers")
 	goalFilter := fs.String("goal", "", "limit every mode to scenarios that contribute to this Goal id")
 	severityFilter := fs.String("severity", "", "limit every mode to this severity (critical/major/minor)")
-	discover := fs.Bool("discover", false, "auto-discover Spec.pkl / Test.pkl / *.test.pkl files under the current directory (in addition to any positional args)")
+	discover := fs.Bool("discover", false, "auto-discover Spec.pkl / Test.pkl / SPEC.pkl / specs/*.pkl files under the current directory (in addition to any positional args)")
 	lint := fs.Bool("lint", false, "instead of rendering, run convention lint over every Scenario / Goal / Decision — broken refs, missing descriptions, etc.")
 	lintDisable := fs.String("lint-disable", "", "comma-separated lint rule ids to suppress (e.g. \"lint.missing-description,lint.deprecated-without-replacedBy\")")
 	template := fs.String("template", "", "instead of rendering, print a Pkl skeleton for one of: scenario, goal, module")
@@ -365,6 +561,16 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	fs.Var(&tags, "tag", "only include tests whose `tags` Listing contains this exact value (repeatable; OR)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	modes := selectedSpecModes(*check, *coverage, *graph, *decisions, *goalsFlag, *next, *orphans, *implementations, *lint, *template)
+	if len(modes) > 1 {
+		return fmt.Errorf("choose only one spec mode, got: %s", strings.Join(modes, ", "))
+	}
+	if *strict && !*check {
+		return fmt.Errorf("--strict requires check mode")
+	}
+	if *lintDisable != "" && !*lint {
+		return fmt.Errorf("--lint-disable requires lint mode")
 	}
 	// --template takes no plan input; print and exit before file loading.
 	if *template != "" {
@@ -460,13 +666,17 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		_, err := io.WriteString(stdout, spec.FormatOrphans(spec.Orphans(plans)))
 		return err
 	}
+	if *implementations {
+		_, err := io.WriteString(stdout, spec.FormatImplementationIndex(spec.ImplementationIndex(plans), rootDir))
+		return err
+	}
 	if *coverage {
 		rep := spec.Coverage(plans)
 		_, err := io.WriteString(stdout, spec.FormatCoverage(rep))
 		return err
 	}
 	if *graph {
-		_, err := io.WriteString(stdout, spec.Graph(plans))
+		_, err := io.WriteString(stdout, spec.Graph(plans, rootDir))
 		return err
 	}
 	if *decisions {
@@ -544,6 +754,41 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stderr, "pkspec: wrote %s (%d entries)\n", *output, len(entries))
 	return nil
+}
+
+func selectedSpecModes(check, coverage, graph, decisions, goals, next, orphans, implementations, lint bool, template string) []string {
+	var out []string
+	if check {
+		out = append(out, "check")
+	}
+	if coverage {
+		out = append(out, "coverage")
+	}
+	if graph {
+		out = append(out, "graph")
+	}
+	if decisions {
+		out = append(out, "decisions")
+	}
+	if goals {
+		out = append(out, "goals")
+	}
+	if next {
+		out = append(out, "next")
+	}
+	if orphans {
+		out = append(out, "orphans")
+	}
+	if implementations {
+		out = append(out, "implementations")
+	}
+	if lint {
+		out = append(out, "lint")
+	}
+	if template != "" {
+		out = append(out, "template")
+	}
+	return out
 }
 
 // buildSuite converts the executor's per-test results into a JUnit
@@ -701,7 +946,7 @@ func (m *multiString) Set(v string) error {
 // findRepoRoot walks up from the current directory looking for the
 // nearest `.git` or `go.mod`. Falls back to cwd when neither is
 // found. Used to resolve relative `Scenario.implementedAt` paths
-// under `--check --strict`.
+// under `pkspec check --strict`.
 func findRepoRoot() string {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -723,9 +968,10 @@ func findRepoRoot() string {
 	}
 }
 
-// discoverSpecFiles walks `root` and returns every Spec.pkl /
-// Test.pkl path plus a root-level SPEC.pkl, so `pkspec spec --discover`
-// can pick up an entire repo without the operator listing each file.
+// discoverSpecFiles walks `root` and returns every Spec.pkl / Test.pkl
+// path, a root-level SPEC.pkl, and direct specs/*.pkl modules so
+// `--discover` can pick up an entire repo without the operator listing
+// each file.
 // Hidden dirs (`.git`, `.pkspec`, ...) and `node_modules` are skipped.
 func discoverSpecFiles(root string) ([]string, error) {
 	var out []string
@@ -751,14 +997,18 @@ func discoverSpecFiles(root string) ([]string, error) {
 		}
 		base := filepath.Base(path)
 		// Canonical pkspec filenames anywhere in the tree, plus the
-		// root-level SPEC.pkl convention. `*.test.pkl` is the pkl-test
-		// convention for native modules that don't necessarily amend
-		// our Test.pkl, so we skip it.
+		// root-level SPEC.pkl convention and direct specs/*.pkl modules.
+		// `*.test.pkl` is the pkl-test convention for native modules that
+		// don't necessarily amend our Test.pkl, so we skip it.
 		if base == "Spec.pkl" || base == "Test.pkl" {
 			out = append(out, path)
 			return nil
 		}
 		if base == "SPEC.pkl" && filepath.Dir(path) == root {
+			out = append(out, path)
+			return nil
+		}
+		if filepath.Base(filepath.Dir(path)) == "specs" && filepath.Ext(base) == ".pkl" {
 			out = append(out, path)
 		}
 		return nil
@@ -768,8 +1018,8 @@ func discoverSpecFiles(root string) ([]string, error) {
 }
 
 // contributesFor scans every plan for a Scenario with the given id and
-// returns its `contributes` list (Goal ids). Surfaced in `pkspec spec
-// --check` so each reported unimplemented entry says which Goal it
+// returns its `contributes` list (Goal ids). Surfaced in `pkspec check`
+// so each reported unimplemented entry says which Goal it
 // would advance.
 func contributesFor(plans []*config.Plan, id string) []string {
 	for _, p := range plans {

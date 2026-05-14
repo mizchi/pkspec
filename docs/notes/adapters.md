@@ -164,6 +164,11 @@ Current runtime support is intentionally small but executable:
 
 - `pkl/Adapter.pkl` renders adapter suites as Pkl data.
 - Built-in adapter modules exist as Pkl subclasses.
+- Native shim commands implement discovery and manifest execution for
+  Vitest, Playwright, node:test, go test, and moon test:
+  `pkspec-adapter-vitest`, `pkspec-adapter-playwright`,
+  `pkspec-adapter-node-test`, `pkspec-adapter-go-test`, and
+  `pkspec-adapter-moon-test`.
 - `pkspec init` writes `Adapter.pkl` and `adapters/*.pkl` beside
   `Test.pkl` / `Spec.pkl` / `QuickCheck.pkl`.
 - Schema examples validate with `pkl eval`.
@@ -171,6 +176,7 @@ Current runtime support is intentionally small but executable:
   `pkspec adapter`.
 - `pkl/Adapter.test.pkl` locks the intended API.
 
-Full Vitest / Playwright / node:test / go test / moon test shim
-executables are future work. Existing `Test.pkl` / `Step.playwrightTest`
-remains the mature runtime path until those adapters land.
+Coverage collectors remain small command adapters. Built-in shims emit
+`pkspec-cases-json` for discovery, read `--manifest
+$PKSPEC_CASE_MANIFEST` for runs, and write `pkspec-events-jsonl`
+without requiring a Go registry of adapter types.

@@ -74,5 +74,5 @@ need per-inner-test drilldown.
 ```
 
 Upload `.pkspec/junit/*.xml` with your CI's standard test-report
-publisher. Keep `pkspec spec --check --strict` as a separate gate for
+publisher. Keep `pkspec check --strict` as a separate gate for
 spec coverage; JUnit reports are execution results, not the spec index.

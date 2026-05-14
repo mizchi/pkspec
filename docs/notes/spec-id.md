@@ -27,9 +27,16 @@ stable identifiers. The flow:
    [pkspec] signup_happy_path: passed (verifies SIGNUP-001) (12ms)
    ```
 4. **`pkspec spec`** renders `verifies: SIGNUP-001` next to the test
-   bullet in the SPEC.md so reviewers see the cross-link without
-   leaving the markdown.
-5. **`pkspec spec --check`** cross-references the two sides and exits
+   bullet, then adds a **Spec implementation index** that aggregates
+   the reverse direction: `SIGNUP-001` → active tests and any
+   `implementedAt` code/doc pointers.
+   `pkspec graph` uses the same reverse links as blue
+   implementation nodes.
+5. **`pkspec lint`** catches active tests whose `specRef`
+   points at a missing or deprecated Scenario id. Run it with both
+   Spec and Test modules loaded (or `--discover`) so the id set is
+   complete.
+6. **`pkspec check`** cross-references the two sides and exits
    non-zero on any declared spec that no active test verifies.
 
 ## Schema
@@ -58,12 +65,12 @@ Test (typically in `Test.pkl`) whose `specRef` contains the same
 id counts as the spec **implementation**. The check command treats
 these two roles separately.
 
-## `pkspec spec --check`
+## `pkspec check`
 
 CI gate: "every spec has an implementer." Usage:
 
 ```sh
-pkspec spec --check Spec.pkl Test.pkl
+pkspec check Spec.pkl Test.pkl
 ```
 
 The command:
@@ -107,10 +114,9 @@ mark it differently if it isn't worth doing).
 
 - No automatic id generation. Authors pick ids by hand; typo
   surface area is the regex.
-- No "spec deprecation" mechanism. To retire a spec, delete the
-  Scenario; existing `specRef`s pointing at it just become inert
-  references (no error). `--check` only reports the declaration →
-  implementation direction.
+- `pkspec check` only reports the declaration → implementation direction.
+  Use `pkspec lint` to catch the reverse direction: active tests whose
+  `specRef` is missing or points at a deprecated Scenario.
 - The check is whole-suite. There's no notion of "warn but don't
   fail" or per-domain budgets; that would be a useful follow-up if
   the unimplemented set ever gets large enough to need triage.

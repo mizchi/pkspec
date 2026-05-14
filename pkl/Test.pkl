@@ -607,7 +607,7 @@ class Test {
   /// to a `Scenario.id` declared in `Spec.pkl` (typically across a
   /// boundary — the spec lives in one module, the implementing test
   /// in another). `pkspec spec` cross-links id → verifying tests in the
-  /// generated SPEC.md, and `pkspec spec --check` reports declared
+  /// generated SPEC.md, and `pkspec check` reports declared
   /// specs that no active test references.
   ///
   /// Auto-populated by `Spec.pkl` when a Scenario carries an `id`:
@@ -994,7 +994,7 @@ class RenderedHook {
 
 /// One entry in a Scenario's append-only decision log. The
 /// runner never modifies these — the Go side reads them, the
-/// `pkspec spec --decisions` command formats them. See
+/// `pkspec decisions` command formats them. See
 /// `docs/notes/spec-graph.md` for the convention.
 class RenderedDecision {
   date: String
@@ -1004,8 +1004,8 @@ class RenderedDecision {
 }
 
 /// A Scenario rendered for the Go runner. Carries every
-/// metadata field needed by `pkspec spec --check / --coverage /
-/// --graph / --decisions / --goals / --next`. Test-execution
+/// metadata field needed by `pkspec check / coverage /
+/// graph / decisions / goals / next`. Test-execution
 /// semantics live on `RenderedTest`; `RenderedScenario` is the
 /// spec-side counterpart and is only consulted by spec tooling.
 class RenderedScenario {
@@ -1013,6 +1013,11 @@ class RenderedScenario {
   id: String?
   description: String?
   tags: Listing<String>
+  audience: Listing<String>
+  userDescription: String?
+  pmNotes: String?
+  operatorNotes: String?
+  apiNotes: String?
   dependsOn: Listing<String>
   supersedes: Listing<String>
   /// `parent` is the id of the broader Scenario this one refines —
@@ -1022,7 +1027,7 @@ class RenderedScenario {
   /// "I assume X works."
   parent: String?
   /// `contributes` lists `Goal.id` values this Scenario advances.
-  /// `pkspec spec --next` aggregates open contributions to suggest
+  /// `pkspec next` aggregates open contributions to suggest
   /// which spec to implement next.
   contributes: Listing<String>
   reviewStatus: String        // "draft" | "review" | "approved"
@@ -1033,7 +1038,7 @@ class RenderedScenario {
   /// How the scenario is verified — "test" (a Test.pkl with
   /// matching specRef), "code" (framework-internal Go behaviour
   /// pointed at by `implementedAt`), or "doc" (prose guarantee
-  /// pointed at by `implementedAt`). `pkspec spec --check` accepts
+  /// pointed at by `implementedAt`). `pkspec check` accepts
   /// `code` / `doc` entries whose `implementedAt` is non-null.
   implementedBy: String       // "test" | "code" | "doc"
   /// Free-form pointer to the implementing artefact —
@@ -1048,14 +1053,14 @@ class RenderedScenario {
 /// A Goal rendered for the Go runner. Goals carry no test
 /// implementation themselves — they are user-facing value
 /// statements that Scenarios contribute toward via
-/// `Scenario.contributes`. `pkspec spec --next` ranks unimplemented
+/// `Scenario.contributes`. `pkspec next` ranks unimplemented
 /// scenarios by their parent Goal's priority.
 class RenderedGoal {
   id: String
   name: String
   description: String?
   /// Higher = more important. No fixed scale; the runner only
-  /// uses it for relative ordering in `--goals` and `--next`.
+  /// uses it for relative ordering in `pkspec goals` and `pkspec next`.
   priority: Int
   reviewStatus: String        // "draft" | "review" | "approved"
   deprecated: Boolean

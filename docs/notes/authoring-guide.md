@@ -1,8 +1,8 @@
 # Authoring guide — writing your first Spec.pkl
 
 The goal of this guide: get from an empty directory to a Spec.pkl
-that survives `pkspec spec --check --lint --strict --discover` in
-under 15 minutes.
+that survives `pkspec check --strict --discover` and
+`pkspec lint --discover` in under 15 minutes.
 
 If you only want the reference (every field's semantics), see
 [`spec-graph.md`](./spec-graph.md). This file is the
@@ -66,7 +66,7 @@ new Goal {
 }
 ```
 
-Lifecycle: `draft` → `review` → `approved`. `pkspec spec --check`
+Lifecycle: `draft` → `review` → `approved`. `pkspec check`
 skips draft, fails on review/approved unimplementeds.
 
 ## 3. Write a Scenario that contributes
@@ -76,7 +76,10 @@ new {
   id = "checkout.add-to-cart"
   name = "add_item_to_cart"
   description = "POST /cart adds an item; the response carries the new total + line count."
-  tags { "spec" }
+  tags { "spec"; "audience:pm"; "audience:end-user" }
+  audience { "pm"; "end-user" }
+  pmNotes = "This is the checkout happy path PMs should track for launch readiness."
+  userDescription = "Shoppers can add an item to their cart and see the updated total."
   severity = "major"
   reviewStatus = "draft"
   contributes { "goal.checkout" }
@@ -87,8 +90,8 @@ What's load-bearing:
 
 - **`id`** uses dot-path convention. Reads independently — no
   cross-reference table required.
-- **`contributes`** is the link to Goal. Without it, `pkspec spec
-  --next` can't rank the spec.
+- **`contributes`** is the link to Goal. Without it, `pkspec next`
+  can't rank the spec.
 - **`severity = "critical"`** + empty `contributes` triggers a
   `lint.critical-without-contributes` warning — critical specs
   should be anchored to a Goal.
@@ -96,18 +99,20 @@ What's load-bearing:
 ## 4. Run the analyses
 
 ```sh
-pkspec spec --check    --discover    # CI gate (skips draft)
-pkspec spec --coverage --discover    # declared vs implemented
-pkspec spec --goals    --discover    # per-Goal coverage
-pkspec spec --next     --discover    # what to work on next
-pkspec spec --lint     --discover    # convention checks
-pkspec spec --orphans  --discover    # tests with no specRef
+pkspec check           --discover    # CI gate (skips draft)
+pkspec coverage        --discover    # declared vs implemented
+pkspec goals           --discover    # per-Goal coverage
+pkspec next            --discover    # what to work on next
+pkspec implementations --discover    # spec id -> implementations
+pkspec docs --audience pm --discover # reader-specific Markdown
+pkspec lint            --discover    # convention checks
+pkspec orphans         --discover    # tests with no specRef
 ```
 
 `--discover` walks the current directory, picking up `Spec.pkl`
 / `Test.pkl` files and any `*.pkl` directly under `specs/`.
 
-At this point everything is draft, so `--check` exits clean.
+At this point everything is draft, so `pkspec check` exits clean.
 Promote a Scenario to `reviewStatus = "approved"` and re-run —
 you'll see it appear in the unimplemented set, with a
 `→ goal.checkout` suffix telling you what's blocked.
@@ -137,7 +142,7 @@ tests {
 }
 ```
 
-Re-run `pkspec spec --check --discover`. The scenario flips to
+Re-run `pkspec check --discover`. The scenario flips to
 implemented; coverage updates.
 
 ## 6. Use the knowledge graph
@@ -159,11 +164,13 @@ new {
 ```
 
 ```sh
-pkspec spec --graph --discover | dot -Tsvg > spec-graph.svg
+pkspec graph --discover | dot -Tsvg > spec-graph.svg
 ```
 
-Each edge type renders differently — solid for `dependsOn`,
-dashed for `supersedes`, dotted for `replacedBy`.
+Each spec-to-spec edge type renders differently — solid for
+`dependsOn`, dashed for `supersedes`, dotted for `replacedBy`.
+Implementation backlinks from active tests or code/doc pointers
+render as blue nodes with edges back to the spec id they verify.
 
 ## 7. Record decisions
 
@@ -184,7 +191,7 @@ new {
 }
 ```
 
-`pkspec spec --decisions --discover` flattens these across the
+`pkspec decisions --discover` flattens these across the
 project in date-desc order.
 
 ## 8. Lifecycle the spec
@@ -199,7 +206,7 @@ new {
 }
 ```
 
-`--check` skips deprecated; `--decisions` still shows them.
+`pkspec check` skips deprecated; `pkspec decisions` still shows them.
 
 ## 9. Framework-internal specs (no Pkl Test possible)
 
@@ -216,7 +223,7 @@ new {
 }
 ```
 
-`pkspec spec --check --strict` will additionally verify the file
+`pkspec check --strict` will additionally verify the file
 portion of `implementedAt` exists on disk.
 
 ## 10. CI wiring
@@ -224,20 +231,25 @@ portion of `implementedAt` exists on disk.
 A reasonable gate on every PR:
 
 ```yaml
-- run: pkspec spec --check --strict --lint --discover
+- run: pkspec check --strict --discover
+- run: pkspec lint --discover
 ```
 
-That single line catches:
+Those two lines catch:
 
 - declared specs without an implementing test (unless draft /
-  deprecated) → `--check`
+  deprecated) → `pkspec check`
 - `implementedAt` paths that no longer exist (rename rot) →
   `--strict`
-- broken refs, missing descriptions on approved specs, future
-  decision dates, etc. → `--lint`
+- broken refs, active tests pointing at missing/deprecated specs,
+  missing descriptions on approved specs, future decision dates,
+  etc. → `pkspec lint`
 
-Add `--coverage` to the same job (without `set -e`) for a trend
-metric, and `--goals` / `--next` for human review.
+Add `pkspec coverage` to the same job (without `set -e`) for a trend
+metric, and `pkspec goals` / `pkspec next` for human review.
+Use `pkspec docs --audience pm --output docs/PRODUCT.md --discover`
+when the same spec source should publish a reader-specific document
+without runner implementation details.
 
 For a non-pkspec project that wants to wrap an existing task runner
 with local gate contracts, see [`project-gates.md`](./project-gates.md).
@@ -249,17 +261,19 @@ pkspec spec --template module     skeleton Spec.pkl
 pkspec spec --template scenario   one-scenario skeleton
 pkspec spec --template goal       one-goal skeleton
 
-pkspec spec --check               CI gate — unimplemented specs
-pkspec spec --check --strict      + verify implementedAt paths
-pkspec spec --lint                convention checks (broken refs, ...)
-pkspec spec --coverage            % implemented, by severity / status
-pkspec spec --goals               Goals by priority + per-Goal coverage
-pkspec spec --next                "what to work on next" queue
-pkspec spec --orphans             tests with no specRef
-pkspec spec --graph               graphviz dot
-pkspec spec --decisions           Markdown decision log
+pkspec check                      CI gate — unimplemented specs
+pkspec check --strict             + verify implementedAt paths
+pkspec lint                       convention checks (dead refs, ...)
+pkspec coverage                   % implemented, by severity / status
+pkspec goals                      Goals by priority + per-Goal coverage
+pkspec next                       "what to work on next" queue
+pkspec implementations            spec id -> tests/code/doc implementers
+pkspec orphans                    tests with no specRef
+pkspec graph                      graphviz dot incl. implementation links
+pkspec decisions                  Markdown decision log
+pkspec docs --audience pm         audience-specific Markdown
 
-pkspec spec --goal goal.X         filter every mode to one Goal
-pkspec spec --severity critical   filter every mode to one severity
-pkspec spec --discover            walk the cwd for *.pkl spec files
+pkspec check --goal goal.X        filter review commands to one Goal
+pkspec check --severity critical  filter review commands to one severity
+pkspec check --discover           walk the cwd for *.pkl spec files
 ```

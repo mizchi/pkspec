@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -187,7 +188,7 @@ func Lint(plans []*config.Plan) []LintIssue {
 				out = append(out, LintIssue{
 					Rule: "lint.code-doc-without-implementedAt", Level: LintError,
 					Subject: subject,
-					Message: fmt.Sprintf("implementedBy=%q but implementedAt is unset — there is no pointer for --check / --strict to verify", sc.ImplementedBy),
+					Message: fmt.Sprintf("implementedBy=%q but implementedAt is unset — there is no pointer for pkspec check --strict to verify", sc.ImplementedBy),
 					Fix:     "set implementedAt = \"path:Symbol\" or change implementedBy back to \"test\"",
 				})
 			}
@@ -203,6 +204,39 @@ func Lint(plans []*config.Plan) []LintIssue {
 						Message: fmt.Sprintf("decision dated %s is in the future (today UTC: %s)", d.Date, today),
 						Fix:     "fix the date typo",
 					})
+				}
+			}
+		}
+
+		if len(scenarioIDs) > 0 {
+			for name, test := range p.Tests {
+				if isPending(test) {
+					continue
+				}
+				subject := lintTestSubject(p.SourcePath, name)
+				for _, ref := range test.SpecRef {
+					sc, ok := scenarioIDs[ref]
+					if !ok {
+						out = append(out, LintIssue{
+							Rule: "lint.dead-specRef", Level: LintError,
+							Subject: subject,
+							Message: fmt.Sprintf("specRef %q has no matching Scenario.id", ref),
+							Fix:     "fix the typo, declare the Scenario, or remove the stale specRef",
+						})
+						continue
+					}
+					if sc.Deprecated {
+						fix := "point specRef at the replacement scenario, or remove the stale reference"
+						if sc.ReplacedBy != nil && *sc.ReplacedBy != "" {
+							fix = fmt.Sprintf("replace %q with %q, or remove the stale reference", ref, *sc.ReplacedBy)
+						}
+						out = append(out, LintIssue{
+							Rule: "lint.deprecated-specRef", Level: LintWarn,
+							Subject: subject,
+							Message: fmt.Sprintf("specRef %q points at a deprecated Scenario", ref),
+							Fix:     fix,
+						})
+					}
 				}
 			}
 		}
@@ -241,6 +275,14 @@ func lintSubject(sc *config.Scenario) string {
 	return sc.Name
 }
 
+func lintTestSubject(sourcePath, name string) string {
+	source := filepath.Base(sourcePath)
+	if source == "." || source == string(filepath.Separator) || source == "" {
+		return name
+	}
+	return source + ":" + name
+}
+
 // FormatLint renders a LintIssue slice as plain text — one line per
 // issue, level-prefixed for grep, with the Fix hint indented below.
 func FormatLint(issues []LintIssue) string {
@@ -270,7 +312,7 @@ func FormatLint(issues []LintIssue) string {
 	return string(b)
 }
 
-// LintExitCode returns a recommended exit code for a `pkspec spec --lint`
+// LintExitCode returns a recommended exit code for a `pkspec lint`
 // invocation: 1 if any error-level issues exist, 0 otherwise. Warn /
 // info are not failure-worthy by default.
 func LintExitCode(issues []LintIssue) int {

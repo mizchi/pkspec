@@ -19,18 +19,24 @@ Run any example with:
 pkspec exec -f examples/<name>/Test.pkl
 ```
 
-Most adapter DSL examples are schema-only for now. They use
-`Adapter.pkl` instead of `Test.pkl` and validate with:
+Adapter DSL examples use `Adapter.pkl` instead of `Test.pkl`. Validate
+the Pkl shape with:
 
 ```sh
 pkl eval examples/<adapter-name>/Adapter.pkl
 ```
 
-The protocol smoke example is executable:
+The protocol smoke example is fully self-contained:
 
 ```sh
 pkspec adapter -f examples/adapter-protocol-smoke/Adapter.pkl
 ```
+
+The built-in adapter examples use native shim commands
+(`pkspec-adapter-vitest`, `pkspec-adapter-playwright`,
+`pkspec-adapter-node-test`, `pkspec-adapter-go-test`,
+`pkspec-adapter-moon-test`). Running them requires the corresponding
+native runner to be installed for that fixture.
 
 ## Index
 

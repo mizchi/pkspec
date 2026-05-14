@@ -1,8 +1,7 @@
 # adapter-vitest
 
-Pkl-only Vitest adapter configuration. It shows the intended shape for
-discovering native Vitest cases and layering pkspec metadata through
-`overlays`.
+Vitest adapter configuration. It discovers native Vitest cases through
+`pkspec-adapter-vitest` and layers pkspec metadata through `overlays`.
 
 Validate the DSL shape:
 
@@ -10,5 +9,5 @@ Validate the DSL shape:
 pkl eval examples/adapter-vitest/Adapter.pkl
 ```
 
-The adapter command names are protocol placeholders; the generic
-pkspec adapter runner will execute them once the runtime lands.
+Run it with `pkspec adapter -f examples/adapter-vitest/Adapter.pkl`
+when Vitest is available in the project environment.

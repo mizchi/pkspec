@@ -1,6 +1,6 @@
 /// pkspec's own spec — dogfooded.
 ///
-/// Lives at the repo root as `SPEC.pkl` — `pkspec spec --check`
+/// Lives at the repo root as `SPEC.pkl` — `pkspec check`
 /// with no path argument discovers it via the convention.
 ///
 /// Every scenario is `tags { "spec" }` with no body, so the runner
@@ -9,16 +9,16 @@
 ///     declares matching `specRef`.
 ///   - "code" / "doc" scenarios — verified by Go source or by a
 ///     reviewed doc; `implementedBy + implementedAt` are the
-///     pointer. `--check` accepts them without a Pkl Test.
+///     pointer. `pkspec check` accepts them without a Pkl Test.
 ///
 /// Canonical gate for pkspec itself:
 ///
-///   pkspec spec --check --strict SPEC.pkl examples/*/Test.pkl
+///   pkspec check --strict SPEC.pkl examples/*/Test.pkl
 ///
 /// Do not use `--discover` as the pkspec-own-spec gate. It also
 /// sweeps example fixture specs such as `examples/spec-graph/Spec.pkl`
 /// and `examples/spec-id/Spec.pkl`, which intentionally contain
-/// unimplemented scenarios to demonstrate `--check` / `--next`.
+/// unimplemented scenarios to demonstrate `pkspec check` / `pkspec next`.
 ///
 /// ── ID naming convention ────────────────────────────────────
 ///
@@ -377,13 +377,25 @@ scenarios {
     implementedAt = "internal/adapter/adapter.go"
   }
   new {
+    id = "adapter.native-shims"
+    name = "native_adapter_shims_emit_cases_and_events"
+    description = "The built-in Vitest, Playwright, node:test, go test, and moon test adapter commands implement `discover`, read `--manifest $PKSPEC_CASE_MANIFEST` for `run`, and emit pkspec case JSON / event JSONL without adding a Go-side adapter registry."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "review"
+    dependsOn { "adapter.protocol-runtime"; "adapter.extends-builtins" }
+    contributes { "goal.adapter-dsl"; "goal.lang-independent"; "goal.ci-trustworthy" }
+    implementedBy = "code"
+    implementedAt = "internal/adaptershim/shim.go"
+  }
+  new {
     id = "adapter.coverage-collectors"
     name = "coverage_collectors_share_the_adapter_command_protocol"
     description = "`ReportCollector` attaches post-run report commands to an AdapterSuite. The first runnable format is `PkspecCoverageJson` with metrics `{name, covered, total}`; the CLI prints normalized coverage summaries independent of the source runner. Lcov and Cobertura are declared as future parser targets."
     tags { "spec" }
     severity = "major"
     reviewStatus = "review"
-    dependsOn { "adapter.dsl"; "adapter.protocol-runtime" }
+    dependsOn { "adapter.dsl"; "adapter.protocol-runtime"; "adapter.native-shims" }
     contributes { "goal.adapter-dsl"; "goal.lang-independent" }
     implementedBy = "code"
     implementedAt = "pkl/Adapter.pkl"
@@ -424,9 +436,21 @@ scenarios {
     implementedAt = "internal/spec/spec.go:CheckUnimplemented"
   }
   new {
+    id = "spec.implementation-index"
+    name = "spec_id_backlinks_aggregate_implementations"
+    description = "`pkspec spec` renders a per-spec implementation index, and `pkspec implementations` prints just that view: each Scenario.id points back to active Test.specRef implementers, plus code/doc implementedAt pointers."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.cross-reference"; "spec.implemented-by" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:ImplementationIndex"
+  }
+  new {
     id = "spec.lifecycle"
     name = "review_status_lifecycle"
-    description = "draft → review → approved; deprecated retires a spec; replacedBy is the forwarding pointer. `--check` skips draft + deprecated."
+    description = "draft → review → approved; deprecated retires a spec; replacedBy is the forwarding pointer. `pkspec check` skips draft + deprecated."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -438,7 +462,7 @@ scenarios {
   new {
     id = "spec.knowledge-graph"
     name = "knowledge_graph_edges"
-    description = "dependsOn (precondition), supersedes (replaces a retired spec), parent (sub-spec refinement). `pkspec spec --graph` emits a graphviz `dot` document."
+    description = "dependsOn (precondition), supersedes (replaces a retired spec), parent (sub-spec refinement). `pkspec graph` emits a graphviz `dot` document."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -448,9 +472,21 @@ scenarios {
     implementedAt = "internal/spec/spec.go:Graph"
   }
   new {
+    id = "spec.graph-implementation-links"
+    name = "spec_graph_includes_implementation_backlinks"
+    description = "`pkspec graph` includes implementation nodes derived from active Test.specRef and code/doc implementedAt pointers, with edges back to the Scenario.id they verify."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.knowledge-graph"; "spec.implementation-index" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:Graph"
+  }
+  new {
     id = "spec.decision-log"
     name = "decision_log_is_append_only"
-    description = "Each Scenario.decisions entry records date + author + summary + rationale. Append-only by convention; `pkspec spec --decisions` flattens newest-first."
+    description = "Each Scenario.decisions entry records date + author + summary + rationale. Append-only by convention; `pkspec decisions` flattens newest-first."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
@@ -461,7 +497,7 @@ scenarios {
   new {
     id = "spec.goals"
     name = "goal_concept_with_priority"
-    description = "Goals carry user-facing value statements with no test of their own. Scenarios point at Goals via `contributes`; `pkspec spec --next` ranks unimplemented specs by best Goal priority then severity."
+    description = "Goals carry user-facing value statements with no test of their own. Scenarios point at Goals via `contributes`; `pkspec next` ranks unimplemented specs by best Goal priority then severity."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -484,7 +520,7 @@ scenarios {
   new {
     id = "spec.cli-modes"
     name = "pkt_spec_modes_cover_review_and_ci"
-    description = "`pkspec spec` default renders SPEC.md; `--check / --coverage / --graph / --decisions / --goals / --next / --orphans` cover the review + CI surface. Filters: `--goal` / `--severity` / `--discover`."
+    description = "`pkspec spec` default renders developer SPEC.md; `pkspec docs --audience X` renders audience-specific docs; `pkspec check / coverage / graph / decisions / goals / next / implementations / orphans` cover the review + CI surface. Filters: `--goal` / `--severity` / `--discover`."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -494,9 +530,24 @@ scenarios {
     implementedAt = "cmd/pkspec/main.go:cmdSpec"
   }
   new {
+    id = "docs.audience-projection"
+    name = "audience_specific_docs_projection"
+    description = "`pkspec docs --audience <name>` filters scenarios by `audience { ... }` or `audience:<name>` tags and renders stable Markdown for a target reader. The projection hides runner implementation details by default while preserving scenario prose, Goals, open questions, and decisions for PM/developer profiles."
+    pmNotes = "PM-facing docs can include product value, review status, open questions, and decisions without exposing shell commands or runner internals."
+    userDescription = "A project can generate simpler documentation for different readers from the same written specs."
+    tags { "spec"; "audience:pm"; "audience:end-user"; "audience:developer" }
+    audience { "pm"; "end-user"; "developer"; "api"; "operator"; "non-engineer" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.cli-modes"; "spec.goals" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "cmd/pkspec/main.go:cmdDocs"
+  }
+  new {
     id = "spec.implemented-by"
     name = "framework_internal_specs_carry_implementation_pointer"
-    description = "`Scenario.implementedBy = \"code\"` (or \"doc\") with `implementedAt = \"path:symbol\"` lets a Scenario claim implementation without a Pkl Test. `--check --strict` verifies the file part exists."
+    description = "`Scenario.implementedBy = \"code\"` (or \"doc\") with `implementedAt = \"path:symbol\"` lets a Scenario claim implementation without a Pkl Test. `pkspec check --strict` verifies the file part exists."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -508,7 +559,7 @@ scenarios {
   new {
     id = "tooling.lint"
     name = "lint_catches_structural_authoring_mistakes"
-    description = "`pkspec spec --lint` reports broken cross-references (dependsOn / supersedes / parent / replacedBy / contributes), missing descriptions on approved entries, critical specs with no Goal anchor, deprecated specs without replacedBy, future-dated decisions, and a few similar invariants. Error-level issues fail the command; warn / info are informational."
+    description = "`pkspec lint` reports broken cross-references (dependsOn / supersedes / parent / replacedBy / contributes / active Test.specRef), deprecated Test.specRef links, missing descriptions on approved entries, critical specs with no Goal anchor, deprecated specs without replacedBy, future-dated decisions, and similar invariants. Error-level issues fail the command; warn / info are informational."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -530,7 +581,7 @@ scenarios {
   new {
     id = "tooling.authoring-guide"
     name = "step_by_step_authoring_walkthrough_exists"
-    description = "A start-here doc walks new authors from empty directory to running `--check --lint --strict --discover` in roughly 15 minutes. Covers the Goal / Scenario / Test mental model, the dot-path id convention, lifecycle, graph edges, decision logs, framework-internal specs, and the CI single-line invocation."
+    description = "A start-here doc walks new authors from empty directory to running `pkspec check --strict --discover` and `pkspec lint --discover` in roughly 15 minutes. Covers the Goal / Scenario / Test mental model, the dot-path id convention, lifecycle, graph edges, decision logs, framework-internal specs, and the CI invocation."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
@@ -563,7 +614,7 @@ scenarios {
   new {
     id = "spec.strict-gate.recipe"
     name = "strict_spec_gate_recipe_is_copyable"
-    description = "Docs provide a copyable `pkspec spec --check --strict` recipe for projects that adopt pkspec as their spec gate."
+    description = "Docs provide a copyable `pkspec check --strict` recipe for projects that adopt pkspec as their spec gate."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"

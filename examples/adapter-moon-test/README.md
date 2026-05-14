@@ -1,8 +1,8 @@
 # adapter-moon-test
 
-Pkl-only MoonBit `moon test` adapter configuration. It shows how
-MoonBit stays a Pkl subclass of the generic adapter protocol instead
-of becoming another built-in Go executor.
+MoonBit `moon test` adapter configuration. It shows how MoonBit stays
+a Pkl subclass of the generic adapter protocol instead of becoming a
+Go-side registry entry.
 
 Validate the DSL shape:
 

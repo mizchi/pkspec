@@ -34,8 +34,8 @@ class SpecStep {
 /// A user-facing Goal — a piece of value the system should
 /// deliver, independent of any specific implementation. Goals have
 /// no test of their own; Scenarios reference them via
-/// `Scenario.contributes`. `pkspec spec --goals` lists Goals with
-/// each Goal's contributing-scenario coverage; `pkspec spec --next`
+/// `Scenario.contributes`. `pkspec goals` lists Goals with
+/// each Goal's contributing-scenario coverage; `pkspec next`
 /// ranks unimplemented scenarios by their Goal's priority to
 /// suggest where to invest next.
 class Goal {
@@ -57,7 +57,7 @@ class Goal {
   /// Authoring lifecycle. Same semantics as `Scenario.reviewStatus`.
   reviewStatus: ("draft" | "review" | "approved") = "draft"
 
-  /// Marks the Goal as retired. `pkspec spec --goals` excludes
+  /// Marks the Goal as retired. `pkspec goals` excludes
   /// deprecated Goals from the active list (they remain visible
   /// for design archaeology).
   deprecated: Boolean = false
@@ -71,7 +71,7 @@ class Goal {
 /// — don't rewrite past entries when a spec changes; add a new
 /// Decision pointing back at what it supersedes.
 ///
-/// `pkspec spec --decisions` renders these chronologically across the
+/// `pkspec decisions` renders these chronologically across the
 /// whole project so reviewers can read the design trail.
 class Decision {
   /// ISO-8601 date the decision was made. Regex enforces
@@ -87,7 +87,7 @@ class Decision {
   summary: String(length > 0)
 
   /// Optional multi-paragraph rationale. Rendered as a quoted
-  /// block under the summary in `pkspec spec --decisions`.
+  /// block under the summary in `pkspec decisions`.
   rationale: String? = null
 }
 
@@ -119,6 +119,23 @@ class Scenario {
   /// as the written-down intent).
   tags: Listing<String> = new {}
 
+  /// Human audience names this scenario should appear under when
+  /// generating reader-specific docs. Conventional values:
+  /// "end-user", "pm", "non-engineer", "developer", "api",
+  /// and "operator". The `audience:<name>` tag form is also
+  /// recognized by the Go renderer for backwards compatibility with
+  /// tag-only projects.
+  audience: Listing<String> = new {}
+
+  /// Reader-specific prose used by `pkspec docs --audience ...`.
+  /// When a field is unset, the docs renderer falls back to
+  /// `description` so existing specs remain useful without extra
+  /// authoring.
+  userDescription: String? = null
+  pmNotes: String? = null
+  operatorNotes: String? = null
+  apiNotes: String? = null
+
   given: Listing<SpecStep> = new {}
   // `when` is a Pkl keyword (used by `when (cond) { ... }` constraint
   // blocks), so the field name must be backtick-quoted both in this
@@ -147,7 +164,7 @@ class Scenario {
   // ── Knowledge graph edges ────────────────────────────────────
 
   /// Other `Scenario.id` values this spec depends on / assumes.
-  /// `pkspec spec --graph` renders these as graphviz edges so impact
+  /// `pkspec graph` renders these as graphviz edges so impact
   /// analysis ("if LOGIN-001 breaks, what else fails?") is mechanical.
   dependsOn: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
 
@@ -168,7 +185,7 @@ class Scenario {
 
   /// `Goal.id` values this scenario contributes toward. A single
   /// scenario can advance multiple goals (e.g. "login works" goal
-  /// AND "audit log captures auth events" goal). `pkspec spec --next`
+  /// AND "audit log captures auth events" goal). `pkspec next`
   /// uses these edges to rank unimplemented specs by the priority
   /// of the goals they would unblock.
   contributes: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
@@ -176,13 +193,13 @@ class Scenario {
   // ── Lifecycle ────────────────────────────────────────────────
 
   /// Authoring lifecycle. "draft" = sketched, not yet reviewed —
-  /// `pkspec spec --check` ignores draft specs (no failure even when
+  /// `pkspec check` ignores draft specs (no failure even when
   /// unimplemented). "review" = under stakeholder review.
   /// "approved" = signed off, must be implemented before merging.
   reviewStatus: ("draft" | "review" | "approved") = "draft"
 
-  /// Marks the spec as retired. `pkspec spec --check` skips deprecated
-  /// specs, but they remain in `pkspec spec --decisions` / `--graph`
+  /// Marks the spec as retired. `pkspec check` skips deprecated
+  /// specs, but they remain in `pkspec decisions` / `pkspec graph`
   /// so the design history is preserved.
   deprecated: Boolean = false
 
@@ -195,18 +212,18 @@ class Scenario {
   replacedBy: String? = null
 
   /// Severity for failure-impact classification. Affects how
-  /// `pkspec spec --check` weighs unimplemented specs — `critical`
+  /// `pkspec check` weighs unimplemented specs — `critical`
   /// triggers failure, `major` warns, `minor` is silent. Default
   /// `major` so most specs land in the middle bucket.
   severity: ("critical" | "major" | "minor") = "major"
 
   /// How this scenario is verified.
   ///   - "test" (default): a Test.pkl module declares
-  ///     `specRef { id }`. `pkspec spec --check` requires the link.
+  ///     `specRef { id }`. `pkspec check` requires the link.
   ///   - "code": the guarantee lives in Go (or other) source
   ///     that no Pkl Test can naturally reach. Set `implementedAt`
-  ///     to point at the file / function; `--check` accepts it.
-  ///   - "doc": the guarantee is a prose claim. `--check` accepts
+  ///     to point at the file / function; `pkspec check` accepts it.
+  ///   - "doc": the guarantee is a prose claim. `pkspec check` accepts
   ///     it when `implementedAt` is set (treat the doc as the
   ///     reviewed artefact).
   /// Used by framework-internal specs (the runner's own behaviour)
@@ -218,7 +235,7 @@ class Scenario {
   /// `implementedBy` is "code" or "doc". Examples:
   ///   "internal/executor/executor.go:Run"
   ///   "docs/notes/timing-shard.md#total-timeout-semantics"
-  /// Required (non-null) for `--check` to accept the scenario as
+  /// Required (non-null) for `pkspec check` to accept the scenario as
   /// implemented when `implementedBy != "test"`.
   implementedAt: String? = null
 
@@ -230,7 +247,7 @@ class Scenario {
 
   /// Append-only decision log. Each entry records what changed,
   /// when, and (optionally) why. Don't edit past entries — add new
-  /// ones. `pkspec spec --decisions` renders these across the project
+  /// ones. `pkspec decisions` renders these across the project
   /// for design-history review.
   decisions: Listing<Decision> = new {}
 }
@@ -246,8 +263,8 @@ scenarios: Listing<Scenario> = new {}
 
 /// User-facing Goals. Each Goal is a piece of value the system
 /// should deliver; Scenarios contribute toward them via
-/// `Scenario.contributes`. `pkspec spec --goals` lists them; `pkspec
-/// spec --next` ranks unimplemented scenarios by Goal priority.
+/// `Scenario.contributes`. `pkspec goals` lists them; `pkspec next`
+/// ranks unimplemented scenarios by Goal priority.
 goals: Listing<Goal> = new {}
 
 /// Shared setup steps prepended to every scenario's Given list —
@@ -357,6 +374,11 @@ local function renderScenarioMeta(s: Scenario): base.RenderedScenario = new {
   id = s.id
   description = s.description
   tags = s.tags
+  audience = s.audience
+  userDescription = s.userDescription
+  pmNotes = s.pmNotes
+  operatorNotes = s.operatorNotes
+  apiNotes = s.apiNotes
   dependsOn = s.dependsOn
   supersedes = s.supersedes
   parent = s.parent
@@ -392,7 +414,7 @@ tests: Listing<base.Test> = new {
 }
 
 /// Inject scenario-side metadata into the rendered Plan so
-/// `pkspec spec --check / --coverage / --graph / --decisions` can
+/// `pkspec check / coverage / graph / decisions` can
 /// read it via the Go side. Keyed by Scenario.name since names
 /// are unique within a module; the id (if any) lives inside.
 renderedScenarios: Mapping<String, base.RenderedScenario> = new {
