@@ -14,6 +14,7 @@
 /// Canonical gate for pkspec itself:
 ///
 ///   pkspec check --strict SPEC.pkl examples/*/Test.pkl
+///   pkspec lint SPEC.pkl examples/*/Spec.pkl examples/*/Test.pkl
 ///
 /// Do not use `--discover` as the pkspec-own-spec gate. It also
 /// sweeps example fixture specs such as `examples/spec-graph/Spec.pkl`
@@ -49,6 +50,17 @@ goals {
     reviewStatus = "approved"
     description = "Any test failure surfaces as a non-zero exit. pkl test's silent-zero-on-failure gap is closed."
     rationale = "Without this, no other feature matters — a green CI lying about a red suite poisons every downstream decision."
+  }
+  new Goal {
+    id = "goal.secure-release"
+    name = "release artifacts are hardened"
+    priority = 88
+    reviewStatus = "approved"
+    description = "Published binaries, GitHub Actions, and schema-to-executor boundaries avoid known vulnerable toolchains, excess CI privileges, and unchecked numeric narrowing."
+    rationale = "A test runner is part of the supply chain. Users should not have to audit every install path before trusting it in CI."
+    progress {
+      method = "severity-weighted"
+    }
   }
   new Goal {
     id = "goal.lang-independent"
@@ -129,6 +141,13 @@ milestones {
     description = "Goal, Scenario, docs, lint, and review commands form a usable authoring loop."
     goals { "goal.spec-driven" }
   }
+  new Milestone {
+    id = "ms.release-hardening"
+    name = "release hardening baseline"
+    reviewStatus = "review"
+    description = "Toolchain, CI permissions, and trusted-input boundaries have explicit specs before the next patch release."
+    goals { "goal.secure-release" }
+  }
 }
 
 // ── Scenarios ───────────────────────────────────────────────────────
@@ -176,6 +195,39 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy" }
+  }
+
+  // -- goal.secure-release -----------------------------------------
+
+  new {
+    id = "security.go-toolchain-vulnerability-floor"
+    name = "go_toolchain_has_no_known_reachable_vulnerabilities"
+    description = "The Go module and Nix package use a patched Go toolchain so `govulncheck ./...` reports no known reachable vulnerabilities in pkspec or the standard library used by pkspec."
+    tags { "spec"; "security"; "release"; "toolchain" }
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "goal.secure-release"; "goal.ci-trustworthy" }
+    implementedBy = "code"
+    implementedAt = "flake.nix:go_1_26_3"
+    decisions {
+      new Decision {
+        date = "2026-05-14"
+        author = "mizchi"
+        summary = "pin Nix and Go module builds to Go 1.26.3 after govulncheck"
+        rationale = "The vulnerability was in reachable standard-library paths, so relying on a local auto-downloaded toolchain was insufficient; release artifacts built by Nix also need the patched compiler/runtime."
+      }
+    }
+  }
+  new {
+    id = "security.workflow-read-only-permissions"
+    name = "non_release_workflows_are_read_only"
+    description = "Non-release GitHub Actions workflows declare `permissions: contents: read`; only the tag publishing workflow keeps `contents: write` for GitHub Release publication."
+    tags { "spec"; "security"; "ci"; "github-actions" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.secure-release"; "goal.ci-trustworthy" }
+    implementedBy = "code"
+    implementedAt = ".github/workflows/go.yml:permissions"
   }
 
   // ── goal.lang-independent ────────────────────────────────────────
@@ -823,6 +875,18 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.property-based" }
+  }
+  new {
+    id = "pbt.iteration-seed.uint32-range"
+    name = "iteration_seed_is_explicit_uint32"
+    description = "Test.iterationSeed is constrained to the xorshift32 seed range [0, 4294967295] in the Pkl schema, and the Go executor rejects out-of-range values before converting to uint32."
+    tags { "spec"; "security"; "pbt" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "pbt.iterations" }
+    contributes { "goal.property-based"; "goal.secure-release" }
+    implementedBy = "code"
+    implementedAt = "pkl/Test.pkl:iterationSeed"
   }
   new {
     id = "pbt.inputs"

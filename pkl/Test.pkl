@@ -673,7 +673,7 @@ class Test {
   /// reproduces the exact xorshift32 stream that
   /// `pkl/QuickCheck.pkl` generates, so a failure reported by pkspec
   /// can be re-investigated inside `pkl test` with the same seed.
-  iterationSeed: Int = 1
+  iterationSeed: Int(this >= 0 && this <= 4294967295) = 1
 
   /// Enable seed-space shrinking after a property failure. When
   /// `iterations > 1` and the body fails at some seed S, the

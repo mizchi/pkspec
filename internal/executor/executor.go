@@ -728,7 +728,16 @@ func (e *Executor) runOne(ctx context.Context, name string, t *config.Test, defa
 // the Reasons; passing iterations are silent. Retries are
 // intentionally disabled in this mode.
 func (e *Executor) runIterated(ctx context.Context, name string, mode config.Mode, t *config.Test, defaults *config.Defaults, extraEnv map[string]string, start time.Time) Result {
-	seed := uint32(t.IterationSeed)
+	seed, err := iterationSeedUint32(t.IterationSeed)
+	if err != nil {
+		return Result{
+			Name:     name,
+			Outcome:  OutcomeErrored,
+			Reasons:  []string{err.Error()},
+			Duration: time.Since(start),
+			SpecRef:  t.SpecRef,
+		}
+	}
 	var last Result
 	passed := 0
 

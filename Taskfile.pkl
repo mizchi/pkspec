@@ -1,6 +1,6 @@
 amends "package://pkg.pkl-lang.org/github.com/mizchi/pkfire/pkfire@0.9.0#/Taskfile.pkl"
 
-local releaseVersion = "0.1.7"
+local releaseVersion = "0.1.8"
 
 local goSources: Listing<String> = new {
   "*.go"
@@ -29,6 +29,13 @@ local ciSources: Listing<String> = new {
   "flake.nix"
   "flake.lock"
   "nix/**"
+}
+
+local specGateSources: Listing<String> = new {
+  ...goSources
+  ...schemaSources
+  ...examplesAndFixtures
+  "SPEC.pkl"
 }
 
 local default: Task = new {
@@ -125,6 +132,14 @@ local actionLint: Task = new {
   }
 }
 
+local specLint: Task = new {
+  name = "spec-lint"
+  description = "Lint pkspec's own spec and example cross-references"
+  cmd = "go run ./cmd/pkspec lint SPEC.pkl examples/*/Spec.pkl examples/*/Test.pkl"
+  cache = false
+  inputs = specGateSources
+}
+
 local nixCheck: Task = new {
   name = "nix-check"
   description = "Evaluate the Nix flake"
@@ -146,7 +161,7 @@ local releaseCheck: Task = new {
   description = "Full local release gate"
   cmd = "echo release-check ok"
   cache = false
-  deps { test; smoke; initSmoke; actionLint; nixCheck; nixBuild }
+  deps { test; smoke; initSmoke; actionLint; specLint; nixCheck; nixBuild }
 }
 
 local tag: Task = new {
@@ -179,6 +194,7 @@ tasks {
   smoke
   initSmoke
   actionLint
+  specLint
   nixCheck
   nixBuild
   releaseCheck

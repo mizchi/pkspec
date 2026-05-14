@@ -29,6 +29,10 @@ facts {
   ["non-positive timeout is rejected"] {
     module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; timeoutSec = 0 }).timeoutSec) != null
   }
+  ["iteration seed must stay in uint32 range"] {
+    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; iterationSeed = -1 }).iterationSeed) != null
+    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; iterationSeed = 4294967296 }).iterationSeed) != null
+  }
 }
 
 examples {

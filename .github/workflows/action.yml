@@ -28,6 +28,9 @@ on:
       - ".github/workflows/action.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   setup:
     name: setup (${{ matrix.os }})

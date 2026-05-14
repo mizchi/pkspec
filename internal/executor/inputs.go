@@ -16,16 +16,25 @@ import (
 // generateOneInput / shrinkOneInput is the extension point for
 // future StringInput / ListIntInput / ... kinds.
 //
-//   1. Derive a value for every input from the current iteration
-//      seed (each input uses a different sub-seed via xorshift steps).
-//   2. Inject `$<input_name>` env entries into the iteration env.
-//   3. Run the body via the existing runAttempt path.
-//   4. On failure: invoke per-input shrink (greedy probe of [lo,
-//      value/2, value-1]; recurse on any candidate that still
-//      fails). Report the minimal-ish input set.
+//  1. Derive a value for every input from the current iteration
+//     seed (each input uses a different sub-seed via xorshift steps).
+//  2. Inject `$<input_name>` env entries into the iteration env.
+//  3. Run the body via the existing runAttempt path.
+//  4. On failure: invoke per-input shrink (greedy probe of [lo,
+//     value/2, value-1]; recurse on any candidate that still
+//     fails). Report the minimal-ish input set.
 func (e *Executor) runInputIterated(ctx context.Context, name string, mode config.Mode, t *config.Test, defaults *config.Defaults, extraEnv map[string]string, start time.Time) Result {
 	names := sortedInputNames(t.Inputs)
-	seed := uint32(t.IterationSeed)
+	seed, err := iterationSeedUint32(t.IterationSeed)
+	if err != nil {
+		return Result{
+			Name:     name,
+			Outcome:  OutcomeErrored,
+			Reasons:  []string{err.Error()},
+			Duration: time.Since(start),
+			SpecRef:  t.SpecRef,
+		}
+	}
 	var last Result
 	passed := 0
 
@@ -110,7 +119,19 @@ func deriveInt(seed uint32, lo, hi int) int {
 	if span <= 0 {
 		return lo
 	}
-	return lo + int(uint64(seed)%uint64(span))
+	offset := uint64(seed) % uint64(span)
+	return lo + int(offset) // #nosec G115 -- offset is strictly less than positive int span.
+}
+
+func iterationSeedUint32(seed int) (uint32, error) {
+	if seed < 0 {
+		return 0, fmt.Errorf("iterationSeed must be within uint32 range [0, 4294967295], got %d", seed)
+	}
+	wide := uint64(seed)
+	if wide > uint64(^uint32(0)) {
+		return 0, fmt.Errorf("iterationSeed must be within uint32 range [0, 4294967295], got %d", seed)
+	}
+	return uint32(wide), nil // #nosec G115 -- range checked above.
 }
 
 // composeInputEnv copies extraEnv, then layers PKSPEC_SEED /

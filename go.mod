@@ -1,6 +1,6 @@
 module github.com/mizchi/pkspec
 
-go 1.26.2
+go 1.26.3
 
 require (
 	github.com/apple/pkl-go v0.13.2 // indirect

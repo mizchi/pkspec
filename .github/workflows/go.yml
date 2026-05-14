@@ -28,6 +28,9 @@ on:
       - ".github/workflows/go.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: test (${{ matrix.os }})

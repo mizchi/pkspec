@@ -54,13 +54,13 @@ That lets a repository answer practical questions:
 With Nix:
 
 ```sh
-nix run github:mizchi/pkspec/v0.1.7 -- version
+nix run github:mizchi/pkspec/v0.1.8 -- version
 ```
 
 With Go:
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/...@v0.1.7
+go install github.com/mizchi/pkspec/cmd/...@v0.1.8
 pkspec version
 ```
 

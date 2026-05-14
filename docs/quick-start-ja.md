@@ -52,13 +52,13 @@ adapter 経由の native runner などを記述できます。Go 製の runner �
 Nix を使う場合:
 
 ```sh
-nix run github:mizchi/pkspec/v0.1.7 -- version
+nix run github:mizchi/pkspec/v0.1.8 -- version
 ```
 
 Go を使う場合:
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/...@v0.1.7
+go install github.com/mizchi/pkspec/cmd/...@v0.1.8
 pkspec version
 ```
 

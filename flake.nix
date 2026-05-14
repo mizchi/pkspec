@@ -11,9 +11,19 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        version = "0.1.7";
+        version = "0.1.8";
+        go_1_26_3 = pkgs.go_1_26.overrideAttrs (_old: {
+          version = "1.26.3";
+          src = pkgs.fetchurl {
+            url = "https://go.dev/dl/go1.26.3.src.tar.gz";
+            hash = "sha256-HGRoddCqh5kTMYTtV895/yS97+jIggRwYCqdPW2Rkrg=";
+          };
+        });
+        buildGo1263Module = pkgs.buildGo126Module.override {
+          go = go_1_26_3;
+        };
         pklNative = pkgs.callPackage ./nix/pkl-native.nix { };
-        pkspec = pkgs.buildGoModule {
+        pkspec = buildGo1263Module {
           pname = "pkspec";
           inherit version;
           src = ./.;
@@ -132,7 +142,7 @@
           packages = [
             pkfire.packages.${system}.default
           ] ++ (with pkgs; [
-            go
+            go_1_26_3
             pklNative
             gopls
           ]);
