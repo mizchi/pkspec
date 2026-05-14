@@ -395,7 +395,7 @@ Inputs:
 
 | Input | Default | Notes |
 | --- | --- | --- |
-| `version` | the action ref, falling back to latest release | Accepts `v0.1.6`, `0.1.6`, `v0`, or `latest`. |
+| `version` | the action ref, falling back to latest release | Accepts `local`, `v0.1.6`, `0.1.6`, `v0`, or `latest`. |
 | `pkl-version` | `0.31.1` | Set to `none` to skip Pkl install. |
 | `setup-go` | `true` | Uses this action's `go.mod` to install the Go toolchain needed for `go install`. |
 | `install-dir` | `${{ runner.temp }}/pkspec-bin` | Added to `PATH`. |

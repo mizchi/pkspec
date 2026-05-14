@@ -7,8 +7,10 @@ branding:
 inputs:
   version:
     description: |
-      pkspec version to install. Accepts a release tag such as `v0.1.6`,
-      a bare semver `0.1.6`, the floating major `v0`, or `latest`.
+      pkspec version to install. Accepts `local`, a release tag such as
+      `v0.1.6`, a bare semver `0.1.6`, the floating major `v0`, or `latest`.
+      `local` installs from this action checkout and is intended for this
+      repository's own CI.
       When empty, the action reads its own ref (so pinning via
       `mizchi/pkspec@v0.1.6` or `@v0` just works) and falls back to the
       latest published release.
@@ -101,6 +103,7 @@ runs:
           local raw="$1"
           case "$raw" in
             "" | main | master) echo ""; return ;;
+            local) echo "local"; return ;;
             latest) latest; return ;;
             v[0-9]*.[0-9]*.[0-9]*) echo "$raw"; return ;;
             [0-9]*.[0-9]*.[0-9]*) echo "v$raw"; return ;;
@@ -149,16 +152,20 @@ runs:
         set -euo pipefail
         dir="${{ inputs.install-dir }}"
         mkdir -p "$dir"
-        for pkg in \
-          cmd/pkspec \
-          cmd/pkspec-adapter-vitest \
-          cmd/pkspec-adapter-playwright \
-          cmd/pkspec-adapter-node-test \
-          cmd/pkspec-adapter-go-test \
-          cmd/pkspec-adapter-moon-test
-        do
-          GOBIN="$dir" go install "github.com/mizchi/pkspec/$pkg@${{ steps.resolve.outputs.version }}"
-        done
+        if [ "${{ steps.resolve.outputs.version }}" = "local" ]; then
+          GOBIN="$dir" go install "${{ github.action_path }}/cmd/..."
+        else
+          for pkg in \
+            cmd/pkspec \
+            cmd/pkspec-adapter-vitest \
+            cmd/pkspec-adapter-playwright \
+            cmd/pkspec-adapter-node-test \
+            cmd/pkspec-adapter-go-test \
+            cmd/pkspec-adapter-moon-test
+          do
+            GOBIN="$dir" go install "github.com/mizchi/pkspec/$pkg@${{ steps.resolve.outputs.version }}"
+          done
+        fi
         echo "$dir" >> "$GITHUB_PATH"
 
     - name: Install Pkl CLI

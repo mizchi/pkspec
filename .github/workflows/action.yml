@@ -41,7 +41,7 @@ jobs:
 
       - uses: ./
         with:
-          version: latest
+          version: local
           init-schema-dir: ${{ runner.temp }}/pkspec
 
       - name: Write smoke test
