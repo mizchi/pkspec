@@ -73,6 +73,9 @@ goals {
     reviewStatus = "approved"
     description = "Specs are first-class Pkl values with stable ids, lifecycle, and a knowledge graph. Tests declare which specs they verify."
     rationale = "Without traceability, specs rot into design-doc folklore and tests become orphaned artefacts. Cross-references are the load-bearing edge."
+    progress {
+      method = "severity-weighted"
+    }
   }
   new Goal {
     id = "goal.parallel-execution"
@@ -113,6 +116,18 @@ goals {
     reviewStatus = "review"
     description = "expectAi delegates fuzzy claims to an LLM judge with content-hash caching, so the team can write the spec before the deterministic test exists."
     rationale = "Specs are often written before assertions can be made deterministic. The AI path is the placeholder, not the destination — `ai.prefer-deterministic` will surface coded checks once they exist."
+  }
+}
+
+// ── Milestones ──────────────────────────────────────────────────────
+
+milestones {
+  new Milestone {
+    id = "ms.spec-authoring"
+    name = "spec authoring review surface"
+    reviewStatus = "review"
+    description = "Goal, Scenario, docs, lint, and review commands form a usable authoring loop."
+    goals { "goal.spec-driven" }
   }
 }
 
@@ -497,7 +512,7 @@ scenarios {
   new {
     id = "spec.goals"
     name = "goal_concept_with_priority"
-    description = "Goals carry user-facing value statements with no test of their own. Scenarios point at Goals via `contributes`; `pkspec next` ranks unimplemented specs by best Goal priority then severity."
+    description = "Goals carry user-facing value statements with no test of their own. Scenarios point at Goals via `contributes`; `pkspec goals` calculates achievement via each Goal's progress method, and `pkspec next` ranks unimplemented specs by best Goal priority then severity."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -505,6 +520,42 @@ scenarios {
     contributes { "goal.spec-driven" }
     implementedBy = "code"
     implementedAt = "internal/spec/spec.go:Goals"
+  }
+  new {
+    id = "spec.goal-progress"
+    name = "goal_progress_method_controls_achievement_rate"
+    description = "Goal.progress.method defines how achievement is calculated. `scenario-count` uses implemented contributing scenarios / all contributing scenarios; `severity-weighted` uses critical/major/minor weights of 5/3/1."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.goals" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:goalProgress"
+  }
+  new {
+    id = "spec.milestones"
+    name = "milestones_roll_up_goal_progress"
+    description = "Milestones group Goal ids into planning checkpoints. `pkspec milestones` renders each active Milestone with due/status metadata, referenced Goal progress, and missing Goal references surfaced by lint."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "spec.goals"; "spec.goal-progress" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:Milestones"
+  }
+  new {
+    id = "docs.advanced-launch-readiness-recipe"
+    name = "advanced_launch_readiness_recipe_is_copyable"
+    description = "Advanced docs include a larger copyable recipe that combines multiple Goals, severity-weighted progress, Milestones, linked Tests, and the review commands used to interpret the output."
+    tags { "spec"; "docs" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "spec.goal-progress"; "spec.milestones" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/advanced/recipes/launch-readiness.md"
   }
   new {
     id = "spec.prelude"
@@ -520,7 +571,7 @@ scenarios {
   new {
     id = "spec.cli-modes"
     name = "pkt_spec_modes_cover_review_and_ci"
-    description = "`pkspec spec` default renders developer SPEC.md; `pkspec docs --audience X` renders audience-specific docs; `pkspec check / coverage / graph / decisions / goals / next / implementations / orphans` cover the review + CI surface. Filters: `--goal` / `--severity` / `--discover`."
+    description = "`pkspec spec` default renders developer SPEC.md; `pkspec docs --audience X` renders audience-specific docs; `pkspec check / coverage / graph / decisions / goals / milestones / next / implementations / orphans` cover the review + CI surface. Filters: `--goal` / `--severity` / `--discover`."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"

@@ -1260,6 +1260,16 @@ type GoalReport struct {
 	Contributing []ContributingScenario
 	Implemented  int
 	Total        int
+	Progress     ProgressReport
+}
+
+// ProgressReport is a normalized ratio used by Goals and Milestones.
+type ProgressReport struct {
+	Method      string
+	Implemented int
+	Total       int
+	Percent     int
+	Unit        string
 }
 
 // ContributingScenario is one row in a GoalReport: a scenario that
@@ -1320,11 +1330,13 @@ func Goals(plans []*config.Plan) []GoalReport {
 				impl++
 			}
 		}
+		progress := goalProgress(g.ProgressMethod, cs)
 		out = append(out, GoalReport{
 			Goal:         g,
 			Contributing: cs,
 			Implemented:  impl,
 			Total:        len(cs),
+			Progress:     progress,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -1345,13 +1357,14 @@ func FormatGoals(reports []GoalReport) string {
 		return b.String()
 	}
 	for _, r := range reports {
-		pct := 0
-		if r.Total > 0 {
-			pct = int(100 * float64(r.Implemented) / float64(r.Total))
-		}
 		fmt.Fprintf(&b, "## %s — %s\n\n", r.Goal.ID, r.Goal.Name)
-		fmt.Fprintf(&b, "_priority %d · %d / %d contributing specs implemented (%d%%)_\n\n",
-			r.Goal.Priority, r.Implemented, r.Total, pct)
+		if normalizeGoalProgressMethod(r.Progress.Method) == "severity-weighted" {
+			fmt.Fprintf(&b, "_priority %d · %d / %d severity points implemented (%d%%)_\n\n",
+				r.Goal.Priority, r.Progress.Implemented, r.Progress.Total, r.Progress.Percent)
+		} else {
+			fmt.Fprintf(&b, "_priority %d · %d / %d contributing specs implemented (%d%%)_\n\n",
+				r.Goal.Priority, r.Implemented, r.Total, r.Progress.Percent)
+		}
 		if r.Goal.Description != nil && *r.Goal.Description != "" {
 			fmt.Fprintf(&b, "%s\n\n", *r.Goal.Description)
 		}
@@ -1375,6 +1388,236 @@ func FormatGoals(reports []GoalReport) string {
 				fmt.Fprintf(&b, " [%s]", c.Status)
 			}
 			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func goalProgress(method string, scenarios []ContributingScenario) ProgressReport {
+	method = normalizeGoalProgressMethod(method)
+	switch method {
+	case "severity-weighted":
+		total := 0
+		implemented := 0
+		for _, sc := range scenarios {
+			w := severityWeight(sc.Severity)
+			total += w
+			if sc.Implemented {
+				implemented += w
+			}
+		}
+		return ProgressReport{
+			Method:      method,
+			Implemented: implemented,
+			Total:       total,
+			Percent:     progressPercent(implemented, total),
+			Unit:        "severity points",
+		}
+	default:
+		implemented := 0
+		for _, sc := range scenarios {
+			if sc.Implemented {
+				implemented++
+			}
+		}
+		return ProgressReport{
+			Method:      "scenario-count",
+			Implemented: implemented,
+			Total:       len(scenarios),
+			Percent:     progressPercent(implemented, len(scenarios)),
+			Unit:        "specs",
+		}
+	}
+}
+
+func normalizeGoalProgressMethod(method string) string {
+	switch method {
+	case "severity-weighted":
+		return method
+	default:
+		return "scenario-count"
+	}
+}
+
+func severityWeight(severity string) int {
+	switch severity {
+	case "critical":
+		return 5
+	case "minor":
+		return 1
+	default:
+		return 3
+	}
+}
+
+func progressPercent(implemented, total int) int {
+	if total == 0 {
+		return 0
+	}
+	return int(100 * float64(implemented) / float64(total))
+}
+
+func formatGoalProgressInline(r GoalReport) string {
+	if normalizeGoalProgressMethod(r.Progress.Method) == "severity-weighted" {
+		return fmt.Sprintf("%d / %d severity points (%d%%)",
+			r.Progress.Implemented, r.Progress.Total, r.Progress.Percent)
+	}
+	return fmt.Sprintf("%d / %d specs (%d%%)", r.Implemented, r.Total, r.Progress.Percent)
+}
+
+// MilestoneReport summarises a planning checkpoint and the Goal
+// progress that rolls up into it.
+type MilestoneReport struct {
+	Milestone    *config.Milestone
+	Goals        []GoalReport
+	MissingGoals []string
+	Progress     ProgressReport
+}
+
+// Milestones returns active Milestones with referenced Goal progress.
+func Milestones(plans []*config.Plan) []MilestoneReport {
+	active := map[string]*config.Milestone{}
+	for _, p := range plans {
+		for id, m := range p.Milestones {
+			if m.Deprecated {
+				continue
+			}
+			active[id] = m
+		}
+	}
+
+	goalReports := Goals(plans)
+	byGoalID := map[string]GoalReport{}
+	for _, r := range goalReports {
+		byGoalID[r.Goal.ID] = r
+	}
+
+	out := make([]MilestoneReport, 0, len(active))
+	for id, m := range active {
+		_ = id
+		var refs []GoalReport
+		var missing []string
+		for _, gid := range m.Goals {
+			r, ok := byGoalID[gid]
+			if !ok {
+				missing = append(missing, gid)
+				continue
+			}
+			refs = append(refs, r)
+		}
+		out = append(out, MilestoneReport{
+			Milestone:    m,
+			Goals:        refs,
+			MissingGoals: missing,
+			Progress:     milestoneProgress(m.ProgressMethod, refs),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		di := milestoneTargetDate(out[i].Milestone)
+		dj := milestoneTargetDate(out[j].Milestone)
+		if di != dj {
+			return di < dj
+		}
+		return out[i].Milestone.ID < out[j].Milestone.ID
+	})
+	return out
+}
+
+func milestoneTargetDate(m *config.Milestone) string {
+	if m.TargetDate == nil || *m.TargetDate == "" {
+		return "~"
+	}
+	return *m.TargetDate
+}
+
+func milestoneProgress(method string, goals []GoalReport) ProgressReport {
+	method = normalizeMilestoneProgressMethod(method)
+	switch method {
+	case "scenario-count", "severity-weighted":
+		return goalProgress(method, flattenMilestoneScenarios(goals))
+	default:
+		implemented := 0
+		for _, g := range goals {
+			implemented += g.Progress.Percent
+		}
+		total := 100 * len(goals)
+		return ProgressReport{
+			Method:      "goal-average",
+			Implemented: implemented,
+			Total:       total,
+			Percent:     progressPercent(implemented, total),
+			Unit:        "goal percent",
+		}
+	}
+}
+
+func normalizeMilestoneProgressMethod(method string) string {
+	switch method {
+	case "scenario-count", "severity-weighted":
+		return method
+	default:
+		return "goal-average"
+	}
+}
+
+func flattenMilestoneScenarios(goals []GoalReport) []ContributingScenario {
+	seen := map[string]ContributingScenario{}
+	for _, g := range goals {
+		for _, sc := range g.Contributing {
+			if _, ok := seen[sc.SpecID]; ok {
+				continue
+			}
+			seen[sc.SpecID] = sc
+		}
+	}
+	out := make([]ContributingScenario, 0, len(seen))
+	for _, sc := range seen {
+		out = append(out, sc)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].SpecID < out[j].SpecID
+	})
+	return out
+}
+
+// FormatMilestones renders a Milestone report as Markdown.
+func FormatMilestones(reports []MilestoneReport) string {
+	var b strings.Builder
+	b.WriteString("# Milestones\n\n")
+	if len(reports) == 0 {
+		b.WriteString("_No Milestones declared._\n")
+		return b.String()
+	}
+	for _, r := range reports {
+		fmt.Fprintf(&b, "## %s — %s\n\n", r.Milestone.ID, r.Milestone.Name)
+		meta := []string{}
+		if r.Milestone.TargetDate != nil && *r.Milestone.TargetDate != "" {
+			meta = append(meta, "due "+*r.Milestone.TargetDate)
+		}
+		if r.Milestone.ReviewStatus != "" {
+			meta = append(meta, r.Milestone.ReviewStatus)
+		}
+		meta = append(meta, fmt.Sprintf("%d%% complete via %s", r.Progress.Percent, normalizeMilestoneProgressMethod(r.Progress.Method)))
+		fmt.Fprintf(&b, "_%s_\n\n", strings.Join(meta, " · "))
+		if r.Milestone.Description != nil && *r.Milestone.Description != "" {
+			fmt.Fprintf(&b, "%s\n\n", *r.Milestone.Description)
+		}
+		if len(r.Goals) == 0 && len(r.MissingGoals) == 0 {
+			b.WriteString("_No Goals linked yet._\n\n")
+			continue
+		}
+		for _, g := range r.Goals {
+			mark := "[ ]"
+			if g.Progress.Total > 0 && g.Progress.Percent == 100 {
+				mark = "[x]"
+			}
+			fmt.Fprintf(&b, "- %s **%s** — %s: %s\n",
+				mark, g.Goal.ID, g.Goal.Name, formatGoalProgressInline(g))
+		}
+		sort.Strings(r.MissingGoals)
+		for _, gid := range r.MissingGoals {
+			fmt.Fprintf(&b, "- [!] missing Goal: `%s`\n", gid)
 		}
 		b.WriteString("\n")
 	}

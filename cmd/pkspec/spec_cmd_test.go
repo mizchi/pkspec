@@ -85,6 +85,7 @@ func TestRunTopLevelSpecReviewCommands(t *testing.T) {
 		{name: "graph", want: "digraph specs"},
 		{name: "decisions", want: "# Decision log"},
 		{name: "goals", want: "# Goals"},
+		{name: "milestones", want: "# Milestones"},
 		{name: "next", want: "SIGNUP-003"},
 	}
 	for _, tc := range cases {
@@ -262,6 +263,86 @@ scenarios {
 	}
 }
 
+func TestRunMilestonesCommandReadsGoalProgressFromSpec(t *testing.T) {
+	requirePklCLI(t)
+
+	repoRoot := filepath.Join("..", "..")
+	tmp := t.TempDir()
+	specPath := filepath.Join(tmp, "Spec.pkl")
+	schemaPath, err := filepath.Abs(filepath.Join(repoRoot, "pkl", "Spec.pkl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`amends "%s"
+
+goals {
+  new Goal {
+    id = "goal.launch"
+    name = "launch ready"
+    progress {
+      method = "severity-weighted"
+    }
+  }
+}
+
+milestones {
+  new Milestone {
+    id = "ms.beta"
+    name = "Beta"
+    targetDate = "2026-06-01"
+    goals { "goal.launch" }
+  }
+}
+
+scenarios {
+  new Scenario {
+    id = "upload.scan"
+    name = "upload scan"
+    severity = "critical"
+    contributes { "goal.launch" }
+  }
+  new Scenario {
+    id = "upload.content-type"
+    name = "upload content type"
+    severity = "major"
+    contributes { "goal.launch" }
+    implementedBy = "code"
+    implementedAt = "internal/upload/security.go:Check"
+  }
+  new Scenario {
+    id = "upload.preview"
+    name = "upload preview"
+    severity = "minor"
+    contributes { "goal.launch" }
+    implementedBy = "code"
+    implementedAt = "internal/upload/security.go:Check"
+  }
+}
+`, filepath.ToSlash(schemaPath))
+	if err := os.WriteFile(specPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"milestones", specPath}, &stdout, &stderr); err != nil {
+		t.Fatalf("run(milestones) error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	got := stdout.String()
+	for _, want := range []string{
+		"# Milestones",
+		"## ms.beta — Beta",
+		"_due 2026-06-01 · draft · 44% complete via goal-average_",
+		"- [ ] **goal.launch** — launch ready: 4 / 9 severity points (44%)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("milestones output missing %q\n---\n%s", want, got)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
 func TestDiscoverSpecFilesIncludesSpecsDirectoryModules(t *testing.T) {
 	root := t.TempDir()
 	paths := []string{
@@ -271,6 +352,9 @@ func TestDiscoverSpecFilesIncludesSpecsDirectoryModules(t *testing.T) {
 		filepath.Join("specs", "checkout.pkl"),
 		filepath.Join("specs", "nested", "ignored.pkl"),
 		filepath.Join("node_modules", "pkg", "Spec.pkl"),
+		filepath.Join("pkspec", "Spec.pkl"),
+		filepath.Join("pkspec", "Test.pkl"),
+		filepath.Join("pkspec", "QuickCheck.pkl"),
 	}
 	for _, p := range paths {
 		full := filepath.Join(root, p)

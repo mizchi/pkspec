@@ -95,6 +95,7 @@ new Goal {
 
   // Why this Goal matters — business / UX / compliance justification.
   rationale = "Replace with the rationale for keeping this Goal in scope."
+
 }
 `
 

@@ -254,6 +254,29 @@ func Lint(plans []*config.Plan) []LintIssue {
 				}
 			}
 		}
+
+		for id, m := range p.Milestones {
+			for _, gid := range m.Goals {
+				if _, ok := goalIDs[gid]; !ok {
+					out = append(out, LintIssue{
+						Rule: "lint.broken-ref.milestone-goal", Level: LintError,
+						Subject: id,
+						Message: fmt.Sprintf("Milestone goal %q has no matching Goal", gid),
+						Fix:     "declare the Goal, fix the typo, or remove it from the Milestone",
+					})
+				}
+			}
+			if m.ReviewStatus == "approved" {
+				if m.Description == nil || *m.Description == "" {
+					out = append(out, LintIssue{
+						Rule: "lint.missing-description", Level: LintWarn,
+						Subject: id,
+						Message: "approved Milestone has empty description",
+						Fix:     "add a description before approving",
+					})
+				}
+			}
+		}
 	}
 
 	sort.Slice(out, func(i, j int) bool {

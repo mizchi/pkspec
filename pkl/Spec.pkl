@@ -31,6 +31,16 @@ class SpecStep {
   impl: base.Step
 }
 
+/// How a Goal's achievement percentage is derived from its
+/// contributing scenarios.
+class GoalProgress {
+  /// `scenario-count` is the default: implemented scenarios divided
+  /// by all contributing scenarios. `severity-weighted` gives
+  /// critical / major / minor scenarios weights of 5 / 3 / 1 so
+  /// higher-impact scenarios dominate the percentage.
+  method: ("scenario-count" | "severity-weighted") = "scenario-count"
+}
+
 /// A user-facing Goal — a piece of value the system should
 /// deliver, independent of any specific implementation. Goals have
 /// no test of their own; Scenarios reference them via
@@ -65,6 +75,43 @@ class Goal {
   /// Free-form explanation of why this Goal matters — the
   /// business / user-experience justification.
   rationale: String? = null
+
+  /// Calculation used by `pkspec goals` and Milestone rollups.
+  progress: GoalProgress = new {}
+}
+
+/// A Milestone groups Goals into a release / planning checkpoint.
+/// Progress is derived from the referenced Goals; Milestones do not
+/// duplicate Scenario links themselves.
+class Milestone {
+  /// Stable identifier. Convention: use an `ms.` or `MILESTONE-`
+  /// namespace to keep ids distinct from Goal and Scenario ids.
+  id: String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))
+
+  /// Short label used in headings.
+  name: String(length > 0)
+
+  /// Human-facing scope description.
+  description: String? = null
+
+  /// Optional target date in `YYYY-MM-DD` form.
+  targetDate: String(matches(Regex(#"^\d{4}-\d{2}-\d{2}$"#)))? = null
+
+  /// Authoring lifecycle. Same semantics as `Goal.reviewStatus`.
+  reviewStatus: ("draft" | "review" | "approved") = "draft"
+
+  /// Marks the Milestone as retired. `pkspec milestones` excludes
+  /// deprecated Milestones from the active list.
+  deprecated: Boolean = false
+
+  /// Goal ids included in this Milestone.
+  goals: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+
+  /// Rollup strategy for the Milestone percentage.
+  /// `goal-average` averages each referenced Goal's percentage.
+  /// `scenario-count` / `severity-weighted` flatten all contributing
+  /// scenarios across referenced Goals before computing the ratio.
+  progressMethod: ("goal-average" | "scenario-count" | "severity-weighted") = "goal-average"
 }
 
 /// One entry in a scenario's decision log. Append-only by convention
@@ -267,6 +314,10 @@ scenarios: Listing<Scenario> = new {}
 /// ranks unimplemented scenarios by Goal priority.
 goals: Listing<Goal> = new {}
 
+/// Planning checkpoints built from Goal ids. `pkspec milestones`
+/// renders their progress and linked Goals.
+milestones: Listing<Milestone> = new {}
+
 /// Shared setup steps prepended to every scenario's Given list —
 /// Cucumber's `Background:` block. Use this for invariants every
 /// scenario in this module relies on (logged-in user, seeded
@@ -404,6 +455,18 @@ local function renderGoal(g: Goal): base.RenderedGoal = new {
   reviewStatus = g.reviewStatus
   deprecated = g.deprecated
   rationale = g.rationale
+  progressMethod = g.progress.method
+}
+
+local function renderMilestone(m: Milestone): base.RenderedMilestone = new {
+  id = m.id
+  name = m.name
+  description = m.description
+  targetDate = m.targetDate
+  reviewStatus = m.reviewStatus
+  deprecated = m.deprecated
+  goals = m.goals
+  progressMethod = m.progressMethod
 }
 
 // Append the rendered scenarios to whatever `tests` the user (or
@@ -428,5 +491,12 @@ renderedScenarios: Mapping<String, base.RenderedScenario> = new {
 renderedGoals: Mapping<String, base.RenderedGoal> = new {
   for (g in goals) {
     [g.id] = renderGoal(g)
+  }
+}
+
+/// Inject Milestone definitions, keyed by Milestone.id.
+renderedMilestones: Mapping<String, base.RenderedMilestone> = new {
+  for (m in milestones) {
+    [m.id] = renderMilestone(m)
   }
 }

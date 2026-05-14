@@ -1065,6 +1065,25 @@ class RenderedGoal {
   reviewStatus: String        // "draft" | "review" | "approved"
   deprecated: Boolean
   rationale: String?
+  /// Goal achievement calculation method. Currently:
+  /// "scenario-count" or "severity-weighted".
+  progressMethod: String
+}
+
+/// A Milestone rendered for the Go runner. Milestones are planning
+/// checkpoints built from Goal ids; spec tooling derives their
+/// progress from the referenced Goals.
+class RenderedMilestone {
+  id: String
+  name: String
+  description: String?
+  targetDate: String?
+  reviewStatus: String        // "draft" | "review" | "approved"
+  deprecated: Boolean
+  goals: Listing<String>
+  /// Milestone rollup calculation method:
+  /// "goal-average", "scenario-count", or "severity-weighted".
+  progressMethod: String
 }
 
 class Rendered {
@@ -1079,6 +1098,9 @@ class Rendered {
   /// User-value Goals, keyed by `Goal.id`. Populated by
   /// `Spec.pkl#goals`; pure `Test.pkl` modules leave it empty.
   goals: Mapping<String, RenderedGoal>
+  /// Milestones, keyed by `Milestone.id`. Populated by
+  /// `Spec.pkl#milestones`; pure `Test.pkl` modules leave it empty.
+  milestones: Mapping<String, RenderedMilestone>
 }
 
 defaults: Defaults = new {}
@@ -1309,6 +1331,10 @@ renderedScenarios: Mapping<String, RenderedScenario> = new {}
 /// `Test.pkl` modules leave this empty.
 renderedGoals: Mapping<String, RenderedGoal> = new {}
 
+/// Hook for `Spec.pkl` to inject Milestone definitions. Plain
+/// `Test.pkl` modules leave this empty.
+renderedMilestones: Mapping<String, RenderedMilestone> = new {}
+
 output {
   value = new Rendered {
     defaults = module.defaults
@@ -1318,5 +1344,6 @@ output {
     after = renderedAfter
     scenarios = renderedScenarios
     goals = renderedGoals
+    milestones = renderedMilestones
   }
 }

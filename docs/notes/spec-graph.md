@@ -283,6 +283,10 @@ A Goal can be `deprecated = true` to retire it without deleting it;
 deprecated Goals are excluded from `pkspec goals` but their contributing
 scenarios still appear in `pkspec coverage`, `pkspec check`, and `pkspec next`.
 
+Advanced Goal progress methods and release/planning Milestones are
+documented in
+[`../advanced/goals-and-milestones.md`](../advanced/goals-and-milestones.md).
+
 ## ID naming convention (phase 35)
 
 `Scenario.id` and `Goal.id` are dot-separated paths from a short

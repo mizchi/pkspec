@@ -74,6 +74,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return cmdSpecMode("decisions", args[1:], stdout, stderr)
 	case "goals":
 		return cmdSpecMode("goals", args[1:], stdout, stderr)
+	case "milestones":
+		return cmdSpecMode("milestones", args[1:], stdout, stderr)
 	case "next":
 		return cmdSpecMode("next", args[1:], stdout, stderr)
 	case "implementations":
@@ -134,6 +136,8 @@ commands:
   graph [opts] <path>...      output graphviz dot with spec + implementation edges.
   decisions [opts] <path>...  print newest-first Markdown decision log.
   goals [opts] <path>...      print Goals with contributing-spec coverage.
+  milestones [opts] <path>...
+                              print Milestones with Goal progress rollups.
   next [opts] <path>...       rank unimplemented specs by Goal priority.
   lint [opts] <path>...       run structural spec lint: broken graph refs,
                               dead/deprecated Test.specRef links, missing
@@ -254,6 +258,7 @@ func usageSpecMode(w io.Writer, mode string) {
 		"graph":           "emit graphviz dot for spec edges and implementation backlinks",
 		"decisions":       "print the newest-first Scenario decision log",
 		"goals":           "list Goals with contributing-spec coverage",
+		"milestones":      "list Milestones with Goal progress rollups",
 		"next":            "rank unimplemented specs by Goal priority and severity",
 		"implementations": "list each spec id with active test/code/doc implementers",
 		"orphans":         "list active tests with no specRef",
@@ -548,6 +553,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	graph := fs.Bool("graph", false, "instead of rendering, output a graphviz `dot` document of the spec knowledge graph (dependsOn / supersedes / replacedBy)")
 	decisions := fs.Bool("decisions", false, "instead of rendering, output a Markdown decision log flattened across every scenario (newest first)")
 	goalsFlag := fs.Bool("goals", false, "instead of rendering, list user-facing Goals with each Goal's contributing-scenario coverage (priority desc)")
+	milestones := fs.Bool("milestones", false, "instead of rendering, list Milestones with their referenced Goal progress")
 	next := fs.Bool("next", false, "instead of rendering, list unimplemented specs ranked by their Goal's priority then severity — the \"what to work on next\" view")
 	orphans := fs.Bool("orphans", false, "instead of rendering, list active tests whose `specRef` is empty (candidates for spec-linking)")
 	implementations := fs.Bool("implementations", false, "instead of rendering, list each spec id with active Test.specRef implementers and code/doc implementedAt pointers")
@@ -562,7 +568,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	modes := selectedSpecModes(*check, *coverage, *graph, *decisions, *goalsFlag, *next, *orphans, *implementations, *lint, *template)
+	modes := selectedSpecModes(*check, *coverage, *graph, *decisions, *goalsFlag, *milestones, *next, *orphans, *implementations, *lint, *template)
 	if len(modes) > 1 {
 		return fmt.Errorf("choose only one spec mode, got: %s", strings.Join(modes, ", "))
 	}
@@ -689,6 +695,11 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		_, err := io.WriteString(stdout, spec.FormatGoals(reports))
 		return err
 	}
+	if *milestones {
+		reports := spec.Milestones(plans)
+		_, err := io.WriteString(stdout, spec.FormatMilestones(reports))
+		return err
+	}
 	if *next {
 		actions := spec.NextActions(plans)
 		_, err := io.WriteString(stdout, spec.FormatNext(actions))
@@ -756,7 +767,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
-func selectedSpecModes(check, coverage, graph, decisions, goals, next, orphans, implementations, lint bool, template string) []string {
+func selectedSpecModes(check, coverage, graph, decisions, goals, milestones, next, orphans, implementations, lint bool, template string) []string {
 	var out []string
 	if check {
 		out = append(out, "check")
@@ -772,6 +783,9 @@ func selectedSpecModes(check, coverage, graph, decisions, goals, next, orphans, 
 	}
 	if goals {
 		out = append(out, "goals")
+	}
+	if milestones {
+		out = append(out, "milestones")
 	}
 	if next {
 		out = append(out, "next")
@@ -987,6 +1001,9 @@ func discoverSpecFiles(root string) ([]string, error) {
 			if base == "node_modules" {
 				return filepath.SkipDir
 			}
+			if path != root && isPkspecSchemaDir(path) {
+				return filepath.SkipDir
+			}
 			// The `pkl/` directory holds pkspec's own schema modules
 			// (Test.pkl, Spec.pkl, QuickCheck.pkl, Adapter.pkl). They are amended by
 			// users, not loaded directly as a Plan.
@@ -1015,6 +1032,15 @@ func discoverSpecFiles(root string) ([]string, error) {
 	})
 	sort.Strings(out)
 	return out, err
+}
+
+func isPkspecSchemaDir(path string) bool {
+	for _, name := range []string{"Spec.pkl", "Test.pkl", "QuickCheck.pkl"} {
+		if _, err := os.Stat(filepath.Join(path, name)); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // contributesFor scans every plan for a Scenario with the given id and

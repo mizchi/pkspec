@@ -418,6 +418,168 @@ func TestRenderDocsHidesImplementationDetailsByDefault(t *testing.T) {
 	}
 }
 
+func TestGoalsCanUseSeverityWeightedProgress(t *testing.T) {
+	goalID := "goal.secure-upload"
+	criticalID := "upload.scan-malware"
+	majorID := "upload.check-type"
+	minorID := "upload.preview"
+	impl := "internal/upload/security.go:Check"
+	plans := []*config.Plan{
+		{
+			Goals: map[string]*config.Goal{
+				goalID: {
+					ID:             goalID,
+					Name:           "secure uploads",
+					Priority:       90,
+					ReviewStatus:   "approved",
+					ProgressMethod: "severity-weighted",
+				},
+			},
+			Scenarios: map[string]*config.Scenario{
+				"malware scan": {
+					Name:         "malware scan",
+					ID:           &criticalID,
+					Severity:     "critical",
+					ReviewStatus: "approved",
+					Contributes:  []string{goalID},
+				},
+				"content type check": {
+					Name:          "content type check",
+					ID:            &majorID,
+					Severity:      "major",
+					ReviewStatus:  "approved",
+					Contributes:   []string{goalID},
+					ImplementedBy: "code",
+					ImplementedAt: &impl,
+				},
+				"preview metadata": {
+					Name:          "preview metadata",
+					ID:            &minorID,
+					Severity:      "minor",
+					ReviewStatus:  "approved",
+					Contributes:   []string{goalID},
+					ImplementedBy: "code",
+					ImplementedAt: &impl,
+				},
+			},
+		},
+	}
+
+	reports := Goals(plans)
+	if len(reports) != 1 {
+		t.Fatalf("Goals() returned %d reports, want 1", len(reports))
+	}
+	if got, want := reports[0].Progress.Percent, 44; got != want {
+		t.Fatalf("weighted progress percent = %d, want %d", got, want)
+	}
+	out := FormatGoals(reports)
+	if !strings.Contains(out, "4 / 9 severity points implemented (44%)") {
+		t.Fatalf("weighted progress missing from goals output\n---\n%s", out)
+	}
+}
+
+func TestMilestonesAggregateReferencedGoals(t *testing.T) {
+	weightedGoal := "goal.secure-upload"
+	countGoal := "goal.basic-upload"
+	msID := "ms.beta"
+	due := "2026-06-01"
+	impl := "internal/upload/uploader.go:Upload"
+	criticalID := "upload.scan-malware"
+	majorID := "upload.check-type"
+	minorID := "upload.preview"
+	basicID := "upload.accepts-file"
+	missingID := "upload.size-limit"
+	plans := []*config.Plan{
+		{
+			Goals: map[string]*config.Goal{
+				weightedGoal: {
+					ID:             weightedGoal,
+					Name:           "secure uploads",
+					Priority:       90,
+					ProgressMethod: "severity-weighted",
+				},
+				countGoal: {
+					ID:       countGoal,
+					Name:     "basic uploads",
+					Priority: 80,
+				},
+			},
+			Milestones: map[string]*config.Milestone{
+				msID: {
+					ID:           msID,
+					Name:         "Beta launch",
+					TargetDate:   &due,
+					ReviewStatus: "review",
+					Goals:        []string{weightedGoal, countGoal},
+				},
+			},
+			Scenarios: map[string]*config.Scenario{
+				"malware scan": {
+					Name:         "malware scan",
+					ID:           &criticalID,
+					Severity:     "critical",
+					Contributes:  []string{weightedGoal},
+					ReviewStatus: "approved",
+				},
+				"content type check": {
+					Name:          "content type check",
+					ID:            &majorID,
+					Severity:      "major",
+					Contributes:   []string{weightedGoal},
+					ReviewStatus:  "approved",
+					ImplementedBy: "code",
+					ImplementedAt: &impl,
+				},
+				"preview metadata": {
+					Name:          "preview metadata",
+					ID:            &minorID,
+					Severity:      "minor",
+					Contributes:   []string{weightedGoal},
+					ReviewStatus:  "approved",
+					ImplementedBy: "code",
+					ImplementedAt: &impl,
+				},
+				"accepts file": {
+					Name:          "accepts file",
+					ID:            &basicID,
+					Severity:      "major",
+					Contributes:   []string{countGoal},
+					ReviewStatus:  "approved",
+					ImplementedBy: "code",
+					ImplementedAt: &impl,
+				},
+				"size limit": {
+					Name:         "size limit",
+					ID:           &missingID,
+					Severity:     "major",
+					Contributes:  []string{countGoal},
+					ReviewStatus: "approved",
+				},
+			},
+		},
+	}
+
+	reports := Milestones(plans)
+	if len(reports) != 1 {
+		t.Fatalf("Milestones() returned %d reports, want 1", len(reports))
+	}
+	if got, want := reports[0].Progress.Percent, 47; got != want {
+		t.Fatalf("milestone progress percent = %d, want %d", got, want)
+	}
+	out := FormatMilestones(reports)
+	for _, want := range []string{
+		"# Milestones",
+		"## ms.beta — Beta launch",
+		"_due 2026-06-01 · review · 47% complete via goal-average_",
+		"- [ ] **goal.secure-upload** — secure uploads: 4 / 9 severity points (44%)",
+		"- [ ] **goal.basic-upload** — basic uploads: 1 / 2 specs (50%)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("milestone output missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
 func TestGraphIncludesImplementationBacklinks(t *testing.T) {
 	specID := "auth.login"
 	codeID := "auth.password-policy"
@@ -538,6 +700,29 @@ func TestLintReportsDeadAndDeprecatedSpecRefs(t *testing.T) {
 		if iss.Subject == "Test.pkl:active_ref" || iss.Subject == "Test.pkl:pending_dead_ref" {
 			t.Fatalf("unexpected issue for %s: %#v", iss.Subject, iss)
 		}
+	}
+}
+
+func TestLintReportsBrokenMilestoneGoalRefs(t *testing.T) {
+	plans := []*config.Plan{
+		{
+			Goals: map[string]*config.Goal{
+				"goal.present": {ID: "goal.present", Name: "present"},
+			},
+			Milestones: map[string]*config.Milestone{
+				"ms.beta": {
+					ID:    "ms.beta",
+					Name:  "Beta",
+					Goals: []string{"goal.present", "goal.missing"},
+				},
+			},
+		},
+	}
+
+	issues := Lint(plans)
+	issue := lintIssueByRuleSubject(t, issues, "lint.broken-ref.milestone-goal", "ms.beta")
+	if issue.Level != LintError || !strings.Contains(issue.Message, "goal.missing") {
+		t.Fatalf("milestone goal ref issue = %#v, want error mentioning missing Goal", issue)
 	}
 }
 

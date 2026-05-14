@@ -69,6 +69,9 @@ new Goal {
 Lifecycle: `draft` → `review` → `approved`. `pkspec check`
 skips draft, fails on review/approved unimplementeds.
 
+Advanced Goal progress methods and Milestones are covered in
+[`../advanced/goals-and-milestones.md`](../advanced/goals-and-milestones.md).
+
 ## 3. Write a Scenario that contributes
 
 ```pkl

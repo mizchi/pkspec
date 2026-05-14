@@ -203,6 +203,7 @@ surface is exposed as top-level commands:
   test/code/doc implementation backlinks
 - `pkspec decisions` — newest-first Markdown decision log
 - `pkspec goals` — Goals listed by priority with per-Goal coverage
+- `pkspec milestones` — release/planning Milestones with Goal progress rollups
 - `pkspec next` — unimplemented specs ranked by Goal priority + severity
   ("what to work on next")
 - `pkspec implementations` — the reverse index only: spec id → active
@@ -263,6 +264,8 @@ Shared setup across scenarios uses the top-level `prelude`
 [`examples/spec-graph/`](./examples/spec-graph/). For project-level
 local gates and task-runner contracts, see
 [`docs/notes/project-gates.md`](./docs/notes/project-gates.md).
+For advanced Goal progress methods and Milestone rollups, see
+[`docs/advanced/goals-and-milestones.md`](./docs/advanced/goals-and-milestones.md).
 
 ## Property-based testing, fuzzing, differential testing
 
@@ -303,9 +306,9 @@ Beyond the per-test plumbing:
 ### Nix (recommended)
 
 ```sh
-nix run github:mizchi/pkspec/v0.1.6 -- init --dir pkspec
-nix run github:mizchi/pkspec/v0.1.6 -- exec -f path/to/Test.pkl
-nix profile install github:mizchi/pkspec/v0.1.6
+nix run github:mizchi/pkspec/v0.1.7 -- init --dir pkspec
+nix run github:mizchi/pkspec/v0.1.7 -- exec -f path/to/Test.pkl
+nix profile install github:mizchi/pkspec/v0.1.7
 ```
 
 The flake builds `pkspec` plus the built-in adapter shim binaries and
@@ -320,7 +323,7 @@ In a home-manager flake:
 
 ```nix
 {
-  inputs.pkspec.url = "github:mizchi/pkspec/v0.1.6";
+  inputs.pkspec.url = "github:mizchi/pkspec/v0.1.7";
   inputs.pkspec.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = { self, nixpkgs, home-manager, pkspec, ... }:
@@ -349,7 +352,7 @@ you only want the wrapped `pkspec` binary and do not want a standalone
 ### Go
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/...@v0.1.6
+go install github.com/mizchi/pkspec/cmd/...@v0.1.7
 pkspec init --dir pkspec
 ```
 
@@ -380,7 +383,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: mizchi/pkspec@v0.1.6
+      - uses: mizchi/pkspec@v0.1.7
         with:
           init-schema-dir: pkspec
       - run: pkspec exec -f Test.pkl
@@ -395,7 +398,7 @@ Inputs:
 
 | Input | Default | Notes |
 | --- | --- | --- |
-| `version` | the action ref, falling back to latest release | Accepts `local`, `v0.1.6`, `0.1.6`, `v0`, or `latest`. |
+| `version` | the action ref, falling back to latest release | Accepts `local`, `v0.1.7`, `0.1.7`, `v0`, or `latest`. |
 | `pkl-version` | `0.31.1` | Set to `none` to skip Pkl install. |
 | `setup-go` | `true` | Uses this action's `go.mod` to install the Go toolchain needed for `go install`. |
 | `install-dir` | `${{ runner.temp }}/pkspec-bin` | Added to `PATH`. |
@@ -433,6 +436,7 @@ pkspec coverage Spec.pkl Test.pkl          coverage report by severity / review-
 pkspec graph Spec.pkl Test.pkl             graphviz dot of spec edges + implementation backlinks
 pkspec decisions Spec.pkl Test.pkl         newest-first Markdown decision log
 pkspec goals Spec.pkl Test.pkl             user-facing Goals + their contributing-spec coverage
+pkspec milestones Spec.pkl Test.pkl        release/planning Milestones + Goal progress
 pkspec next Spec.pkl Test.pkl              unimplemented specs ranked by Goal priority + severity
 pkspec implementations Spec.pkl Test.pkl   spec id -> tests/code/doc implementers
 pkspec orphans Test.pkl...                 active tests with no specRef (spec-link backlog)
@@ -473,7 +477,7 @@ pkf run release-check
 push a release tag after `release-check` passes:
 
 ```sh
-pkf run tag --version=0.1.6
+pkf run tag --version=0.1.7
 ```
 
 Pushing `v*.*.*` tags triggers the Release workflow. It validates the
@@ -489,7 +493,7 @@ expect schema and CLI changes before a stability promise.
 
 For decision history per phase, see [`findings.md`](./findings.md);
 the time-ordered raw log. For thematic deep dives, see
-[`docs/notes/`](./docs/notes/).
+[`docs/notes/`](./docs/notes/) and [`docs/advanced/`](./docs/advanced/).
 
 If you are looking for a real **task** runner rather than a test
 runner, see [mizchi/pkfire](https://github.com/mizchi/pkfire);

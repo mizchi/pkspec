@@ -290,24 +290,39 @@ type Scenario struct {
 // of value the system should deliver. Goals have no test of their
 // own; Scenarios point at them via `Scenario.Contributes`.
 type Goal struct {
-	ID           string  `pkl:"id"`
-	Name         string  `pkl:"name"`
-	Description  *string `pkl:"description"`
-	Priority     int     `pkl:"priority"`
-	ReviewStatus string  `pkl:"reviewStatus"`
-	Deprecated   bool    `pkl:"deprecated"`
-	Rationale    *string `pkl:"rationale"`
+	ID             string  `pkl:"id"`
+	Name           string  `pkl:"name"`
+	Description    *string `pkl:"description"`
+	Priority       int     `pkl:"priority"`
+	ReviewStatus   string  `pkl:"reviewStatus"`
+	Deprecated     bool    `pkl:"deprecated"`
+	Rationale      *string `pkl:"rationale"`
+	ProgressMethod string  `pkl:"progressMethod"`
+}
+
+// Milestone mirrors `pkspec.Test#RenderedMilestone` — a release or
+// planning checkpoint expressed as a set of Goal ids.
+type Milestone struct {
+	ID             string   `pkl:"id"`
+	Name           string   `pkl:"name"`
+	Description    *string  `pkl:"description"`
+	TargetDate     *string  `pkl:"targetDate"`
+	ReviewStatus   string   `pkl:"reviewStatus"`
+	Deprecated     bool     `pkl:"deprecated"`
+	Goals          []string `pkl:"goals"`
+	ProgressMethod string   `pkl:"progressMethod"`
 }
 
 // Plan is the decoded `Rendered` value the runner consumes.
 type Plan struct {
-	Defaults  *Defaults            `pkl:"defaults"`
-	Tests     map[string]*Test     `pkl:"tests"`
-	Before    map[string]*Hook     `pkl:"before"`
-	After     map[string]*Hook     `pkl:"after"`
-	Scenarios map[string]*Scenario `pkl:"scenarios"`
-	Goals     map[string]*Goal     `pkl:"goals"`
-	Canonical []byte               `pkl:"-"`
+	Defaults   *Defaults             `pkl:"defaults"`
+	Tests      map[string]*Test      `pkl:"tests"`
+	Before     map[string]*Hook      `pkl:"before"`
+	After      map[string]*Hook      `pkl:"after"`
+	Scenarios  map[string]*Scenario  `pkl:"scenarios"`
+	Goals      map[string]*Goal      `pkl:"goals"`
+	Milestones map[string]*Milestone `pkl:"milestones"`
+	Canonical  []byte                `pkl:"-"`
 	// SourcePath is the absolute path to the Pkl module that produced
 	// this plan. Inline-snapshot updates rewrite that file in place,
 	// so the runner needs the original location separately from the
@@ -335,6 +350,7 @@ func init() {
 	pkl.RegisterMapping("pkspec.Test#RenderedScenario", Scenario{})
 	pkl.RegisterMapping("pkspec.Test#RenderedDecision", Decision{})
 	pkl.RegisterMapping("pkspec.Test#RenderedGoal", Goal{})
+	pkl.RegisterMapping("pkspec.Test#RenderedMilestone", Milestone{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects
