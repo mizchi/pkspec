@@ -30,6 +30,10 @@ func cmdInit(args []string, stdout, _ io.Writer) error {
 	dir := fs.String("dir", "pkspec", "directory to write embedded Pkl schemas into")
 	force := fs.Bool("force", false, "overwrite existing schema files")
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			usageInit(stdout)
+			return nil
+		}
 		return err
 	}
 	if len(fs.Args()) > 0 {
@@ -86,4 +90,23 @@ func cmdInit(args []string, stdout, _ io.Writer) error {
 		fmt.Fprintln(stdout, "     default for new projects.")
 	}
 	return nil
+}
+
+func usageInit(w io.Writer) {
+	fmt.Fprint(w, `pkspec init — write the embedded Pkl authoring schemas into a project
+
+usage:
+  pkspec init [--dir DIR] [--force]
+
+options:
+  --dir DIR   destination directory (default: "pkspec"). For new
+              projects, "schemas" reads better because the default
+              collides with the binary name in `+"`amends \"pkspec/Spec.pkl\"`"+`.
+  --force     overwrite existing schema files instead of erroring.
+
+Writes Test.pkl, Spec.pkl, QuickCheck.pkl, Adapter.pkl, and the
+adapters/*.pkl modules so Go/Nix-installed binaries can author specs
+without a source checkout. Prints a 3-line next-step hint
+(`+"`pkspec spec --template module`"+` etc.) on success.
+`)
 }

@@ -27,6 +27,10 @@ func cmdTimings(args []string, stdout, stderr io.Writer) error {
 	shardSpec := fs.String("shard", "", "preview which tests would land in shard K/N (does not run them)")
 	n := fs.Int("n", 10, "load up to this many records per test when computing stats")
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			usageTimings(stdout)
+			return nil
+		}
 		return err
 	}
 
@@ -147,4 +151,26 @@ func truncName(s string, max int) string {
 		return s[:max]
 	}
 	return s[:max-1] + "…"
+}
+
+func usageTimings(w io.Writer) {
+	fmt.Fprint(w, `pkspec timings — inspect .pkspec/timings.jsonl per-test stats
+
+usage:
+  pkspec timings [-f|--file Test.pkl] [opts]
+
+options:
+  -f, --file PATH        Test.pkl module used to locate the default timings.jsonl
+                         (default: Test.pkl in the current directory).
+  --timings-file PATH    override the timings.jsonl path (default: <workdir>/.pkspec/timings.jsonl).
+  --env NAME             env tag to filter on (default: PKSPEC_TIMING_ENV or 'local').
+  --failing              only show tests whose latest record is non-pass (fail / error / skip / timeout).
+  --shard K/N            preview which tests would land in shard K/N (does not run them).
+  -n NUM                 load up to NUM records per test when computing stats (default: 10).
+
+Prints a per-test summary of runs / median / p90 / latest outcome
+/ kind. With --shard, prints the LPT-balanced shard assignment so
+you can verify byte-for-byte the same K/N will be produced by
+`+"`pkspec exec --shard=K/N`"+`.
+`)
 }

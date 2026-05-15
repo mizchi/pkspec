@@ -343,6 +343,10 @@ func cmdExec(args []string, stdout, stderr io.Writer) error {
 	totalTimeout := fs.Duration("total-timeout", 0, "abort the run after this wall-clock and report remaining tests as skipped (e.g. 300s, 5m)")
 	rerunFailed := fs.Bool("rerun-failed", false, "only run tests whose most recent record in timings.jsonl is fail/error/skip")
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			usageExec(stdout)
+			return nil
+		}
 		return err
 	}
 	if len(fs.Args()) > 0 {
@@ -550,6 +554,34 @@ func cmdDocs(args []string, stdout, stderr io.Writer) error {
 }
 
 // cmdSpec renders one or more Test.pkl modules to a Markdown SPEC.
+func usageExec(w io.Writer) {
+	fmt.Fprint(w, `pkspec exec — execute every Test in a Test.pkl module
+
+usage:
+  pkspec exec [-f|--file Test.pkl] [opts]
+
+run filters:
+  --only NAME            only run tests whose name contains NAME (repeatable; case-sensitive)
+  --tag TAG              only run tests whose tags Listing contains TAG (repeatable; AND with --only)
+  --shard K/N            run the K-th of N LPT-balanced shards (uses .pkspec/timings.jsonl history)
+  --rerun-failed         only run tests whose most recent timings.jsonl record is fail/error/skip
+
+snapshot / capture:
+  --refresh-snapshots    rewrite every reference snapshot file
+  --refresh-ai           force every Step.expectAi to re-run its judge and rewrite the cached verdict
+  --refresh-http         force every cassette'd HTTP step to redispatch and rewrite the cassette
+  --http-replay-only     fail cassette HTTP steps on cache miss instead of dispatching a real request (CI hardening)
+  --update-inline-snapshots
+                         rewrite Test.pkl inline snapshot fields from the live capture
+
+timing / reporting:
+  --total-timeout DUR    abort the run after this wall-clock; remaining tests report Skipped (e.g. 300s, 5m)
+  --no-record-timings    skip writing per-test wall-clock durations to .pkspec/timings.jsonl
+  --timings-file PATH    override the timings.jsonl path (default: <workdir>/.pkspec/timings.jsonl)
+  --junit-reports DIR    write a JUnit XML report into DIR (filename is <module-basename>.xml)
+`)
+}
+
 // Multiple positional args are accepted so a single command can index
 // an entire `tests/` tree (`pkspec spec tests/**/*.pkl`). Sections are
 // grouped by source directory relative to --root (default: cwd) so
