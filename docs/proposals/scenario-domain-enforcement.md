@@ -1,5 +1,12 @@
 # Proposal: Enforce `Scenario.id` Domain Prefix
 
+> **Status:** implemented in v0.1.10 (proposal B chosen). Module-level
+> `Spec.pkl#domains: Listing<String>` is the opt-in allow-list;
+> `pkspec lint` emits `lint.unknown-domain-prefix` at info level when
+> a Scenario.id's first dot-segment is not in the list. Modules that
+> leave `domains` empty are silent. `SPEC.pkl` declares the 14
+> prefixes from `docs/notes/concepts.md` §2.
+
 ## Problem
 
 `SPEC.pkl` already follows a strict naming convention: every

@@ -737,6 +737,54 @@ func lintIssueByRuleSubject(t *testing.T, issues []LintIssue, rule, subject stri
 	return LintIssue{}
 }
 
+func TestLintUnknownDomainPrefixIsOptInInfo(t *testing.T) {
+	knownID := "runner.exit-code.something"
+	unknownID := "session.fixation"
+	planWithDomains := &config.Plan{
+		SourcePath: "/repo/specs/Spec.pkl",
+		Domains:    []string{"runner", "kind"},
+		Scenarios: map[string]*config.Scenario{
+			"in allow-list": {
+				Name: "in allow-list", ID: &knownID,
+				ReviewStatus: "review", Severity: "major",
+			},
+			"unknown prefix": {
+				Name: "unknown prefix", ID: &unknownID,
+				ReviewStatus: "review", Severity: "major",
+			},
+		},
+	}
+
+	issues := Lint([]*config.Plan{planWithDomains})
+	got := lintIssueByRuleSubject(t, issues, "lint.unknown-domain-prefix", unknownID)
+	if got.Level != LintInfo {
+		t.Fatalf("unknown-domain-prefix should be Info, got %v", got.Level)
+	}
+	for _, iss := range issues {
+		if iss.Rule == "lint.unknown-domain-prefix" && iss.Subject == knownID {
+			t.Fatalf("known prefix should not trip the rule: %#v", iss)
+		}
+	}
+
+	// Opt-out: a plan without `domains` declared stays silent on the
+	// new rule even though `session.fixation` is still "unknown" by
+	// pkspec's own taste.
+	planNoDomains := &config.Plan{
+		SourcePath: "/repo/specs/Spec.pkl",
+		Scenarios: map[string]*config.Scenario{
+			"unknown prefix": {
+				Name: "unknown prefix", ID: &unknownID,
+				ReviewStatus: "review", Severity: "major",
+			},
+		},
+	}
+	for _, iss := range Lint([]*config.Plan{planNoDomains}) {
+		if iss.Rule == "lint.unknown-domain-prefix" {
+			t.Fatalf("opt-in rule should be silent when domains is empty, got %#v", iss)
+		}
+	}
+}
+
 func TestLintCriticalApprovedWithOpenQuestionsIsError(t *testing.T) {
 	criticalID := "auth.session-fixation"
 	majorID := "auth.password-reset"

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mizchi/pkspec/internal/config"
@@ -82,8 +83,34 @@ func Lint(plans []*config.Plan) []LintIssue {
 	today := time.Now().UTC().Format("2006-01-02")
 
 	for _, p := range plans {
+		// Opt-in domain-prefix allow-list. When `domains` is empty in
+		// the source module, the rule is silent — existing projects
+		// (and `examples/`) keep working without any new lint output.
+		var allowedDomains map[string]struct{}
+		if len(p.Domains) > 0 {
+			allowedDomains = make(map[string]struct{}, len(p.Domains))
+			for _, d := range p.Domains {
+				allowedDomains[d] = struct{}{}
+			}
+		}
+
 		for _, sc := range p.Scenarios {
 			subject := lintSubject(sc)
+
+			if allowedDomains != nil && sc.ID != nil {
+				prefix := *sc.ID
+				if i := strings.Index(prefix, "."); i >= 0 {
+					prefix = prefix[:i]
+				}
+				if _, ok := allowedDomains[prefix]; !ok {
+					out = append(out, LintIssue{
+						Rule: "lint.unknown-domain-prefix", Level: LintInfo,
+						Subject: subject,
+						Message: fmt.Sprintf("Scenario id domain prefix %q is not in this module's `domains` allow-list", prefix),
+						Fix:     "add the prefix to top-level `domains`, rename the id, or clear the `domains` list to opt out",
+					})
+				}
+			}
 
 			for _, d := range sc.DependsOn {
 				if _, ok := scenarioIDs[d]; !ok {

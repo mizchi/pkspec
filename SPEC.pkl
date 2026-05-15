@@ -40,6 +40,19 @@ amends "pkl/Spec.pkl"
 
 feature = "pkspec — language-agnostic Pkl-based spec & test runner"
 
+// ── Domain prefix allow-list ────────────────────────────────────────
+//
+// pkspec's own scenarios follow a strict dot-path convention with one
+// of the 14 prefixes below. `pkspec lint` enforces this via the
+// `lint.unknown-domain-prefix` info rule (opt-in: a project that does
+// not declare `domains` gets zero new lint output). Update this list
+// before introducing a new prefix so the lint and the convention move
+// together.
+domains {
+  "adapter"; "ai"; "diff"; "docs"; "goal"; "history"; "kind"
+  "ms"; "parallel"; "pbt"; "runner"; "security"; "spec"; "tooling"
+}
+
 // ── Goals ───────────────────────────────────────────────────────────
 
 goals {
@@ -250,6 +263,17 @@ scenarios {
     contributes { "goal.secure-release" }
     implementedBy = "code"
     implementedAt = ".github/dependabot.yml"
+  }
+  new {
+    id = "tooling.domain-lint"
+    name = "lint_unknown_domain_prefix_is_opt_in"
+    description = "When a Spec.pkl module declares the optional module-level `domains` allow-list, `pkspec lint` reports any Scenario.id whose first dot-segment is not in the list as `lint.unknown-domain-prefix` at info level. Modules that leave `domains` empty (e.g. `examples/*`) get no new lint output, so the rule is opt-in."
+    tags { "spec"; "tooling"; "lint" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/lint.go:Lint"
   }
   new {
     id = "tooling.ci-concurrency"

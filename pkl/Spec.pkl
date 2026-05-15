@@ -328,6 +328,19 @@ milestones: Listing<Milestone> = new {}
 /// already exists for long-running auxiliary processes.
 prelude: Listing<SpecStep> = new {}
 
+/// Optional allow-list of Scenario.id domain prefixes used in this
+/// module / project. When non-empty, `pkspec lint` reports any
+/// Scenario.id whose first dot-segment is not in this list as
+/// `lint.unknown-domain-prefix` at info level (advisory).
+///
+/// Leave empty to opt out — projects with their own naming
+/// convention (e.g. examples/ style `AUTH-001`) get no new lint
+/// output unless they declare their own allow-list.
+///
+/// Convention for pkspec's own SPEC.pkl: the 14 prefixes documented
+/// in `docs/notes/concepts.md` §2. Other projects pick their own.
+domains: Listing<String> = new {}
+
 local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.Step = new {
   name = "\(prefix) \(s.description)"
   // body slots — every kind the runner knows about
@@ -500,3 +513,7 @@ renderedMilestones: Mapping<String, base.RenderedMilestone> = new {
     [m.id] = renderMilestone(m)
   }
 }
+
+/// Forward the module-level `domains` allow-list to the rendered
+/// Plan so `pkspec lint` can apply the unknown-prefix rule.
+renderedDomains: Listing<String> = domains

@@ -322,6 +322,7 @@ type Plan struct {
 	Scenarios  map[string]*Scenario  `pkl:"scenarios"`
 	Goals      map[string]*Goal      `pkl:"goals"`
 	Milestones map[string]*Milestone `pkl:"milestones"`
+	Domains    []string              `pkl:"domains"`
 	Canonical  []byte                `pkl:"-"`
 	// SourcePath is the absolute path to the Pkl module that produced
 	// this plan. Inline-snapshot updates rewrite that file in place,

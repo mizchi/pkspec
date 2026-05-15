@@ -282,14 +282,13 @@ Honest issues with the vocabulary as it stands today:
    and `pkspec docs --help` now name each other explicitly so readers
    know the relationship without spelunking.
 
-5. **Spec id domain prefixes are convention, not enforcement.**
-   §2 lists the prefixes in use today, but nothing in `pkspec lint`
-   stops a new Scenario from declaring `id = "random.thing"`.
-   Proposal drafted at
-   [`docs/proposals/scenario-domain-enforcement.md`](../proposals/scenario-domain-enforcement.md) —
-   recommends an opt-in Plan-scoped `domains: Listing<String>` and a
-   `lint.unknown-domain-prefix` info-level rule. Implementation
-   deferred to a future phase.
+5. ~~Spec id domain prefixes are convention, not enforcement~~ —
+   resolved. `Spec.pkl` now exposes an optional module-level
+   `domains: Listing<String>` allow-list; when populated, `pkspec
+   lint` reports any Scenario.id whose first dot-segment is not in
+   the list as `lint.unknown-domain-prefix` (info). Modules that
+   leave `domains` empty are silent — the rule is opt-in. pkspec's
+   own `SPEC.pkl` declares the 14 prefixes from §2.
 
 6. **Goal-driven Scenario generation.** The independent design
    review of Phase 42 flagged that the highest-leverage idea
