@@ -2,8 +2,8 @@
 ///
 /// Every entry is auto-pending (no cmd, just `tags { "spec" }`) so the
 /// example does not require a runtime. The point of this directory is
-/// to demonstrate the `openQuestions` Stress-phase policy via `pkspec
-/// lint`, not to exercise the executor.
+/// to demonstrate the openQuestions lint policy via `pkspec lint`, not
+/// to exercise the executor.
 amends "../../pkl/Test.pkl"
 
 tests {

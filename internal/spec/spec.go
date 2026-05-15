@@ -1690,7 +1690,7 @@ func NextActions(plans []*config.Plan) []NextAction {
 			return severityRank(out[i].Severity) > severityRank(out[j].Severity)
 		}
 		// Tie-break on unanswered questions: a spec carrying more open
-		// questions has a thicker "Stress phase" backlog, so surface it
+		// questions has a thicker authoring backlog, so surface it
 		// first within the same Goal priority + severity bucket.
 		if out[i].OpenQuestions != out[j].OpenQuestions {
 			return out[i].OpenQuestions > out[j].OpenQuestions

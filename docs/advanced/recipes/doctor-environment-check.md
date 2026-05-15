@@ -140,8 +140,8 @@ truth that says what is installed right now.
 
 ## See also
 
-- [`docs/advanced/recipes/stress-phase-open-questions.md`](stress-phase-open-questions.md) —
-  the spec-level counterpart: `pkspec lint` for unchallenged
-  assumptions.
+- [`docs/advanced/recipes/open-questions-policy.md`](open-questions-policy.md) —
+  the spec-level counterpart: `pkspec lint` for unanswered authoring
+  questions.
 - [`examples/spec-open-questions/`](../../../examples/spec-open-questions/) —
   a runnable fixture for the open-questions policy.

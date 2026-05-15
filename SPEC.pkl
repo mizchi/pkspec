@@ -617,15 +617,15 @@ scenarios {
     implementedAt = "docs/advanced/recipes/launch-readiness.md"
   }
   new {
-    id = "docs.advanced-stress-phase-recipe"
-    name = "stress_phase_open_questions_recipe_is_copyable"
-    description = "Advanced docs include a recipe for the Stress-phase open-questions workflow: authoring openQuestions, the critical-vs-major lint policy split, promoting answered questions into decisions, and CI integration."
+    id = "docs.advanced-open-questions-policy-recipe"
+    name = "open_questions_policy_recipe_is_copyable"
+    description = "Advanced docs include a recipe for the openQuestions policy: authoring openQuestions, the critical-vs-major lint split, promoting answered questions into decisions, and CI integration."
     tags { "spec"; "docs" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
     implementedBy = "doc"
-    implementedAt = "docs/advanced/recipes/stress-phase-open-questions.md"
+    implementedAt = "docs/advanced/recipes/open-questions-policy.md"
   }
   new {
     id = "docs.advanced-doctor-recipe"
@@ -646,10 +646,21 @@ scenarios {
     tags { "spec"; "docs" }
     severity = "minor"
     reviewStatus = "review"
-    dependsOn { "docs.advanced-stress-phase-recipe" }
+    dependsOn { "docs.advanced-open-questions-policy-recipe" }
     contributes { "goal.spec-driven" }
     implementedBy = "doc"
     implementedAt = "examples/spec-open-questions/README.md"
+  }
+  new {
+    id = "docs.concept-map"
+    name = "concept_map_index_exists"
+    description = "docs/notes/concepts.md is a cross-cutting index of every concept pkspec exposes (authoring DSL, knowledge-graph edges, lifecycle, verification, audience projection, kinds, adapter DSL, differential, PBT, history, AI), with Scenario id domain prefixes, CLI commands grouped by purpose, and a table pointing to per-topic detail docs."
+    tags { "spec"; "docs" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/notes/concepts.md"
   }
   new {
     id = "spec.prelude"

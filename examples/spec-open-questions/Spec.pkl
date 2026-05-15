@@ -1,24 +1,16 @@
-/// Demonstrates Scenario.openQuestions and the "Stress phase" lint
-/// policy: a critical scenario must answer its open questions before
-/// being marked reviewStatus = "approved", or `pkspec lint` will fail
-/// with the rule `lint.critical-approved-with-open-questions`.
+/// Demonstrates Scenario.openQuestions and the lint policy that
+/// gates a critical Scenario from being marked
+/// `reviewStatus = "approved"` while it still carries unanswered
+/// questions. The offending configuration trips the rule
+/// `lint.critical-approved-with-open-questions`.
 ///
-/// Inspired by NyxFoundation/speca's three-phase proof-attempt model:
-///   Phase 1 (Map)    — decompose the property into conditions
-///   Phase 2 (Prove)  — show the implementation covers every path
-///   Phase 3 (Stress) — challenge the assumptions, attack the proof
-///
-/// pkspec collapses Map + Prove into normal Scenario + Test linking;
-/// this example shows how Stress is encoded as openQuestions + lint.
-///
-/// All scenarios here are kept at reviewStatus = "review" so that
+/// All scenarios here are kept at `reviewStatus = "review"` so that
 /// `pkspec lint` stays green when this directory is included in the
-/// project-wide spec-lint gate. The README explains how to flip the
-/// critical scenario to "approved" locally to observe the new
-/// `lint.critical-approved-with-open-questions` error.
+/// project-wide spec-lint gate. The README walks through flipping
+/// the critical scenario to "approved" locally to observe the error.
 amends "../../pkl/Spec.pkl"
 
-feature = "openQuestions + Stress phase lint policy"
+feature = "openQuestions lint policy"
 
 goals {
   new Goal {

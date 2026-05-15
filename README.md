@@ -504,6 +504,17 @@ If you are looking for a real **task** runner rather than a test
 runner, see [mizchi/pkfire](https://github.com/mizchi/pkfire);
 pkspec is its testing-focused sibling.
 
+## Acknowledgements
+
+The `Scenario.openQuestions` field and the
+[`open-questions-policy`](./docs/advanced/recipes/open-questions-policy.md)
+recipe were prompted by reading
+[NyxFoundation/speca](https://github.com/NyxFoundation/speca), a
+specification-anchored security-audit framework. pkspec borrows a
+small idea — keeping unresolved authoring questions first-class on
+the spec so they cannot be silently rolled over — and does not import
+speca's broader proof-attempt pipeline or security framing.
+
 ## License
 
 MIT.

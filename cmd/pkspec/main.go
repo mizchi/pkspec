@@ -290,6 +290,7 @@ func usageSpecMode(w io.Writer, mode string) {
 	case "spec":
 		fmt.Fprint(w, "  --output PATH          write Markdown SPEC to PATH\n")
 		fmt.Fprint(w, "  --tag TAG              include tests whose tags contain TAG\n")
+		fmt.Fprint(w, "\nThe tail of the rendered SPEC.md aggregates every Scenario.openQuestions\nacross the project. `pkspec docs --audience NAME` is the per-scenario view\nof the same data.\n")
 	}
 }
 
@@ -307,6 +308,10 @@ opts:
   --discover               auto-discover Spec.pkl / Test.pkl / SPEC.pkl / specs/*.pkl
   --goal ID                limit to scenarios contributing to Goal id
   --severity LEVEL         limit to critical / major / minor
+
+Each scenario's openQuestions list is rendered inline next to its
+description. pkspec spec is the project-wide aggregated view of the
+same data (single "Outstanding questions" section at the tail).
 `)
 }
 

@@ -1,18 +1,8 @@
 # spec-open-questions
 
-Demonstrates `Scenario.openQuestions` and the **Stress-phase** lint
-policy. Inspired by the proof-attempt model in
-[NyxFoundation/speca](https://github.com/NyxFoundation/speca): every
-high-impact scenario should have its assumptions actively challenged
-before being approved.
-
-In pkspec terms:
-
-- **Map**   — write the Scenario (`description`, edges, `contributes`).
-- **Prove** — link it to a Test (`specRef`) or to code (`implementedBy = "code"`).
-- **Stress** — list `openQuestions` you have not yet answered. `pkspec
-  lint` refuses to call a `critical` scenario `approved` while any
-  question remains.
+Demonstrates `Scenario.openQuestions` and the lint policy that keeps
+unanswered authoring questions from sliding under an `approved`
+critical guarantee.
 
 The rule:
 
@@ -22,7 +12,10 @@ lint.approved-with-open-questions            →  warn
 ```
 
 `error` fails `pkspec lint` (exit 1) and the `release-check` gate.
-`warn` does not.
+`warn` does not. A `critical` Scenario that ends up `approved` with
+unanswered `openQuestions` is the only configuration that gets
+gate-blocked — non-critical specs can ship with a known unknown if
+the team accepts the residual risk.
 
 ## Inventory
 
@@ -83,4 +76,4 @@ assumption underneath it."
 
 For a longer walkthrough — including how to integrate the policy into
 CI and how to surface open questions in stakeholder docs — see
-[`docs/advanced/recipes/stress-phase-open-questions.md`](../../docs/advanced/recipes/stress-phase-open-questions.md).
+[`docs/advanced/recipes/open-questions-policy.md`](../../docs/advanced/recipes/open-questions-policy.md).

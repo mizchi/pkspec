@@ -5,6 +5,145 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 42 — speca-inspired: `pkspec doctor` + openQuestions policy + subagent fan-out review
+
+mizchi: "NyxFoundation/speca を読んで、取り入れられるところはないか
+考えてほしい" → "A, B をプロトタイプして評価してみよう" → "subagent
+何パターンか使ってみて、意味のある検出ができるか" → "ツール自体を
+polish する。指摘内容も修正する" → "概念がだいぶ増えている。これを
+整理してほしい"
+
+### Borrowed pieces from speca
+
+[NyxFoundation/speca](https://github.com/NyxFoundation/speca) is a
+specification-anchored security-audit framework with a three-phase
+proof-attempt model and a TUI built around `doctor` / `init` /
+`run --target`. Two ideas were judged borrowable; the rest is too
+domain-specific (STRIDE / bug-bounty eligibility / property
+generation pipeline) for pkspec's general-purpose shape.
+
+1. **`pkspec doctor`** — environment-check subcommand that probes
+   `pkl` (required) and `git` / `node` / `go` (recommended), reports
+   presence + version, exits 1 only when a required tool is missing.
+   `--quiet` hides ok rows; `--json` is a documented machine-readable
+   contract (typed via `encoding/json`).
+
+2. **`Scenario.openQuestions` lint policy** — `critical + approved +
+   non-empty openQuestions` is a new lint error
+   (`lint.critical-approved-with-open-questions`), non-critical stays
+   at the existing warn. `NextActions` uses open-question count as a
+   secondary tie-break (severity wins first).
+
+### Subagent fan-out review
+
+Four parallel subagents reviewed the prototype with disjoint angles:
+
+- `superpowers:code-reviewer` — code quality, test coverage
+- `general-purpose` — design fidelity vs speca
+- `general-purpose` — docs UX (reads recipes as a new contributor)
+- `general-purpose` — robustness / security audit
+
+**Cross-validation observation:** code-reviewer and robustness
+independently surfaced the same JSON contract bug — `fmt.Sprintf("%q",
+...)` emits Go-quoted escapes (`\xNN`) that are **not** valid JSON.
+Two angles converging on one finding is the high-confidence signal
+the fan-out is designed to produce.
+
+Other high-leverage findings:
+
+- docs UX agent found `pkspec lint --discover --format=markdown` cited
+  in a recipe — flag does not exist. Caught by actually running the
+  command, not by reading.
+- design agent flagged the "Stress phase" framing as vocabulary
+  cosplay around a one-line rule, and argued the higher-leverage
+  speca idea (property generation pipeline) was left on the table.
+
+### Polish landed
+
+- `writeDoctorJSON` rewritten with `encoding/json` + typed struct;
+  test verifies `json.Valid` against paths containing raw `\x7f`.
+- `runDoctorCheck` collapses missing-optional into `levelMissing`
+  (was an awkward warn + empty-path dead branch); a present-tool-
+  with-broken-`--version` is now `levelInfo "version probe failed"`
+  instead of being absorbed as `levelOK` with a blank version.
+- `probeDoctorVersion` caps combined output at 4 KiB via
+  `cappedWriter`; `sanitizeVersionLine` strips ANSI / control
+  characters so report column alignment can't be broken by a
+  malicious or careless tool.
+- `cmdDoctor` uses `signal.NotifyContext(SIGINT, SIGTERM)`; Ctrl-C
+  exits in milliseconds instead of waiting out the 3 s probe timeout.
+- e2e tests for `cmdDoctor` lock the exit-code + JSON contract
+  together. `TestNextActionsSeverityOutranksOpenQuestionCount`
+  asserts `critical+0Q` > `major+5Q` (severity is primary).
+
+### Vocabulary cleanup
+
+The design agent's "Stress phase" critique was acted on:
+
+- Recipe `stress-phase-open-questions.md` renamed to
+  `open-questions-policy.md`.
+- speca's proof-attempt table removed from user-facing docs.
+- README gains an `## Acknowledgements` section crediting speca for
+  the `openQuestions` idea, while explicitly noting that the broader
+  proof-attempt pipeline and security framing are NOT imported.
+
+### Concept map
+
+The repo accumulated ~90 Scenario ids, ~40 Pkl classes, 18 CLI
+commands, and 24 `docs/notes/` files with no cross-cutting index.
+`docs/notes/concepts.md` is the new one-page map:
+
+- 11 concept layers (Authoring DSL / graph edges / lifecycle /
+  verification / audience / kinds / adapter DSL / differential /
+  PBT / history / AI)
+- 14 Scenario id domain prefixes (`runner.` / `kind.` / `spec.` /
+  `parallel.` / `history.` / `pbt.` / `diff.` / `ai.` / `adapter.`
+  / `tooling.` / `security.` / `docs.` / `goal.` / `ms.`)
+- CLI commands grouped by purpose (authoring / review / execution)
+- A "§5 Open Concept Issues" section that records resolved /
+  deferred vocabulary calls so the design trail survives.
+
+`pkspec spec --help` and `pkspec docs --help` now name each other
+explicitly so readers know the relationship between the
+project-wide "Outstanding questions" tail and the per-scenario
+"Open questions" inline section.
+
+### Subagent fan-out lesson
+
+Saved to file-based agent memory as
+`subagent-fanout-review.md` (feedback type): 4-angle parallel
+subagents (code / design / docs / robustness) before merging
+non-trivial changes; the cross-validation property is the
+load-bearing one, and overhead (~90 s parallel, ~$0.10–0.30) is
+justified only when the alternative would be a real PR review.
+
+### Verified
+
+- `go test ./...` all packages green; new doctor + lint tests pass.
+- `pkl test pkl/Test.test.pkl pkl/QuickCheck.test.pkl
+  pkl/Adapter.test.pkl` → 21/21 facts, 32/32 asserts.
+- `pkspec lint SPEC.pkl examples/*/Spec.pkl examples/*/Test.pkl` →
+  clean.
+- `pkspec check --strict SPEC.pkl examples/*/Test.pkl` → all 84
+  declared specs implemented; --strict path resolution passes.
+- `pkspec doctor` end-to-end (all tools present + simulated missing-
+  PATH); `--json` output passes `json.Valid` and round-trips through
+  `json.Unmarshal`.
+- Previous commit `35be173` (initial prototype) shipped through main
+  CI green on Go / Action / Nix.
+
+### Deferred for follow-up
+
+1. Scenario id domain prefix is convention-only — `pkspec lint` does
+   not enforce membership in the 14-prefix list. Possible work: a
+   `Scenario.domain` enum field or a `lint.unknown-domain-prefix`
+   advisory rule. Recorded in `docs/notes/concepts.md` §5 #5.
+2. The higher-leverage speca idea (Goal → Scenario candidate
+   generation → `implementedAt` auto-resolution pipeline) is left
+   as a proposal under `docs/proposals/` for a future cycle.
+
+---
+
 ## Phase 41 — Mapping rewriter + `Step.inlineJsonPath`
 
 mizchi: "A" (drain Phase 38's deferred list, starting with the

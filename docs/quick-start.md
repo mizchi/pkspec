@@ -158,6 +158,10 @@ pkspec docs --audience pm --discover     # render audience-specific docs
 
 - [Authoring guide](./notes/authoring-guide.md): write Goals,
   Scenarios, and linked Tests.
+- [Concept map](./notes/concepts.md): one-page index of every concept
+  pkspec exposes — DSL classes, graph edges, lifecycle, verification,
+  kinds, adapters, differential, property-based, history, AI — with
+  pointers to the per-topic detail docs.
 - [Spec graph](./notes/spec-graph.md): reference for graph fields and
   review commands.
 - [Runner design](./notes/runner-design.md): how pkspec executes tests.
