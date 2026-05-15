@@ -5,6 +5,36 @@ what the probe revealed. New entries on top.
 
 ---
 
+## Phase 43 — v0.1.10 dogfooding usability findings
+
+mizchi: "ドッグフーディングする" → "わかりづらい点を文書化して"
+
+After shipping v0.1.10 (the domain-prefix lint), a blank
+`/tmp/pkspec-dogfood` project was set up with the fresh binary and
+the full review surface was exercised — `init`, `doctor`, `lint`,
+`check`, `spec`, `goals`, `next`. End-to-end the walkthrough worked
+without reading the schema source, which is the load-bearing
+success criterion.
+
+Ten rough edges surfaced. None blocks a release; each is a place
+where the experience reads as obvious to a maintainer but opaque to
+a first-time reader. Full list:
+[`docs/notes/usability-findings.md`](docs/notes/usability-findings.md).
+
+Top three by friction:
+
+1. `pkspec check` summary has no severity breakdown — a reader with
+   30 unimplemented scenarios has to scan rows to count criticals.
+2. `pkspec init` has no follow-up hint — a fresh user lands on a
+   `pkspec/` directory with no signal what to do next.
+3. The default `--dir pkspec` shadows the binary name in the
+   `amends "pkspec/Spec.pkl"` line; renaming the default to
+   `schemas/` would make the path obviously a folder.
+
+These are filed as polish-cycle candidates, not v0.1.11 blockers.
+
+---
+
 ## Phase 42 — speca-inspired: `pkspec doctor` + openQuestions policy + subagent fan-out review
 
 mizchi: "NyxFoundation/speca を読んで、取り入れられるところはないか

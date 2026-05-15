@@ -709,6 +709,17 @@ scenarios {
     implementedAt = "examples/spec-open-questions/README.md"
   }
   new {
+    id = "docs.usability-findings"
+    name = "dogfood_usability_findings_are_recorded"
+    description = "docs/notes/usability-findings.md lists the rough edges surfaced by dogfooding pkspec v0.1.10 from a blank project: severity breakdown missing in `pkspec check` summary, `pkspec init` has no follow-up hint, `pkspec/` directory shadows the binary name in amends paths, lint info-row padding, etc. Polish-cycle backlog, not v0.1.11 blockers."
+    tags { "spec"; "docs"; "usability" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/notes/usability-findings.md"
+  }
+  new {
     id = "docs.concept-map"
     name = "concept_map_index_exists"
     description = "docs/notes/concepts.md is a cross-cutting index of every concept pkspec exposes (authoring DSL, knowledge-graph edges, lifecycle, verification, audience projection, kinds, adapter DSL, differential, PBT, history, AI), with Scenario id domain prefixes, CLI commands grouped by purpose, and a table pointing to per-topic detail docs."
