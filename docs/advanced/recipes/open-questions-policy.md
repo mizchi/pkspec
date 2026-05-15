@@ -1,22 +1,10 @@
-# Recipe: Stress-phase Open Questions
+# Recipe: Open Questions Policy
 
-Use this recipe when a project has reached the point where specs are
-not just being written, but **defended**. The named question on the
-table is no longer "does the implementation match the description?" but
-"is the description load-bearing under attack?"
-
-The vocabulary borrows from
-[NyxFoundation/speca](https://github.com/NyxFoundation/speca)'s
-proof-attempt model:
-
-| Phase  | speca                              | pkspec equivalent                                |
-| ------ | ---------------------------------- | ------------------------------------------------ |
-| Map    | enumerate enforcement mechanisms   | write the Scenario + Test (or `implementedAt`)   |
-| Prove  | show every input / path is covered | `pkspec check` says the link resolves            |
-| Stress | challenge the assumptions          | `Scenario.openQuestions` + the lint policy below |
-
-This recipe shows how to make the Stress phase a first-class part of
-the spec review cycle without turning every TODO into a ticket.
+Use this recipe when a spec carries a known unknown — an
+implementation detail, an edge case, a contract corner — that the
+author has identified but does not yet have an answer for. `pkspec`
+gives that unknown a first-class home (`Scenario.openQuestions`) and
+a lint rule so it does not silently get rolled over.
 
 The recipe assumes:
 
@@ -29,10 +17,10 @@ The recipe assumes:
 
 ## 1. Write Open Questions While You Write The Description
 
-Open questions belong in the spec, next to the prose they qualify. If
+Open questions belong on the spec, next to the prose they qualify. If
 you find yourself writing "but I'm not sure if..." in a code comment
 or a Slack message, that is the moment a question wants to live on the
-Scenario.
+Scenario instead.
 
 ```pkl
 scenarios {
@@ -128,7 +116,7 @@ new Scenario {
 ```
 
 Once `openQuestions` is empty, `reviewStatus = "approved"` is safe
-under the new policy and `pkspec lint` is clean.
+under the policy and `pkspec lint` is clean.
 
 ## 5. Wire It Into CI
 
@@ -144,6 +132,22 @@ critical scenarios still carry open questions, keep the offending
 scenarios at `reviewStatus = "review"` instead of approving them. The
 lint policy only fires on `approved`, so a still-being-discussed spec
 stays out of the way until you are ready to defend it.
+
+## Vocabulary Note: `openQuestions` vs `decisions` vs `dependsOn`
+
+All three fields live on a Scenario and can carry free-form text. They
+are not interchangeable — each one answers a different reviewer
+question:
+
+| Field           | Answers                                | Lifetime              |
+| --------------- | -------------------------------------- | --------------------- |
+| `openQuestions` | "What about this spec is still unresolved?" | until answered.        |
+| `decisions`     | "Why did this spec end up the way it did?"  | append-only forever.   |
+| `dependsOn`     | "Which other specs must hold for this one?" | structural, not prose. |
+
+The intended flow is `openQuestions` → answered → archived as a
+`Decision` entry. `dependsOn` is independent — it captures hard
+preconditions between specs, not unresolved authoring questions.
 
 ## Common Pitfalls
 
@@ -173,5 +177,6 @@ implementation, render the audience docs with `pkspec docs`.
   a runnable two-scenario fixture that demonstrates the lint policy
   firing and the `pkspec next` tie-break.
 - [`docs/advanced/recipes/doctor-environment-check.md`](doctor-environment-check.md) —
-  companion recipe for `pkspec doctor`, the environment counterpart to
-  this spec-level audit.
+  companion recipe for `pkspec doctor`, the environment-side audit.
+- [`docs/notes/concepts.md`](../../notes/concepts.md) — concept map
+  with the full cross-cutting vocabulary.

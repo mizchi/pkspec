@@ -284,10 +284,21 @@ Honest issues with the vocabulary as it stands today:
 
 5. **Spec id domain prefixes are convention, not enforcement.**
    §2 lists the prefixes in use today, but nothing in `pkspec lint`
-   stops a new Scenario from declaring `id = "random.thing"`. If
-   prefixes are load-bearing for navigation, they should either be
-   linted or moved into a `domain:` field with a closed enum.
-   Deferred.
+   stops a new Scenario from declaring `id = "random.thing"`.
+   Proposal drafted at
+   [`docs/proposals/scenario-domain-enforcement.md`](../proposals/scenario-domain-enforcement.md) —
+   recommends an opt-in Plan-scoped `domains: Listing<String>` and a
+   `lint.unknown-domain-prefix` info-level rule. Implementation
+   deferred to a future phase.
+
+6. **Goal-driven Scenario generation.** The independent design
+   review of Phase 42 flagged that the highest-leverage idea
+   borrowable from NyxFoundation/speca — its property-generation
+   pipeline — was consciously not shipped. Proposal drafted at
+   [`docs/proposals/goal-driven-scenario-generation.md`](../proposals/goal-driven-scenario-generation.md) —
+   sketches three candidate designs (CLI + LLM judge, template-
+   based, hybrid) and recommends deferring all three until a
+   concrete authoring goal and success metric are defined.
 
 These are not bugs in the implementation — they are vocabulary
 choices that have accumulated. Resolving each one is a design call,

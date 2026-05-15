@@ -663,6 +663,28 @@ scenarios {
     implementedAt = "docs/notes/concepts.md"
   }
   new {
+    id = "docs.proposal-scenario-domain-enforcement"
+    name = "scenario_domain_enforcement_proposal_exists"
+    description = "docs/proposals/scenario-domain-enforcement.md captures four candidate designs (closed enum field, plan-scoped allow-list at info or warn, auto-detection) for enforcing the 14-prefix Scenario.id convention, recommends the opt-in plan-scoped allow-list, and sketches the implementation."
+    tags { "spec"; "docs"; "proposal" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/proposals/scenario-domain-enforcement.md"
+  }
+  new {
+    id = "docs.proposal-goal-driven-generation"
+    name = "goal_driven_scenario_generation_proposal_exists"
+    description = "docs/proposals/goal-driven-scenario-generation.md records the speca-inspired property generation pipeline as a deferred proposal: CLI+LLM, template-based, and hybrid designs with the rationale for deferring all three until a concrete authoring goal is defined."
+    tags { "spec"; "docs"; "proposal" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/proposals/goal-driven-scenario-generation.md"
+  }
+  new {
     id = "spec.prelude"
     name = "prelude_shares_given_across_scenarios"
     description = "Spec.pkl's top-level `prelude: Listing<SpecStep>` is prepended to every scenario's executed steps. Empty `given/when/then/cleanup` still auto-pends — shared setup doesn't count as having a body."
