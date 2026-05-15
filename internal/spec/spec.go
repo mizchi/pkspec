@@ -12,8 +12,10 @@
 package spec
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -961,8 +963,8 @@ func checkFromScenarios(plans []*config.Plan) []SpecIssue {
 // scenarioIsImplemented decides whether a Scenario should be
 // considered verified. Two paths, satisfied in OR:
 //
-//   - any Implementation entry with kind=code/doc that carries a
-//     non-empty `at` is sufficient (the spec-side declaration);
+//   - any Implementation entry with kind=code/doc/task that carries
+//     a non-empty `at` is sufficient (the spec-side declaration);
 //   - any Implementation entry with kind=test, OR an active
 //     Test.pkl matching the Scenario.id via specRef, is sufficient
 //     (the test-side link).
@@ -975,7 +977,7 @@ func scenarioIsImplemented(sc *config.Scenario, impls map[string][]string) bool 
 			continue
 		}
 		switch impl.Kind {
-		case "code", "doc":
+		case "code", "doc", "task":
 			if impl.At != nil && *impl.At != "" {
 				return true
 			}
@@ -1933,59 +1935,130 @@ type ImplIssue struct {
 }
 
 // VerifyImplementedAt walks every Scenario's Implementation entries
-// of kind=code/doc and checks that the file portion of each `at`
-// pointer (before any `:Symbol` / `#anchor` suffix) exists relative
-// to `repoRoot`. Symbol names are not verified — the runner can't
-// reasonably parse every language's AST. Missing files are
-// returned as ImplIssues.
+// of kind=code/doc/task and checks that the file portion of each
+// `at` pointer (before any `:Symbol` / `#anchor` suffix) exists
+// relative to `repoRoot`. Symbol names are not verified — the runner
+// can't reasonably parse every language's AST. For kind=task, when
+// `pkf` is on PATH and the file portion ends in `Taskfile.pkl`, the
+// task name (after `#`) is also cross-checked via `pkf list --json`.
+// Missing files (or missing tasks) are returned as ImplIssues.
 func VerifyImplementedAt(plans []*config.Plan, repoRoot string) []ImplIssue {
 	var out []ImplIssue
 	seen := map[string]struct{}{}
+	// Cache `pkf list --json` per resolved Taskfile path so a single
+	// run of `pkspec check --strict` does not shell out repeatedly
+	// when many Scenarios point at the same Taskfile.
+	taskListCache := map[string]map[string]bool{}
 	for _, p := range plans {
 		for _, sc := range p.Scenarios {
 			for _, impl := range sc.Implementations {
 				if impl == nil {
 					continue
 				}
-				if impl.Kind != "code" && impl.Kind != "doc" {
+				if impl.Kind != "code" && impl.Kind != "doc" && impl.Kind != "task" {
 					continue
 				}
 				if impl.At == nil || *impl.At == "" {
-					continue
-				}
-				pathPart := *impl.At
-				if idx := strings.IndexByte(pathPart, ':'); idx >= 0 {
-					pathPart = pathPart[:idx]
-				}
-				if idx := strings.IndexByte(pathPart, '#'); idx >= 0 {
-					pathPart = pathPart[:idx]
-				}
-				abs := pathPart
-				if !filepath.IsAbs(abs) {
-					abs = filepath.Join(repoRoot, pathPart)
-				}
-				if _, err := os.Stat(abs); err == nil {
 					continue
 				}
 				id := sc.Name
 				if sc.ID != nil {
 					id = *sc.ID
 				}
-				key := id + "|" + pathPart
-				if _, dup := seen[key]; dup {
+				pathPart, taskName := splitImplAt(*impl.At, impl.Kind)
+				abs := pathPart
+				if !filepath.IsAbs(abs) {
+					abs = filepath.Join(repoRoot, pathPart)
+				}
+				if _, err := os.Stat(abs); err != nil {
+					key := id + "|" + pathPart
+					if _, dup := seen[key]; !dup {
+						seen[key] = struct{}{}
+						out = append(out, ImplIssue{
+							SpecID: id,
+							Path:   pathPart,
+							Reason: "file not found",
+						})
+					}
 					continue
 				}
-				seen[key] = struct{}{}
-				out = append(out, ImplIssue{
-					SpecID: id,
-					Path:   pathPart,
-					Reason: "file not found",
-				})
+				if impl.Kind == "task" && taskName != "" && strings.HasSuffix(pathPart, "Taskfile.pkl") {
+					names, ok := taskListCache[abs]
+					if !ok {
+						names = listPkfireTasks(abs)
+						taskListCache[abs] = names
+					}
+					if names != nil {
+						if _, found := names[taskName]; !found {
+							key := id + "|" + pathPart + "#" + taskName
+							if _, dup := seen[key]; !dup {
+								seen[key] = struct{}{}
+								out = append(out, ImplIssue{
+									SpecID: id,
+									Path:   pathPart + "#" + taskName,
+									Reason: fmt.Sprintf("task %q not declared in %s", taskName, pathPart),
+								})
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].SpecID < out[j].SpecID })
 	return out
+}
+
+// splitImplAt parses an Implementation.at value into its file part
+// and the symbol / task name after `:` or `#`. For kind=task, a
+// value with no path separator is treated as a bare task name and
+// defaults the path to `Taskfile.pkl` at the repo root.
+func splitImplAt(at, kind string) (path, name string) {
+	path = at
+	if idx := strings.IndexByte(path, '#'); idx >= 0 {
+		name = path[idx+1:]
+		path = path[:idx]
+	} else if idx := strings.IndexByte(path, ':'); idx >= 0 {
+		name = path[idx+1:]
+		path = path[:idx]
+	}
+	if kind == "task" && path != "" && !strings.HasSuffix(path, ".pkl") && name == "" {
+		// `at = "release"` — bare task name; default the path.
+		name = path
+		path = "Taskfile.pkl"
+	}
+	return path, name
+}
+
+// listPkfireTasks shells out to `pkf list --json -f <taskfile>` and
+// returns the set of declared task names. Returns nil when pkf is
+// not on PATH or the call fails — verification then falls back to
+// the file-existence check alone, so a missing pkf does not break
+// `pkspec check --strict` for repos that haven't installed pkfire.
+func listPkfireTasks(taskfile string) map[string]bool {
+	pkf, err := exec.LookPath("pkf")
+	if err != nil {
+		return nil
+	}
+	cmd := exec.Command(pkf, "list", "--json", "-f", taskfile)
+	cmd.Stderr = nil
+	data, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	var payload struct {
+		Tasks []struct {
+			Name string `json:"name"`
+		} `json:"tasks"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil
+	}
+	names := make(map[string]bool, len(payload.Tasks))
+	for _, t := range payload.Tasks {
+		names[t.Name] = true
+	}
+	return names
 }
 
 // FilterPlansForSpec narrows a plan slice to scenarios matching the

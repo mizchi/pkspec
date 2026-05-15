@@ -1,6 +1,8 @@
 package spec
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -906,5 +908,95 @@ func TestNextActionsTieBreakByOpenQuestions(t *testing.T) {
 	out := FormatNext(actions)
 	if !strings.Contains(out, "open questions: 2") {
 		t.Fatalf("expected open-questions line in formatted output, got %s", out)
+	}
+}
+
+func TestSplitImplAt(t *testing.T) {
+	cases := []struct {
+		name     string
+		at       string
+		kind     string
+		wantPath string
+		wantName string
+	}{
+		{"code with colon", "internal/auth.go:Validate", "code", "internal/auth.go", "Validate"},
+		{"doc with anchor", "docs/security.md#policy", "doc", "docs/security.md", "policy"},
+		{"task with anchor", "Taskfile.pkl#release", "task", "Taskfile.pkl", "release"},
+		{"task bare name defaults path", "release", "task", "Taskfile.pkl", "release"},
+		{"code with no anchor", "go.mod", "code", "go.mod", ""},
+		{"task path only", "subdir/Taskfile.pkl", "task", "subdir/Taskfile.pkl", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path, name := splitImplAt(c.at, c.kind)
+			if path != c.wantPath || name != c.wantName {
+				t.Errorf("splitImplAt(%q, %q) = (%q, %q); want (%q, %q)",
+					c.at, c.kind, path, name, c.wantPath, c.wantName)
+			}
+		})
+	}
+}
+
+func TestVerifyImplementedAtTaskKind(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "Taskfile.pkl"), []byte("// fixture\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	missingPath := "no-such-taskfile.pkl"
+	plans := []*config.Plan{
+		{
+			SourcePath: filepath.Join(repo, "Spec.pkl"),
+			Scenarios: map[string]*config.Scenario{
+				"ok": {
+					Name:         "ok",
+					ID:           strPtr("ok"),
+					ReviewStatus: "approved",
+					Implementations: []*config.Implementation{{
+						Kind: "task",
+						At:   strPtr("Taskfile.pkl#release"),
+					}},
+				},
+				"missing-file": {
+					Name:         "missing-file",
+					ID:           strPtr("missing-file"),
+					ReviewStatus: "approved",
+					Implementations: []*config.Implementation{{
+						Kind: "task",
+						At:   strPtr(missingPath + "#release"),
+					}},
+				},
+			},
+		},
+	}
+	issues := VerifyImplementedAt(plans, repo)
+	// We can't assume `pkf` is on PATH in CI, so only the missing-file
+	// case is guaranteed to surface. If pkf IS on PATH, we additionally
+	// get a "task not declared" issue for the fixture Taskfile (which
+	// is not a real pkfire Taskfile).
+	var sawMissingFile bool
+	for _, iss := range issues {
+		if iss.SpecID == "missing-file" && strings.Contains(iss.Path, missingPath) && iss.Reason == "file not found" {
+			sawMissingFile = true
+		}
+	}
+	if !sawMissingFile {
+		t.Errorf("expected file-not-found issue for missing-file scenario, got %#v", issues)
+	}
+}
+
+func TestScenarioIsImplementedAcceptsTaskKind(t *testing.T) {
+	sc := &config.Scenario{
+		ID: strPtr("x"),
+		Implementations: []*config.Implementation{{
+			Kind: "task",
+			At:   strPtr("Taskfile.pkl#release"),
+		}},
+	}
+	if !scenarioIsImplemented(sc, map[string][]string{}) {
+		t.Error("scenario with kind=task implementation should count as implemented")
+	}
+	sc.Implementations[0].At = nil
+	if scenarioIsImplemented(sc, map[string][]string{}) {
+		t.Error("scenario with kind=task but empty at should NOT count as implemented")
 	}
 }

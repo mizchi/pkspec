@@ -1,0 +1,38 @@
+/// Taskfile pointed at by examples/pkfire-task-link/Spec.pkl.
+///
+/// Three tasks (`release`, `migrate-db`, `release-shorthand`) so
+/// every Implementation { kind = "task" } in the sibling Spec.pkl
+/// resolves cleanly when `pkspec check --strict` shells out to
+/// `pkf list --json`.
+///
+/// Schema is the published pkfire 0.10.0 package — `Task.specRef`
+/// (the *task-side* of the cross-link, available in pkfire 0.11.0+)
+/// is intentionally NOT used here. This example showcases the
+/// spec-side direction only.
+amends "package://pkg.pkl-lang.org/github.com/mizchi/pkfire/pkfire@0.10.0#/Taskfile.pkl"
+
+local release: Task = new {
+  name = "release"
+  description = "Tag and publish a release (implements release-pipeline)"
+  cmd =
+    """
+    set -euo pipefail
+    test -n "$VERSION" || { echo "VERSION required" >&2; exit 2; }
+    git tag -a "v$VERSION" -m "release v$VERSION"
+    git push origin "v$VERSION"
+    """
+  cache = false
+  params {
+    new { name = "version"; type = "string"; description = "semver to tag" }
+  }
+}
+
+local migrateDb: Task = new {
+  name = "migrate-db"
+  description = "Run pending database migrations (implements migration-runs)"
+  cmd = "npx prisma migrate deploy"
+  cache = false
+  inputs { "prisma/migrations/**" }
+}
+
+tasks { release; migrateDb }

@@ -43,8 +43,18 @@ class SpecStep {
 /// implementing artefact ("path:Symbol" / "path#anchor").
 /// `pkspec check --strict` verifies that the file portion exists
 /// on disk.
+///
+/// `kind = "task"` declares that a [pkfire](https://github.com/mizchi/pkfire)
+/// task is the implementation — typical for build / release /
+/// migration pipelines that live in `Taskfile.pkl` rather than
+/// application code. `at` uses the `path#name` convention:
+/// `at = "Taskfile.pkl#release"` for the `release` task in the
+/// repo-root Taskfile, or just `at = "release"` to default the path
+/// to `./Taskfile.pkl`. `pkspec check --strict` verifies the file
+/// exists; when `pkf` is on PATH it also confirms the named task
+/// is declared (via `pkf list --json`).
 class Implementation {
-  kind: ("test" | "code" | "doc")
+  kind: ("test" | "code" | "doc" | "task")
   at: String? = null
 }
 

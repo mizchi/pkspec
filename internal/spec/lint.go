@@ -258,6 +258,15 @@ func lintImpl(plans []*config.Plan, sources []SourceRef) []LintIssue {
 							Fix:     "set `at = \"path:Symbol\"` (or `at = \"docs/...md#anchor\"` for doc), or change kind to \"test\"",
 						})
 					}
+				case "task":
+					if impl.At == nil || *impl.At == "" {
+						out = append(out, LintIssue{
+							Rule: "lint.implementation-task-without-at", Level: LintError,
+							Subject: subject,
+							Message: "Implementation { kind=\"task\" } has no `at` pointer — pkspec check --strict has nothing to verify",
+							Fix:     "set `at = \"Taskfile.pkl#<task>\"` or just `at = \"<task>\"` to default the path",
+						})
+					}
 				}
 			}
 

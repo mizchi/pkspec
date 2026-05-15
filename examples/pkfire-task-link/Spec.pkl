@@ -1,0 +1,68 @@
+/// pkfire-task-link example: Implementation { kind = "task" }.
+///
+/// Demonstrates spec → pkfire task linking via the v0.2.x
+/// Implementation enum value `kind = "task"`. The `at` pointer is
+/// `Taskfile.pkl#<task-name>` (or just `<task-name>` to default
+/// the path to `./Taskfile.pkl`).
+///
+/// `pkspec check --strict` walks every Implementation entry:
+///   - confirms the file portion of `at` exists on disk;
+///   - when `pkf` is on PATH AND the file portion ends in
+///     `Taskfile.pkl`, additionally shells out to
+///     `pkf list --json -f <path>` and verifies the task name
+///     after `#` is declared.
+///
+/// If `pkf` is not on PATH, only the file-existence check runs —
+/// so this example degrades gracefully for environments without
+/// pkfire installed.
+amends "../../pkl/Spec.pkl"
+
+feature = "release pipeline"
+
+scenarios {
+  new {
+    id = "release-pipeline"
+    name = "release tag is pushed by the runner"
+    description = "running `pkf run release --version=X.Y.Z` produces an annotated v-tag on origin"
+    tags { "spec"; "audience:operator" }
+    reviewStatus = "approved"
+    severity = "major"
+    implementations {
+      new {
+        kind = "task"
+        at = "examples/pkfire-task-link/Taskfile.pkl#release"
+      }
+    }
+  }
+  new {
+    id = "migration-runs"
+    name = "schema migrations are applied at release"
+    description = "running `pkf run migrate-db` invokes the migration runner"
+    tags { "spec"; "audience:operator" }
+    reviewStatus = "approved"
+    severity = "major"
+    implementations {
+      new {
+        kind = "task"
+        at = "examples/pkfire-task-link/Taskfile.pkl#migrate-db"
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------
+// `at` value shapes
+// ---------------------------------------------------------------
+//
+// Paths are resolved relative to the repository root, matching the
+// existing `kind = "code"` / `kind = "doc"` conventions. Common
+// shapes:
+//
+//   "Taskfile.pkl#release"                         single Taskfile at repo root
+//   "subdir/Taskfile.pkl#build"                    Taskfile in a subdir / monorepo package
+//   "release"                                      bare task name; pkspec defaults the path to ./Taskfile.pkl
+//
+// In this example, the Taskfile lives at
+// examples/pkfire-task-link/Taskfile.pkl, so each `at` carries the
+// full relative path. Move the spec + taskfile to repo root and
+// the values collapse to `Taskfile.pkl#release` etc.
