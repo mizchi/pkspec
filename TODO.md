@@ -282,6 +282,16 @@ type error.
 
 ### T2-2. Reshape `Step` body via `abstract class StepBody`
 
+**Status (deferred to 0.3.0):** Punted to a dedicated breaking
+release. Rationale: T2-2, T2-3, T3-2, and T3-3 all touch the
+**author surface** of every Test.pkl / Spec.pkl (every `cmd =`,
+every `expect*`, every `inlineStdout`, every `steps` block). Landing
+them one at a time forces every downstream project to run `pkspec
+migrate` four separate times. They should land together in a single
+0.3.0 release with one migrate pass, one changelog entry, and one
+review window. See **Migration sequencing note** at the end of this
+file for the planned 0.3.0 batch.
+
 **Problem.** A `Step` carries five mutually-exclusive body slots
 (`cmd`, `http`, `playwright`, `playwrightTest`, `sql`) all
 nullable, plus a computed `kind` field that diagnoses the case.
@@ -339,6 +349,9 @@ schema change.
 ---
 
 ### T2-3. Extract `ShellExpectations` from Test and Step
+
+**Status (deferred to 0.3.0):** Bundled with T2-2 / T3-2 / T3-3
+in the 0.3.0 author-surface batch (see T2-2 for rationale).
 
 **Problem.** `Test` and `Step` each declare the same nine
 expect/inline field names (`expectStdout`, `expectStdoutContains`,
@@ -428,6 +441,9 @@ abstract-class hierarchy and is no longer synthesized.)
 
 ### T3-2. Apply `abstract TestBody` to `Test.cmd` / `steps` / `parallelSteps`
 
+**Status (deferred to 0.3.0):** Bundled with T2-2 / T2-3 / T3-3
+in the 0.3.0 author-surface batch.
+
 **Problem.** Same as T2-2 but for `Test`. A `Test` is supposed to
 pick exactly one of `cmd`, `steps`, or `parallelSteps`; the
 constraint lives in the runner.
@@ -466,6 +482,9 @@ migration.
 ---
 
 ### T3-3. Rework `inlineStdout` sentinel encoding
+
+**Status (deferred to 0.3.0):** Bundled with T2-2 / T2-3 / T3-2
+in the 0.3.0 author-surface batch.
 
 **Problem.** `inlineStdout: String? = null` carries three
 semantic states:
@@ -619,3 +638,36 @@ This is a runner change (Go-side), not a schema change.
 
 - `cmd/pkspec/*` for the entry that decodes the rendered module.
 - `pkl/Test.pkl:590` (the regex that bit the author).
+
+---
+
+## Migration sequencing note (added 2026-05-15)
+
+After Tier 1 + T2-1 + T3-4 + T3-5 landed, the remaining four
+tickets (**T2-2 / T2-3 / T3-2 / T3-3**) were bundled and deferred
+to a dedicated **0.3.0** release. They all touch the **author
+surface** of every Test.pkl / Spec.pkl in existence:
+
+- T2-2  every `Step { cmd | http | playwright | playwrightTest | sql = ... }`
+- T2-3  every `expectStdout` / `expectStderr` / `expectExitCode` / `expectStdout*` / `inlineStdout` / `inlineStderr` on Step or Test
+- T3-2  every `Test { cmd | steps | parallelSteps = ... }`
+- T3-3  every `inlineStdout` / `inlineStderr` value (the sentinel encoding)
+
+Landing them one at a time would force downstream projects through
+four separate `pkspec migrate` runs. The single-batch 0.3.0 plan:
+
+1. Write a single migration spec covering all four refactors.
+2. Build one `pkspec migrate --to 0.3.0` rule set that rewrites
+   every affected site (multi-line, nested, indented).
+3. Update every example in `examples/` and every Test.pkl /
+   Spec.pkl inside the repo as part of the same commit.
+4. Cut a 0.3.0 tag with a CHANGELOG entry that:
+   - lists the four schema changes side-by-side,
+   - shows before/after for each,
+   - links to the migrate command,
+   - calls out that running `pkspec migrate path` covers all four
+     in one pass.
+
+T3-1 (`hidden Step.kind`) is automatically resolved by T2-2 —
+once `StepBody` carries the discriminator, the synthesized
+`kind` field on `Step` disappears.
