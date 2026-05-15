@@ -69,6 +69,93 @@ func TestScanSourcesFindsMarkers(t *testing.T) {
 	_ = tsFile
 }
 
+func TestScanSourcesExtraSkipDirs(t *testing.T) {
+	dir := t.TempDir()
+	writeFixture(t, dir, "keep/main.go", "// "+marker("a.kept")+"\n")
+	writeFixture(t, dir, "generated/out.go", "// "+marker("a.gone")+"\n")
+
+	refs, err := ScanSourcesWithOptions([]string{dir}, ScanOptions{
+		ExtraSkipDirs: []string{"generated"},
+	})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(refs) != 1 || refs[0].SpecID != "a.kept" {
+		t.Fatalf("expected only a.kept, got %+v", refs)
+	}
+}
+
+func TestScanRegexRejectsSlashInId(t *testing.T) {
+	dir := t.TempDir()
+	// `/` in the marker is intentionally rejected (Scenario.id
+	// grammar disallows it). The scanner should capture only the
+	// portion before the slash, not pretend the whole `foo/bar` is
+	// one id.
+	writeFixture(t, dir, "x.go", "// "+marker("foo")+"/bar baseline\n")
+
+	refs, err := ScanSources([]string{dir})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(refs) != 1 || refs[0].SpecID != "foo" {
+		t.Fatalf("expected single ref to `foo`, got %+v", refs)
+	}
+}
+
+func TestScanSurvivesOversizedLine(t *testing.T) {
+	dir := t.TempDir()
+	// Build a single line large enough to overflow the 1 MiB scanner
+	// cap. The file should be skipped (bufio.ErrTooLong → return what
+	// was read), not abort the whole walk.
+	pad := strings.Repeat("a", 2*1024*1024)
+	writeFixture(t, dir, "huge.go", pad+" // "+marker("only-after-pad")+"\n")
+	writeFixture(t, dir, "tiny.go", "// "+marker("tiny.kept")+"\n")
+
+	refs, err := ScanSources([]string{dir})
+	if err != nil {
+		t.Fatalf("scan should not error on oversized line, got %v", err)
+	}
+	foundTiny := false
+	for _, r := range refs {
+		if r.SpecID == "tiny.kept" {
+			foundTiny = true
+		}
+	}
+	if !foundTiny {
+		t.Fatalf("expected tiny.kept ref to survive the oversized-line file, got %+v", refs)
+	}
+}
+
+func TestScanSourcesSkipsSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	target := writeFixture(t, dir, "real/file.go", "// "+marker("real.target")+"\n")
+	link := filepath.Join(dir, "real", "loop.go")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	// Self-loop symlink as well — must not hang or recurse forever.
+	loopDir := filepath.Join(dir, "real", "self-loop")
+	if err := os.Symlink(loopDir, loopDir); err == nil {
+		// some filesystems disallow this; tolerate either outcome
+		_ = loopDir
+	}
+
+	refs, err := ScanSources([]string{dir})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	count := 0
+	for _, r := range refs {
+		if r.SpecID == "real.target" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected the target file to be scanned exactly once (symlink alias should be skipped), got %d ref(s): %+v",
+			count, refs)
+	}
+}
+
 func TestScanSourcesAcceptsFilePath(t *testing.T) {
 	dir := t.TempDir()
 	file := writeFixture(t, dir, "lone.md", "see "+marker("doc.example")+".\n")
@@ -101,14 +188,17 @@ func TestLintWithSourcesFlagsDeadRef(t *testing.T) {
 	found := false
 	for _, iss := range issues {
 		if iss.Rule == "lint.dead-source-specRef" {
-			if iss.Level != LintError {
-				t.Errorf("dead-source-specRef should be Error, got %v", iss.Level)
+			if iss.Level != LintWarn {
+				t.Errorf("dead-source-specRef should be Warn (advisory; not CI-blocking), got %v", iss.Level)
 			}
 			if !strings.Contains(iss.Subject, "cmd/pkspec/main.go:20") {
 				t.Errorf("subject should point at path:line, got %q", iss.Subject)
 			}
 			if !strings.Contains(iss.Message, "runner.ghost") {
 				t.Errorf("message should name the dead id, got %q", iss.Message)
+			}
+			if strings.Contains(iss.Message, `"runner.ghost"`) {
+				t.Errorf("message should not quote the id (Go-quoted output is not what users grep for), got %q", iss.Message)
 			}
 			found = true
 		}

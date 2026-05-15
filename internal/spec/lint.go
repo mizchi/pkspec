@@ -346,9 +346,15 @@ func LintWithSources(plans []*config.Plan, sources []SourceRef) []LintIssue {
 			}
 			ref := grouped[id][0]
 			out = append(out, LintIssue{
-				Rule: "lint.dead-source-specRef", Level: LintError,
+				// Warn, not error: a dead source marker is an
+				// advisory signal, not a CI-blocking contract
+				// violation. The canonical implementation pointer is
+				// `Scenario.implementedAt` (gated by `check --strict`);
+				// markers are code-side breadcrumbs that can lag
+				// during a rename without breaking the spec.
+				Rule: "lint.dead-source-specRef", Level: LintWarn,
 				Subject: fmt.Sprintf("%s:%d", ref.Path, ref.Line),
-				Message: fmt.Sprintf("pkspec:spec=%q has no matching Scenario.id (%d occurrence(s) across the scan)", id, len(grouped[id])),
+				Message: fmt.Sprintf("pkspec:spec=%s has no matching Scenario.id (%d occurrence(s) across the scan)", id, len(grouped[id])),
 				Fix:     "fix the typo in the source marker, declare the Scenario, or remove the marker if the spec was retired",
 			})
 		}

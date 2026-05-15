@@ -288,8 +288,10 @@ func usageSpecMode(w io.Writer, mode string) {
 	case "lint":
 		fmt.Fprint(w, "  --lint-disable IDS     comma-separated lint rule ids to suppress\n")
 		fmt.Fprint(w, "  --scan PATH            scan PATH (file or directory) for `pkspec:spec=<id>` markers (repeatable)\n")
+		fmt.Fprint(w, "  --skip-dir NAME        prune this directory base-name from --scan walks (repeatable)\n")
 	case "graph":
 		fmt.Fprint(w, "  --scan PATH            scan PATH (file or directory) for `pkspec:spec=<id>` markers and draw source backlinks (repeatable)\n")
+		fmt.Fprint(w, "  --skip-dir NAME        prune this directory base-name from --scan walks (repeatable)\n")
 	case "spec":
 		fmt.Fprint(w, "  --output PATH          write Markdown SPEC to PATH\n")
 		fmt.Fprint(w, "  --tag TAG              include tests whose tags contain TAG\n")
@@ -580,6 +582,8 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	fs.Var(&tags, "tag", "only include tests whose `tags` Listing contains this exact value (repeatable; OR)")
 	var scan multiString
 	fs.Var(&scan, "scan", "scan this path (file or directory) for `pkspec:spec=<id>` markers in source files. Repeatable. Used by lint mode (adds `lint.dead-source-specRef`) and graph mode (adds source backlinks)")
+	var skipDir multiString
+	fs.Var(&skipDir, "skip-dir", "directory base-name to prune from --scan walks in addition to the built-in defaults (.git / node_modules / vendor / dist / build / .pkspec / result). Repeatable.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -657,13 +661,19 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 
 	// `--scan` is only meaningful for the two surfaces that consume it.
 	// Reject combinations that would silently ignore the scan instead
-	// of surprising the user with a quiet no-op.
+	// of surprising the user with a quiet no-op. `--skip-dir` only
+	// makes sense alongside `--scan`.
 	if len(scan) > 0 && !*lint && !*graph {
 		return fmt.Errorf("--scan is only supported by lint and graph modes")
 	}
+	if len(skipDir) > 0 && len(scan) == 0 {
+		return fmt.Errorf("--skip-dir requires --scan")
+	}
 	var sourceRefs []spec.SourceRef
 	if len(scan) > 0 {
-		refs, err := spec.ScanSources([]string(scan))
+		refs, err := spec.ScanSourcesWithOptions([]string(scan), spec.ScanOptions{
+			ExtraSkipDirs: []string(skipDir),
+		})
 		if err != nil {
 			return err
 		}
