@@ -737,14 +737,32 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 			return nil
 		}
 		if len(unimplemented) > 0 {
-			fmt.Fprintf(stderr, "pkspec: %d unimplemented spec(s):\n", len(unimplemented))
+			crit, maj, mnr := 0, 0, 0
+			for _, iss := range unimplemented {
+				switch severityFor(plans, iss.SpecID) {
+				case "critical":
+					crit++
+				case "minor":
+					mnr++
+				default:
+					maj++
+				}
+			}
+			fmt.Fprintf(stderr, "pkspec: %d unimplemented spec(s) — %d critical, %d major, %d minor:\n",
+				len(unimplemented), crit, maj, mnr)
 			for _, iss := range unimplemented {
 				goalSuffix := ""
 				if contribs := contributesFor(plans, iss.SpecID); len(contribs) > 0 {
 					goalSuffix = " → " + strings.Join(contribs, ", ")
 				}
-				fmt.Fprintf(stderr, "  %s (declared in: %s)%s\n",
-					iss.SpecID, strings.Join(iss.DeclaredIn, ", "), goalSuffix)
+				rs := reviewStatusFor(plans, iss.SpecID)
+				sev := severityFor(plans, iss.SpecID)
+				meta := sev
+				if rs != "" && rs != "approved" {
+					meta = sev + ", " + rs
+				}
+				fmt.Fprintf(stderr, "  %s (%s; declared in: %s)%s\n",
+					iss.SpecID, meta, strings.Join(iss.DeclaredIn, ", "), goalSuffix)
 			}
 		}
 		if len(strictIssues) > 0 {
@@ -1066,6 +1084,35 @@ func contributesFor(plans []*config.Plan, id string) []string {
 		}
 	}
 	return nil
+}
+
+// severityFor returns the matched Scenario's severity ("critical" /
+// "major" / "minor"), defaulting to "major" — the schema's own default.
+func severityFor(plans []*config.Plan, id string) string {
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID != nil && *sc.ID == id {
+				if sc.Severity == "" {
+					return "major"
+				}
+				return sc.Severity
+			}
+		}
+	}
+	return "major"
+}
+
+// reviewStatusFor returns the matched Scenario's reviewStatus.
+// Returns empty when not found.
+func reviewStatusFor(plans []*config.Plan, id string) string {
+	for _, p := range plans {
+		for _, sc := range p.Scenarios {
+			if sc.ID != nil && *sc.ID == id {
+				return sc.ReviewStatus
+			}
+		}
+	}
+	return ""
 }
 
 // snapshotHint returns a short hint of which suites wrote snapshots so

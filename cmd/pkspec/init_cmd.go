@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	pkspec "github.com/mizchi/pkspec"
 )
@@ -69,5 +70,20 @@ func cmdInit(args []string, stdout, _ io.Writer) error {
 		written++
 	}
 	fmt.Fprintf(stdout, "pkspec: wrote %d schema file(s) to %s\n", written, abs)
+	rel, err := filepath.Rel(".", abs)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		rel = filepath.Base(abs)
+	}
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Next:")
+	fmt.Fprintf(stdout, "  pkspec spec --template module > Spec.pkl     # then edit `amends \"%s/Spec.pkl\"`\n", rel)
+	fmt.Fprintln(stdout, "  pkspec spec --template scenario              # paste into Spec.pkl")
+	fmt.Fprintln(stdout, "  pkspec check Spec.pkl                        # verify cross-references")
+	if filepath.Base(abs) == "pkspec" {
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, "Tip: the directory `pkspec/` shares the binary's name, which can make")
+		fmt.Fprintln(stdout, "     `amends` paths read oddly. `pkspec init --dir schemas` is a clearer")
+		fmt.Fprintln(stdout, "     default for new projects.")
+	}
 	return nil
 }

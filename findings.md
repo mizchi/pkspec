@@ -31,7 +31,13 @@ Top three by friction:
    `amends "pkspec/Spec.pkl"` line; renaming the default to
    `schemas/` would make the path obviously a folder.
 
-These are filed as polish-cycle candidates, not v0.1.11 blockers.
+**Outcome:** all 10 findings landed in the same phase as the polish
+follow-up. Targets v0.1.11. Finding #5 (the `--dir` default) was
+implemented as a non-breaking "tip" pointing at `--dir schemas`
+rather than flipping the default outright; that flip is reserved for
+a future major version. Every other finding shipped a concrete code
+or doc change. The status of each finding is recorded inline in
+`docs/notes/usability-findings.md`.
 
 ---
 

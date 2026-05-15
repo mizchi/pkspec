@@ -213,6 +213,12 @@ class Scenario {
   /// Other `Scenario.id` values this spec depends on / assumes.
   /// `pkspec graph` renders these as graphviz edges so impact
   /// analysis ("if LOGIN-001 breaks, what else fails?") is mechanical.
+  ///
+  /// `dependsOn` is one of three free-form fields on Scenario; see
+  /// the `Vocabulary Note` table in
+  /// `docs/advanced/recipes/open-questions-policy.md` for how it
+  /// differs from `openQuestions` (unresolved ambiguities) and
+  /// `decisions` (append-only resolutions).
   dependsOn: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
 
   /// Other `Scenario.id` values that this spec replaces. The
@@ -290,12 +296,24 @@ class Scenario {
   /// `pkspec spec` renders these as a TODO list at the end of the
   /// SPEC.md so reviewers can answer them in one pass instead of
   /// hunting through descriptions.
+  ///
+  /// `openQuestions` is one of three free-form fields on Scenario;
+  /// each answers a different reviewer question. The
+  /// `Vocabulary Note` table in
+  /// `docs/advanced/recipes/open-questions-policy.md` is the
+  /// canonical guide for picking between `openQuestions`,
+  /// `decisions`, and `dependsOn`.
   openQuestions: Listing<String> = new {}
 
   /// Append-only decision log. Each entry records what changed,
   /// when, and (optionally) why. Don't edit past entries — add new
   /// ones. `pkspec decisions` renders these across the project
   /// for design-history review.
+  ///
+  /// `decisions` is one of three free-form fields on Scenario;
+  /// see the `Vocabulary Note` table in
+  /// `docs/advanced/recipes/open-questions-policy.md` for how it
+  /// differs from `openQuestions` and `dependsOn`.
   decisions: Listing<Decision> = new {}
 }
 

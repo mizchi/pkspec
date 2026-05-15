@@ -107,7 +107,7 @@ func Lint(plans []*config.Plan) []LintIssue {
 						Rule: "lint.unknown-domain-prefix", Level: LintInfo,
 						Subject: subject,
 						Message: fmt.Sprintf("Scenario id domain prefix %q is not in this module's `domains` allow-list", prefix),
-						Fix:     "add the prefix to top-level `domains`, rename the id, or clear the `domains` list to opt out",
+						Fix:     fmt.Sprintf("add %q to module-level `domains` in Spec.pkl, rename the id, or remove the `domains` declaration entirely to opt out of this rule.", prefix),
 					})
 				}
 			}
@@ -367,7 +367,11 @@ func FormatLint(issues []LintIssue) string {
 	b = fmt.Appendf(b, "lint: %d issue(s): %d error, %d warn, %d info\n\n",
 		len(issues), errs, warns, infos)
 	for _, i := range issues {
-		b = fmt.Appendf(b, "[%-5s] %s — %s: %s\n", i.Level, i.Rule, i.Subject, i.Message)
+		// Bracket hugs the level keyword; padding lives outside so
+		// `[info]`, `[warn]`, `[error]` all line up without trailing
+		// space inside the brackets reading as a typo.
+		tag := "[" + i.Level.String() + "]"
+		b = fmt.Appendf(b, "%-7s %s — %s: %s\n", tag, i.Rule, i.Subject, i.Message)
 		if i.Fix != "" {
 			b = fmt.Appendf(b, "        fix: %s\n", i.Fix)
 		}

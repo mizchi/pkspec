@@ -275,25 +275,7 @@ func sanitizeVersionLine(line string) string {
 }
 
 func writeDoctorReport(w io.Writer, results []doctorResult, quiet bool) {
-	fmt.Fprintln(w, "pkspec doctor — environment check")
-	fmt.Fprintln(w)
-
 	missingRequired, missingOptional, probeFailures := 0, 0, 0
-	rowCount := 0
-	for _, r := range results {
-		if r.level == levelOK && quiet {
-			continue
-		}
-		fmt.Fprintf(w, "  [%-7s] %-6s %s\n", r.level.label(), r.check.name, formatDoctorValue(r))
-		if r.level != levelOK && r.notes != "" {
-			fmt.Fprintf(w, "             why: %s\n", r.notes)
-		}
-		rowCount++
-	}
-	if rowCount > 0 {
-		fmt.Fprintln(w)
-	}
-
 	for _, r := range results {
 		switch r.level {
 		case levelMissing:
@@ -304,6 +286,32 @@ func writeDoctorReport(w io.Writer, results []doctorResult, quiet bool) {
 			}
 		case levelInfo:
 			probeFailures++
+		}
+	}
+
+	rows := make([]doctorResult, 0, len(results))
+	for _, r := range results {
+		if r.level == levelOK && quiet {
+			continue
+		}
+		rows = append(rows, r)
+	}
+
+	// Quiet mode with no rows to show collapses to a single summary
+	// line — no banner, no blank rows. Otherwise emit the full
+	// banner + rows + blank + summary.
+	if !(quiet && len(rows) == 0) {
+		fmt.Fprintln(w, "pkspec doctor — environment check")
+		fmt.Fprintln(w)
+		for _, r := range rows {
+			tag := "[" + r.level.label() + "]"
+			fmt.Fprintf(w, "  %-9s %-6s %s\n", tag, r.check.name, formatDoctorValue(r))
+			if r.level != levelOK && r.notes != "" {
+				fmt.Fprintf(w, "            why: %s\n", r.notes)
+			}
+		}
+		if len(rows) > 0 {
+			fmt.Fprintln(w)
 		}
 	}
 
@@ -372,7 +380,7 @@ usage:
 
 options:
   --quiet   hide rows where the tool is present; show only warnings, missings, and the summary.
-  --json    emit machine-readable JSON instead of the human report.
+  --json    emit machine-readable JSON instead of the human report. When combined with --quiet, --json wins (JSON is always full-fidelity; --quiet only affects the human report).
 
 exit code:
   0  required tools (currently just `+"`pkl`"+`) are present.

@@ -5,12 +5,17 @@ A blank `/tmp/pkspec-dogfood` project was set up from scratch on
 `Spec.pkl` + `Test.pkl` → run every review CLI. The walkthrough
 worked end-to-end without consulting the schema source, which is the
 load-bearing success criterion. But several rough edges surfaced
-along the way. None blocks a release, but each is a place where
-"obvious to me" and "obvious to a new reader" diverge.
+along the way. None blocked a release, but each was a place where
+"obvious to me" and "obvious to a new reader" diverged.
 
 This file is the honest list of those rough edges so future polish
 cycles can pick them up. Findings are grouped by surface, ranked by
 how much friction they actually caused during the walkthrough.
+
+> **Resolution status (2026-05-15):** all 10 findings landed as a
+> polish-cycle commit (target release: v0.1.11). The status note
+> below each finding records what shipped. The list is preserved so
+> the design trail survives future polish work.
 
 ## CLI output ergonomics
 
@@ -45,6 +50,11 @@ And include severity inline in each row:
 This matches what `pkspec next` already shows per-row; the two
 commands should agree.
 
+**Status:** landed. `pkspec check` now emits the severity breakdown
+header line and per-row `(severity[, reviewStatus]; declared in: ...)`
+metadata; approved rows omit the reviewStatus to match `pkspec
+next`'s convention.
+
 ### 2. `pkspec init` has no follow-up hint
 
 ```
@@ -67,6 +77,11 @@ Next:
   pkspec check Spec.pkl
 ```
 
+**Status:** landed. `pkspec init` now emits the three-line next-step
+hint and, when `--dir` defaults to `pkspec`, also prints a tip
+pointing at `--dir schemas` as a clearer default for new projects
+(see finding #5 below).
+
 ### 3. `pkspec doctor --quiet` is *too* quiet on success
 
 ```
@@ -81,6 +96,11 @@ Two empty lines between the header and the summary — a leftover from
 hiding ok rows. Functional but reads as bug. Either drop the blank
 line when no rows are emitted, or fold the header into the summary
 line in quiet mode.
+
+**Status:** landed. Quiet mode with no rows to display now collapses
+to a single summary line — no banner, no blank rows. When rows do
+need to render (warnings, missings, probe failures), the full banner
++ rows + blank + summary layout is preserved.
 
 ### 4. `[info ]` padding has a trailing space
 
@@ -98,6 +118,9 @@ as a typo. The same problem affects `[warn ]`. Tiny detail; pad the
 [warn]    ...
 [error]   ...
 ```
+
+**Status:** landed for both `pkspec lint` and `pkspec doctor`. The
+bracket now hugs the level keyword and the padding lives outside.
 
 ## Authoring ergonomics
 
@@ -119,6 +142,13 @@ amends "schemas/Spec.pkl"  // obviously a folder
 binary name. Existing projects keep working — the change only
 affects `pkspec init` defaults for *new* projects.
 
+**Status:** partially landed. Changing the default outright is a
+breaking change for downstream users invoking `pkspec init` with no
+arguments. Instead, the default stays `pkspec/` for backward
+compatibility, and `pkspec init` now prints a tip recommending
+`pkspec init --dir schemas` to new project authors. A future major
+version may flip the default.
+
 ### 6. `lint.unknown-domain-prefix` fix hint hides the opt-out mechanic
 
 ```
@@ -135,6 +165,11 @@ fix: add the prefix to module-level `domains`, rename the id, or
      remove the `domains` declaration entirely to opt out.
 ```
 
+**Status:** landed. The rule's fix hint now reads
+`add "<prefix>" to module-level \`domains\` in Spec.pkl, rename
+the id, or remove the \`domains\` declaration entirely to opt out
+of this rule.` — names the path, names the offending prefix.
+
 ### 7. `Scenario.openQuestions` vs `decisions` is documented but spread out
 
 The recipe (`docs/advanced/recipes/open-questions-policy.md`) has the
@@ -146,6 +181,10 @@ back-link to the table.
 **Suggested**: in `pkl/Spec.pkl`, add a one-line `/// see
 docs/advanced/recipes/open-questions-policy.md for how these three
 fields relate` to each of the three doc comments.
+
+**Status:** landed. Each of the three field doc comments
+(`openQuestions`, `decisions`, `dependsOn`) in `pkl/Spec.pkl` now
+back-links to the Vocabulary Note table.
 
 ## Document navigation
 
@@ -163,6 +202,11 @@ summary line like:
 3 outstanding question(s) across 2 scenario(s) — see "Outstanding
 questions" at the end.
 ```
+
+**Status:** landed. `pkspec spec` now prints the top-of-document
+summary line (only when there is at least one outstanding question;
+otherwise the SPEC.md tail still has no questions section and the
+banner is omitted).
 
 ### 9. `docs/notes/concepts.md` §5 mixes resolved and deferred items
 
@@ -183,6 +227,9 @@ becomes noisy. Split into two sub-headings:
 6. Goal-driven Scenario generation — ...
 ```
 
+**Status:** landed. `docs/notes/concepts.md` §5 is now split into
+`### Resolved` and `### Deferred` sub-sections.
+
 ## Commands missing from `pkspec --help`
 
 ### 10. `doctor` is in `--help` but `--quiet` / `--json` flags are not
@@ -192,6 +239,10 @@ inline. But the help reads like `--quiet`/`--json` are positional. A
 new user might write `pkspec doctor --quiet --json` and be surprised
 both flags compose (`--json` wins). The help text should make the
 combinability explicit, or document a precedence.
+
+**Status:** landed. `pkspec doctor --help` now spells out the
+precedence: "When combined with --quiet, --json wins (JSON is always
+full-fidelity; --quiet only affects the human report)."
 
 ## Not friction (worth keeping)
 

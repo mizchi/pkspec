@@ -252,10 +252,14 @@ Same binary, three reading orders:
 
 ## 5. Open Concept Issues
 
-Honest issues with the vocabulary as it stands today:
+Honest issues with the vocabulary as it stands today, separated by
+status. Resolved items are kept (struck through) so the design trail
+survives.
 
-1. ~~"Stress phase" framing~~ — resolved. The recipe has been renamed
-   to `docs/advanced/recipes/open-questions-policy.md` and the speca-
+### Resolved
+
+1. ~~"Stress phase" framing~~ — the recipe has been renamed to
+   `docs/advanced/recipes/open-questions-policy.md` and the speca-
    borrowed proof-attempt vocabulary has been removed from user-
    facing docs. `Scenario.openQuestions` and the lint rule remain;
    only the framing changed.
@@ -270,25 +274,31 @@ Honest issues with the vocabulary as it stands today:
    | `decisions`     | "Why did this spec end up the way it did?"       | append-only forever.   |
    | `dependsOn`     | "Which other specs must hold for this one?"      | structural, not prose. |
 
+   The Pkl class definitions in `pkl/Spec.pkl` now back-link to this
+   table from each of the three fields.
+
 3. ~~`lint.critical-approved-with-open-questions` rule strength~~ —
-   resolved. The two-tier split is kept: critical+approved+open
-   = `error` (gates CI), non-critical+approved+open = `warn`. The
-   rule fires on author-controlled fields and mostly catches paste
-   errors, which is a deliberately small but tangible CI signal.
+   the two-tier split is kept: critical+approved+open = `error`
+   (gates CI), non-critical+approved+open = `warn`. The rule fires
+   on author-controlled fields and mostly catches paste errors,
+   which is a deliberately small but tangible CI signal.
 
 4. ~~`pkspec spec` "Outstanding questions" tail vs `pkspec docs`
-   per-scenario "Open questions" section~~ — resolved. Both views are
-   kept (same `openQuestions` list, two renders). `pkspec spec --help`
-   and `pkspec docs --help` now name each other explicitly so readers
-   know the relationship without spelunking.
+   per-scenario "Open questions" section~~ — both views are kept
+   (same `openQuestions` list, two renders). `pkspec spec --help`
+   and `pkspec docs --help` name each other explicitly. The
+   rendered SPEC.md also gains a top-of-document summary line
+   pointing at the tail section.
 
 5. ~~Spec id domain prefixes are convention, not enforcement~~ —
-   resolved. `Spec.pkl` now exposes an optional module-level
+   `Spec.pkl` now exposes an optional module-level
    `domains: Listing<String>` allow-list; when populated, `pkspec
    lint` reports any Scenario.id whose first dot-segment is not in
    the list as `lint.unknown-domain-prefix` (info). Modules that
    leave `domains` empty are silent — the rule is opt-in. pkspec's
    own `SPEC.pkl` declares the 14 prefixes from §2.
+
+### Deferred
 
 6. **Goal-driven Scenario generation.** The independent design
    review of Phase 42 flagged that the highest-leverage idea

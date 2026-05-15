@@ -79,6 +79,17 @@ func Render(entries []Entry, root string) string {
 	fmt.Fprintf(&b, "%d tests across %d module(s) — %d pending, %d active\n\n",
 		tally.total, tally.modules, tally.pending, tally.active)
 
+	// Pre-compute the openQuestions tally so the top-of-document banner
+	// can name how many there are and where they live, while the
+	// detailed list still renders at the tail (preserves the
+	// printable-at-the-bottom convention reviewers expect).
+	qs := collectOpenQuestions(entries)
+	qScenarios := countOpenQuestionScenarios(entries)
+	if len(qs) > 0 {
+		fmt.Fprintf(&b, "%d outstanding question(s) across %d scenario(s) — see \"Outstanding questions\" at the end.\n\n",
+			len(qs), qScenarios)
+	}
+
 	currentDir := ""
 	currentModule := ""
 	for _, e := range entries {
@@ -108,13 +119,27 @@ func Render(entries []Entry, root string) string {
 	// Aggregate Outstanding Questions across every scenario that
 	// carries any. Renders at the document tail so reviewers can
 	// answer the open questions in one pass.
-	if qs := collectOpenQuestions(entries); len(qs) > 0 {
+	if len(qs) > 0 {
 		b.WriteString("\n## Outstanding questions\n\n")
 		for _, q := range qs {
 			fmt.Fprintf(&b, "- %s\n", q)
 		}
 	}
 	return b.String()
+}
+
+// countOpenQuestionScenarios counts how many distinct scenarios in
+// the entry list carry at least one openQuestion entry. Used by the
+// top-of-document banner; the detailed list at the tail uses the raw
+// question strings via collectOpenQuestions.
+func countOpenQuestionScenarios(entries []Entry) int {
+	n := 0
+	for _, e := range entries {
+		if e.Scenario != nil && len(e.Scenario.OpenQuestions) > 0 {
+			n++
+		}
+	}
+	return n
 }
 
 // DocsOptions controls the audience-oriented Markdown projection used by
