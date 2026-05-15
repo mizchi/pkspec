@@ -67,6 +67,20 @@ questions; lint promotes them to error if a `critical` scenario is
 marked `approved` with questions still on the list (see §5 for the
 status of this rule).
 
+In addition to the declared implementation pointer, **any non-Pkl
+source file** can name a Scenario id with the marker
+`pkspec:spec=<id>`. `pkspec lint --scan PATH` and `pkspec graph
+--scan PATH` walk PATH (file or directory) for the marker, then:
+
+- `pkspec lint` runs `lint.dead-source-specRef` (error) when a
+  marker's id is not declared as any Scenario.id;
+- `pkspec graph` draws a green-filled `src:<path>` node per source
+  file plus one edge per (file, id) pair into the matching Scenario.
+
+The marker is opt-in: nothing changes for projects that do not pass
+`--scan`. See `docs/advanced/recipes/source-marker-backlinks.md` for
+the authoring conventions.
+
 ### 1.5 Audience Projection (on `Scenario`)
 
 `audience`, `userDescription`, `pmNotes`, `operatorNotes`, `apiNotes`

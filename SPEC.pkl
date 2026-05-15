@@ -732,6 +732,18 @@ scenarios {
     implementedAt = "docs/advanced/recipes/doctor-environment-check.md"
   }
   new {
+    id = "docs.advanced-source-marker-recipe"
+    name = "source_marker_recipe_is_copyable"
+    description = "Advanced docs include a recipe for the `pkspec:spec=<id>` source-marker workflow: authoring conventions, audit-then-CI rollout, graph rendering, walk semantics, and the boundary between marker (code-side breadcrumb) and `Scenario.implementedAt` (spec-side canonical pointer)."
+    tags { "spec"; "docs" }
+    severity = "minor"
+    reviewStatus = "review"
+    dependsOn { "tooling.source-scan"; "tooling.dead-source-ref-lint"; "spec.graph-source-backlinks" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/advanced/recipes/source-marker-backlinks.md"
+  }
+  new {
     id = "docs.example-spec-open-questions"
     name = "spec_open_questions_example_is_runnable"
     description = "The repo ships a runnable two-scenario example under examples/spec-open-questions/ that demonstrates the openQuestions lint policy firing and the pkspec next tie-break, with a README walkthrough."
