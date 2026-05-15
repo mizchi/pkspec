@@ -1414,19 +1414,83 @@ renderedMilestones: Mapping<String, RenderedMilestone> = new {}
 /// allow-list. Plain `Test.pkl` modules leave this empty.
 renderedDomains: Listing<String> = new {}
 
+// ── Cross-section integrity (T3-4) ────────────────────────────
+//
+// Surface authoring errors at `pkl eval` time when scenarios and
+// tests live in the same module. When `Spec.pkl` is amended (or
+// when a single module declares both `tests { ... }` and
+// `scenarios { ... }`), every cross-reference can be checked
+// without re-parsing in Go.
+//
+// The checks deliberately bail out when `renderedScenarios` /
+// `renderedGoals` are empty: a plain `Test.pkl` module whose
+// scenarios live in a separate `Spec.pkl` file would otherwise
+// fail on the standalone evaluation. The runner re-validates
+// across files in that mode.
+local scenarioIdSet: List<String> =
+  renderedScenarios.toMap().values.toList().flatMap((s) -> if (s.id == null) List() else List(s.id))
+
+local goalIdSet: List<String> = renderedGoals.toMap().values.toList().map((g) -> g.id)
+
+local unknownSpecRefs: List<String> =
+  if (scenarioIdSet.isEmpty)
+    List()
+  else
+    rendered
+      .toMap()
+      .values
+      .toList()
+      .flatMap((t) -> t.specRef.toList())
+      .filter((id) -> !scenarioIdSet.contains(id))
+      .distinct
+
+local unknownMilestoneGoals: List<String> =
+  if (goalIdSet.isEmpty)
+    List()
+  else
+    renderedMilestones
+      .toMap()
+      .values
+      .toList()
+      .flatMap((m) -> m.goals.toList())
+      .filter((g) -> !goalIdSet.contains(g))
+      .distinct
+
+local unknownScenarioContributes: List<String> =
+  if (goalIdSet.isEmpty)
+    List()
+  else
+    renderedScenarios
+      .toMap()
+      .values
+      .toList()
+      .flatMap((s) -> s.contributes.toList())
+      .filter((g) -> !goalIdSet.contains(g))
+      .distinct
+
 output {
   value = new Rendered {
     defaults = module.defaults
     tests =
-      if (duplicateNames.isEmpty)
-        rendered
-      else
+      if (!duplicateNames.isEmpty)
         throw("duplicate test names: \(duplicateNames.join(", "))")
+      else if (!unknownSpecRefs.isEmpty)
+        throw("Test.specRef references unknown Scenario.id: \(unknownSpecRefs.join(", "))")
+      else
+        rendered
     before = renderedBefore
     after = renderedAfter
     scenarios = renderedScenarios
     goals = renderedGoals
-    milestones = renderedMilestones
+    milestones =
+      if (!unknownMilestoneGoals.isEmpty)
+        throw("Milestone.goals references unknown Goal.id: \(unknownMilestoneGoals.join(", "))")
+      else if (!unknownScenarioContributes.isEmpty)
+        throw(
+          "Scenario.contributes references unknown Goal.id: \(unknownScenarioContributes.join(", "))"
+        )
+      else
+        renderedMilestones
     domains = renderedDomains
   }
 }

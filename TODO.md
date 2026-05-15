@@ -371,6 +371,13 @@ new {}` (or inherit via `amends`).
 
 ### T3-1. Hide `Step.kind` with the `hidden` modifier
 
+**Status (deferred / will be moot):** The proposal becomes
+moot under T2-2 — once the `StepBody` abstract hierarchy lands,
+the synthesized `kind` field on `Step` disappears entirely. We
+intentionally do not add `hidden kind: String` as a transitional
+state, because the change is small enough that the T2-2 commit
+removes the synthesized field in one step. See T2-2 above.
+
 **Problem.** `Step.kind` is a computed `String` that surfaces in
 the rendered PCF output even though end users never write to it
 — it exists for pkl-go's dispatch.
@@ -495,6 +502,25 @@ transitions.
 
 ### T3-4. Cross-section validation inside `class Rendered`
 
+**Status (resolved):** Done — three Pkl-side `local` validators
+live next to the existing `duplicateNames` check at the bottom
+of `pkl/Test.pkl`:
+
+- `unknownSpecRefs` — `Test.specRef` ids must exist in
+  `scenarios.keys`.
+- `unknownMilestoneGoals` — `Milestone.goals` ids must exist in
+  `goals.keys`.
+- `unknownScenarioContributes` — `Scenario.contributes` ids must
+  exist in `goals.keys`.
+
+Each validator no-ops when the relevant other side (scenarios /
+goals) is empty in the rendered module. That lets a plain
+`Test.pkl` whose scenarios live in a sibling `Spec.pkl` file
+still evaluate standalone — the cross-file check remains the
+runner's job in that mode. When `Spec.pkl` amends `Test.pkl`
+into the same module, the validators fire at `pkl eval` time
+with the same field-path precision pkl-go already gives.
+
 **Problem.** The output `Rendered` carries `tests`, `before`,
 `after`, `scenarios`, `goals`, `milestones`, and `domains` as
 independent mappings. Cross-section integrity (e.g.
@@ -543,6 +569,16 @@ rendered Plan today; mirror the existing `duplicateNames` pattern.
 ---
 
 ### T3-5. Surface scenario/field context in schema-decode errors (runner side)
+
+**Status (resolved):** Done — `internal/config.annotatePklError`
+parses pkl-go's diagnostic, finds the `at <module>#<path>` frame
+whose file path matches the user-side source, and prepends a
+one-line header with the constraint cause + field path + value.
+The full diagnostic stays wrapped after the header so anyone who
+needs the upstream trace still has it. Unit tests in
+`internal/config/config_test.go` cover Listing-index paths
+(`tests[#3].steps[#0].cmd`) and frame-prioritisation (internal
+`pkspec.Test#...` frames are skipped in favour of the user file).
 
 **Problem.** When a Pkl module fails the regex on a deeply nested
 field (e.g. `Scenario.name` 30 entries into a `scenarios` listing
