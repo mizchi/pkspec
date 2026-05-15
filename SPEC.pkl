@@ -454,6 +454,9 @@ scenarios {
     contributes { "goal.adapter-dsl"; "goal.lang-independent"; "goal.ci-trustworthy" }
     implementedBy = "code"
     implementedAt = "internal/adaptershim/shim.go"
+    openQuestions {
+      "native shim を core に promote する (= built-in command として ship する) 閾値の判断軸が定まっていない — どの runner が \"安定した\" と言えるかの基準が必要。"
+    }
   }
   new {
     id = "adapter.coverage-collectors"
@@ -466,6 +469,10 @@ scenarios {
     contributes { "goal.adapter-dsl"; "goal.lang-independent" }
     implementedBy = "code"
     implementedAt = "pkl/Adapter.pkl"
+    openQuestions {
+      "Lcov / Cobertura parser を pkspec 本体に取り込むか、 ecosystem-specific shim 側に置くかの線引きが未確定。"
+      "coverage metrics の `name` が runner ごとにバラバラ (e.g. vitest の per-file path vs go test の per-package) でも cross-runner 比較できる形にする必要があるか?"
+    }
   }
   new {
     id = "adapter.init-embedded"
@@ -610,6 +617,41 @@ scenarios {
     implementedAt = "docs/advanced/recipes/launch-readiness.md"
   }
   new {
+    id = "docs.advanced-stress-phase-recipe"
+    name = "stress_phase_open_questions_recipe_is_copyable"
+    description = "Advanced docs include a recipe for the Stress-phase open-questions workflow: authoring openQuestions, the critical-vs-major lint policy split, promoting answered questions into decisions, and CI integration."
+    tags { "spec"; "docs" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "docs/advanced/recipes/stress-phase-open-questions.md"
+  }
+  new {
+    id = "docs.advanced-doctor-recipe"
+    name = "doctor_environment_check_recipe_is_copyable"
+    description = "Advanced docs include a recipe for `pkspec doctor`: required-vs-recommended tool tiers, CI integration, pre-commit usage, and JSON output for downstream tools."
+    tags { "spec"; "docs" }
+    severity = "minor"
+    reviewStatus = "review"
+    dependsOn { "tooling.doctor" }
+    contributes { "goal.ci-trustworthy" }
+    implementedBy = "doc"
+    implementedAt = "docs/advanced/recipes/doctor-environment-check.md"
+  }
+  new {
+    id = "docs.example-spec-open-questions"
+    name = "spec_open_questions_example_is_runnable"
+    description = "The repo ships a runnable two-scenario example under examples/spec-open-questions/ that demonstrates the openQuestions lint policy firing and the pkspec next tie-break, with a README walkthrough."
+    tags { "spec"; "docs" }
+    severity = "minor"
+    reviewStatus = "review"
+    dependsOn { "docs.advanced-stress-phase-recipe" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "doc"
+    implementedAt = "examples/spec-open-questions/README.md"
+  }
+  new {
     id = "spec.prelude"
     name = "prelude_shares_given_across_scenarios"
     description = "Spec.pkl's top-level `prelude: Listing<SpecStep>` is prepended to every scenario's executed steps. Empty `given/when/then/cleanup` still auto-pends — shared setup doesn't count as having a body."
@@ -658,6 +700,17 @@ scenarios {
     contributes { "goal.spec-driven" }
     implementedBy = "code"
     implementedAt = "internal/spec/spec.go:scenarioIsImplemented"
+  }
+  new {
+    id = "tooling.doctor"
+    name = "doctor_reports_missing_tools"
+    description = "`pkspec doctor` reports the presence and version of every external tool pkspec relies on, failing fast (exit 1) when a required tool (`pkl`) is missing and warning when an optional tool (git / node / go) is missing. `--quiet` hides ok rows; `--json` emits machine-readable output."
+    tags { "spec"; "tooling" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.ci-trustworthy" }
+    implementedBy = "code"
+    implementedAt = "cmd/pkspec/doctor_cmd.go:cmdDoctor"
   }
   new {
     id = "tooling.lint"

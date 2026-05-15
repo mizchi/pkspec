@@ -54,6 +54,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return nil
 	case "init":
 		return cmdInit(args[1:], stdout, stderr)
+	case "doctor":
+		return cmdDoctor(args[1:], stdout, stderr)
 	case "run":
 		return cmdRun(args[1:], stdout, stderr)
 	case "exec":
@@ -110,6 +112,9 @@ commands:
                               Adapter.pkl, adapters/*.pkl) into
                               a project so Go/Nix-installed binaries can
                               be used without a source checkout.
+  doctor [--quiet] [--json]   check that the local environment has the
+                              tools pkspec needs (pkl required; git /
+                              node / go optional for specific kinds).
   run [--allow-cmd] [pkl-test args...]
                               wrap `+"`pkl test`"+` and force a non-zero exit on
                               any assertion failure (closes pkl test's

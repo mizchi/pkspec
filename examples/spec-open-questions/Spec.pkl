@@ -1,0 +1,83 @@
+/// Demonstrates Scenario.openQuestions and the "Stress phase" lint
+/// policy: a critical scenario must answer its open questions before
+/// being marked reviewStatus = "approved", or `pkspec lint` will fail
+/// with the rule `lint.critical-approved-with-open-questions`.
+///
+/// Inspired by NyxFoundation/speca's three-phase proof-attempt model:
+///   Phase 1 (Map)    — decompose the property into conditions
+///   Phase 2 (Prove)  — show the implementation covers every path
+///   Phase 3 (Stress) — challenge the assumptions, attack the proof
+///
+/// pkspec collapses Map + Prove into normal Scenario + Test linking;
+/// this example shows how Stress is encoded as openQuestions + lint.
+///
+/// All scenarios here are kept at reviewStatus = "review" so that
+/// `pkspec lint` stays green when this directory is included in the
+/// project-wide spec-lint gate. The README explains how to flip the
+/// critical scenario to "approved" locally to observe the new
+/// `lint.critical-approved-with-open-questions` error.
+amends "../../pkl/Spec.pkl"
+
+feature = "openQuestions + Stress phase lint policy"
+
+goals {
+  new Goal {
+    id = "goal.session-safety"
+    name = "sessions cannot be hijacked or replayed"
+    priority = 90
+    reviewStatus = "review"
+    description = "Authenticated sessions must survive expected attack vectors (fixation, replay across tabs, refresh-token theft) without expanding into stolen privileges."
+  }
+}
+
+scenarios {
+
+  // Critical scenario carrying unanswered questions. While kept at
+  // reviewStatus = "review", lint does NOT fail — the project-wide
+  // gate stays green. Flipping this to "approved" before answering
+  // the questions trips lint.critical-approved-with-open-questions.
+  new {
+    id = "auth.session-fixation"
+    name = "session_id_rotates_on_login"
+    description = "After a successful login, the server issues a new opaque session id; the pre-login session id stops being accepted within one request round-trip."
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "review"
+    contributes { "goal.session-safety" }
+    openQuestions {
+      "Is single-request rotation enough under WebSocket reconnect, or do we need to invalidate active long-lived connections too?"
+      "What happens to a user logged in from two tabs simultaneously when only one rotates?"
+    }
+  }
+
+  // Major scenario with an open question. The new policy keeps this
+  // at warn level (existing behaviour) even when approved — the impact
+  // is not catastrophic enough to demand an error-level gate.
+  new {
+    id = "auth.refresh-token-rotation"
+    name = "refresh_token_rotates_per_use"
+    description = "Each /refresh request issues a new refresh token and invalidates the previous one. Reusing an invalidated token revokes the family."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "review"
+    contributes { "goal.session-safety" }
+    openQuestions {
+      "Do we keep the reset token usable across browser sessions, or invalidate on user-agent change?"
+    }
+  }
+
+  // A clean approved critical scenario as a positive control: same
+  // severity as auth.session-fixation, but with no open questions, so
+  // lint stays clean even at reviewStatus = "approved". The shape
+  // mirrors pkspec's normal authoring pattern (Test.pkl provides the
+  // matching specRef) rather than asserting through prose alone.
+  new {
+    id = "auth.session-id-is-opaque"
+    name = "session_id_is_opaque_to_clients"
+    description = "Session ids returned by /login are opaque strings — no embedded user id, role, or timestamp that a client could parse. The format is documented as implementation-private."
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "goal.session-safety" }
+  }
+}

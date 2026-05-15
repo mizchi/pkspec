@@ -146,12 +146,25 @@ func Lint(plans []*config.Plan) []LintIssue {
 					})
 				}
 				if len(sc.OpenQuestions) > 0 {
-					out = append(out, LintIssue{
-						Rule: "lint.approved-with-open-questions", Level: LintWarn,
-						Subject: subject,
-						Message: fmt.Sprintf("approved scenario still has %d open question(s)", len(sc.OpenQuestions)),
-						Fix:     "resolve the questions or downgrade reviewStatus to \"review\"",
-					})
+					// Critical scenarios are not allowed to ship with
+					// unchallenged assumptions: the speca-style "Stress
+					// phase" gate insists the highest-impact specs answer
+					// their open questions before approval.
+					if sc.Severity == "critical" {
+						out = append(out, LintIssue{
+							Rule: "lint.critical-approved-with-open-questions", Level: LintError,
+							Subject: subject,
+							Message: fmt.Sprintf("critical approved scenario still has %d open question(s)", len(sc.OpenQuestions)),
+							Fix:     "answer the questions before approving, or lower severity if the impact is overstated",
+						})
+					} else {
+						out = append(out, LintIssue{
+							Rule: "lint.approved-with-open-questions", Level: LintWarn,
+							Subject: subject,
+							Message: fmt.Sprintf("approved scenario still has %d open question(s)", len(sc.OpenQuestions)),
+							Fix:     "resolve the questions or downgrade reviewStatus to \"review\"",
+						})
+					}
 				}
 			}
 

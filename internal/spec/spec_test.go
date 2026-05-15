@@ -736,3 +736,135 @@ func lintIssueByRuleSubject(t *testing.T, issues []LintIssue, rule, subject stri
 	t.Fatalf("missing lint issue %s %s in %#v", rule, subject, issues)
 	return LintIssue{}
 }
+
+func TestLintCriticalApprovedWithOpenQuestionsIsError(t *testing.T) {
+	criticalID := "auth.session-fixation"
+	majorID := "auth.password-reset"
+	plans := []*config.Plan{
+		{
+			SourcePath: "/repo/specs/Spec.pkl",
+			Scenarios: map[string]*config.Scenario{
+				"session fixation guard": {
+					Name:          "session fixation guard",
+					ID:            &criticalID,
+					ReviewStatus:  "approved",
+					Severity:      "critical",
+					Description:   strPtr("does what it says"),
+					OpenQuestions: []string{"is rekey-on-login sufficient under WebSocket reconnect?"},
+				},
+				"password reset flow": {
+					Name:          "password reset flow",
+					ID:            &majorID,
+					ReviewStatus:  "approved",
+					Severity:      "major",
+					Description:   strPtr("does what it says"),
+					OpenQuestions: []string{"do we keep the reset token usable across browser sessions?"},
+				},
+			},
+		},
+	}
+
+	issues := Lint(plans)
+	critical := lintIssueByRuleSubject(t, issues, "lint.critical-approved-with-open-questions", criticalID)
+	if critical.Level != LintError {
+		t.Fatalf("critical+approved+openQuestions should be Error, got %v", critical.Level)
+	}
+	major := lintIssueByRuleSubject(t, issues, "lint.approved-with-open-questions", majorID)
+	if major.Level != LintWarn {
+		t.Fatalf("major+approved+openQuestions should be Warn, got %v", major.Level)
+	}
+}
+
+func TestNextActionsSeverityOutranksOpenQuestionCount(t *testing.T) {
+	// Severity is the primary tie-break within the same Goal priority;
+	// open-question count is the secondary tie-break. A critical
+	// scenario with zero open questions must rank above a major
+	// scenario with many.
+	critID := "auth.session-fixation"
+	majorID := "auth.refresh-token-rotation"
+	plans := []*config.Plan{
+		{
+			SourcePath: "/repo/specs/Spec.pkl",
+			Goals: map[string]*config.Goal{
+				"goal.secure-auth": {ID: "goal.secure-auth", Name: "secure auth", Priority: 80},
+			},
+			Scenarios: map[string]*config.Scenario{
+				"critical clean": {
+					Name:         "critical clean",
+					ID:           &critID,
+					ReviewStatus: "review",
+					Severity:     "critical",
+					Contributes:  []string{"goal.secure-auth"},
+				},
+				"major loaded": {
+					Name:         "major loaded",
+					ID:           &majorID,
+					ReviewStatus: "review",
+					Severity:     "major",
+					Contributes:  []string{"goal.secure-auth"},
+					OpenQuestions: []string{
+						"q1", "q2", "q3", "q4", "q5",
+					},
+				},
+			},
+		},
+	}
+	actions := NextActions(plans)
+	if len(actions) != 2 {
+		t.Fatalf("want 2 unimplemented scenarios, got %d", len(actions))
+	}
+	if actions[0].SpecID != critID {
+		t.Fatalf("severity must outrank open-question count: got order %q then %q",
+			actions[0].SpecID, actions[1].SpecID)
+	}
+}
+
+func TestNextActionsTieBreakByOpenQuestions(t *testing.T) {
+	quietID := "auth.refresh-token-rotation"
+	noisyID := "auth.session-fixation-guard"
+	plans := []*config.Plan{
+		{
+			SourcePath: "/repo/specs/Spec.pkl",
+			Goals: map[string]*config.Goal{
+				"goal.secure-auth": {ID: "goal.secure-auth", Name: "secure auth", Priority: 80},
+			},
+			Scenarios: map[string]*config.Scenario{
+				"quiet refresh rotation": {
+					Name:         "quiet refresh rotation",
+					ID:           &quietID,
+					ReviewStatus: "review",
+					Severity:     "major",
+					Contributes:  []string{"goal.secure-auth"},
+				},
+				"noisy session guard": {
+					Name:         "noisy session guard",
+					ID:           &noisyID,
+					ReviewStatus: "review",
+					Severity:     "major",
+					Contributes:  []string{"goal.secure-auth"},
+					OpenQuestions: []string{
+						"is rekey-on-login sufficient under WebSocket reconnect?",
+						"what if the user logs in from two tabs simultaneously?",
+					},
+				},
+			},
+		},
+	}
+
+	actions := NextActions(plans)
+	if len(actions) != 2 {
+		t.Fatalf("want 2 unimplemented scenarios, got %d", len(actions))
+	}
+	if actions[0].SpecID != noisyID {
+		t.Fatalf("expected the spec with more open questions first, got order %q then %q",
+			actions[0].SpecID, actions[1].SpecID)
+	}
+	if actions[0].OpenQuestions != 2 || actions[1].OpenQuestions != 0 {
+		t.Fatalf("open-question count mismatch: %#v", actions)
+	}
+
+	out := FormatNext(actions)
+	if !strings.Contains(out, "open questions: 2") {
+		t.Fatalf("expected open-questions line in formatted output, got %s", out)
+	}
+}

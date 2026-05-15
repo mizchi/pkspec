@@ -1626,12 +1626,13 @@ func FormatMilestones(reports []MilestoneReport) string {
 
 // NextAction is one entry in the "what to work on next" listing.
 type NextAction struct {
-	SpecID       string
-	Name         string
-	Severity     string
-	ReviewStatus string
-	Goals        []NextGoalRef
-	TopPriority  int
+	SpecID        string
+	Name          string
+	Severity      string
+	ReviewStatus  string
+	Goals         []NextGoalRef
+	TopPriority   int
+	OpenQuestions int
 }
 
 // NextGoalRef is a Goal this NextAction would contribute to.
@@ -1662,10 +1663,11 @@ func NextActions(plans []*config.Plan) []NextAction {
 				continue
 			}
 			n := NextAction{
-				SpecID:       *sc.ID,
-				Name:         sc.Name,
-				Severity:     sc.Severity,
-				ReviewStatus: sc.ReviewStatus,
+				SpecID:        *sc.ID,
+				Name:          sc.Name,
+				Severity:      sc.Severity,
+				ReviewStatus:  sc.ReviewStatus,
+				OpenQuestions: len(sc.OpenQuestions),
 			}
 			for _, gid := range sc.Contributes {
 				g, ok := goals[gid]
@@ -1686,6 +1688,12 @@ func NextActions(plans []*config.Plan) []NextAction {
 		}
 		if severityRank(out[i].Severity) != severityRank(out[j].Severity) {
 			return severityRank(out[i].Severity) > severityRank(out[j].Severity)
+		}
+		// Tie-break on unanswered questions: a spec carrying more open
+		// questions has a thicker "Stress phase" backlog, so surface it
+		// first within the same Goal priority + severity bucket.
+		if out[i].OpenQuestions != out[j].OpenQuestions {
+			return out[i].OpenQuestions > out[j].OpenQuestions
 		}
 		return out[i].SpecID < out[j].SpecID
 	})
@@ -1916,6 +1924,9 @@ func FormatNext(actions []NextAction) string {
 				gs = append(gs, fmt.Sprintf("%s (p=%d)", gr.ID, gr.Priority))
 			}
 			fmt.Fprintf(&b, "   - contributes to: %s\n", strings.Join(gs, ", "))
+		}
+		if a.OpenQuestions > 0 {
+			fmt.Fprintf(&b, "   - open questions: %d (challenge before approving)\n", a.OpenQuestions)
 		}
 	}
 	return b.String()
