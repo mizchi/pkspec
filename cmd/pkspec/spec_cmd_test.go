@@ -305,7 +305,7 @@ scenarios {
     severity = "major"
     contributes { "goal.launch" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/upload/security.go:Check" }
+      new CodeImpl { at = "internal/upload/security.go:Check" }
     }
   }
   new Scenario {
@@ -314,7 +314,7 @@ scenarios {
     severity = "minor"
     contributes { "goal.launch" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/upload/security.go:Check" }
+      new CodeImpl { at = "internal/upload/security.go:Check" }
     }
   }
 }

@@ -126,9 +126,12 @@ recursively and any .pkl file under them is migrated. The transform
 is text-only — Pkl semantics are never invoked — so this command
 works on sources that no longer parse under the current schema.
 
-Migration rules applied (v0.1.x → v0.2.0):
+Migration rules applied (v0.1.x → v0.2.x):
 
-  1. implementedBy/implementedAt pair  → implementations { new Implementation { ... } }
+  1. implementedBy/implementedAt pair  → implementations { new <Kind>Impl { ... } }
+                                       (TestImpl / CodeImpl / DocImpl / TaskImpl —
+                                        the typed subclasses introduced for the
+                                        abstract Implementation refactor)
   2. userDescription / pmNotes / operatorNotes / apiNotes
                                        → audienceNotes { ["<audience>"] = ... }
   3. progress { method = "X" } block   → progressMethod = "X"

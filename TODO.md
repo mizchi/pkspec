@@ -215,6 +215,21 @@ behind two parallel union literals.
 
 ### T2-1. Reshape `Implementation` as abstract + discriminated subclasses
 
+**Status (resolved):** Done. `Implementation` is now abstract;
+authors instantiate one of `TestImpl` / `CodeImpl` / `DocImpl` /
+`TaskImpl`. The non-test subclasses each declare a non-empty
+`at: String(length > 0)` so the missing-`at` case becomes a
+schema error (`Cannot instantiate ... missing required value
+`at``). The runtime lint rules `lint.implementation-*-without-at`
+remain as a safety net for Go-side constructors that bypass Pkl.
+
+Migration: `pkspec migrate` now emits `new <Kind>Impl { ... }` in
+its v0.1.x → v0.2.x rewrite, including the v0.2.x-only
+`TaskImpl`. The flat shape (`new Implementation { kind = "..."; at
+= "..." }`) is no longer accepted by the Pkl evaluator — re-run
+`pkspec migrate path/to/Spec.pkl` to upgrade any source still on
+the v0.1.x shape.
+
 **Problem.** `Implementation` carries `kind` and `at`, where `at`
 is unused for `kind = "test"` and required for the other three.
 The class doc says "lint flags it if set" for the test case —

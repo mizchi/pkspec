@@ -37,27 +37,49 @@ class SpecStep {
 /// carry multiple `Implementation` entries — typical when one spec
 /// is enforced by a test + a code guard, or by code + a prose doc.
 ///
-/// `kind = "test"` declares that a `Test.specRef = { id }` link in
-/// any Test.pkl module is sufficient; `at` is unused for this kind
-/// and pkspec lint flags it if set.
-///
-/// `kind = "code"` and `kind = "doc"` require `at` to point at the
-/// implementing artefact ("path:Symbol" / "path#anchor").
-/// `pkspec check --strict` verifies that the file portion exists
-/// on disk.
-///
-/// `kind = "task"` declares that a [pkfire](https://github.com/mizchi/pkfire)
-/// task is the implementation — typical for build / release /
-/// migration pipelines that live in `Taskfile.pkl` rather than
-/// application code. `at` uses the `path#name` convention:
-/// `at = "Taskfile.pkl#release"` for the `release` task in the
-/// repo-root Taskfile, or just `at = "release"` to default the path
-/// to `./Taskfile.pkl`. `pkspec check --strict` verifies the file
-/// exists; when `pkf` is on PATH it also confirms the named task
-/// is declared (via `pkf list --json`).
-class Implementation {
-  kind: ("test" | "code" | "doc" | "task")
+/// Author each entry through one of the four typed subclasses below
+/// (`TestImpl` / `CodeImpl` / `DocImpl` / `TaskImpl`). The schema
+/// makes `at` mandatory wherever it would have been required at
+/// runtime — `kind = "test"` carries no `at`, the other three each
+/// declare a non-empty `at` — so the lint rule
+/// `lint.implementation-*-without-at` becomes a compile-time error.
+abstract class Implementation {
+  kind: String
   at: String? = null
+}
+
+/// `Test.specRef = { id }` in any Test.pkl is sufficient for this
+/// implementation. `at` is unused.
+class TestImpl extends Implementation {
+  kind = "test"
+  at = null
+}
+
+/// A code artefact implements the spec. `at` points at "path:Symbol".
+/// `pkspec check --strict` verifies the file portion exists on disk.
+class CodeImpl extends Implementation {
+  kind = "code"
+  at: String(length > 0)
+}
+
+/// A prose doc implements the spec. `at` points at "path#anchor".
+/// `pkspec check --strict` verifies the file portion exists.
+class DocImpl extends Implementation {
+  kind = "doc"
+  at: String(length > 0)
+}
+
+/// A [pkfire](https://github.com/mizchi/pkfire) task is the
+/// implementation — typical for build / release / migration
+/// pipelines that live in `Taskfile.pkl` rather than application
+/// code. `at` uses the `path#name` convention
+/// (`Taskfile.pkl#release`), or a bare task name (`release`) that
+/// defaults the path to `./Taskfile.pkl`. `pkspec check --strict`
+/// verifies the file exists; when `pkf` is on PATH it also confirms
+/// the named task is declared (via `pkf list --json`).
+class TaskImpl extends Implementation {
+  kind = "task"
+  at: String(length > 0)
 }
 
 /// A user-facing Goal — a piece of value the system should

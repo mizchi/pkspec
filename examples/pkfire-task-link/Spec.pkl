@@ -28,8 +28,7 @@ scenarios {
     reviewStatus = "approved"
     severity = "major"
     implementations {
-      new {
-        kind = "task"
+      new TaskImpl {
         at = "examples/pkfire-task-link/Taskfile.pkl#release"
       }
     }
@@ -42,8 +41,7 @@ scenarios {
     reviewStatus = "approved"
     severity = "major"
     implementations {
-      new {
-        kind = "task"
+      new TaskImpl {
         at = "examples/pkfire-task-link/Taskfile.pkl#migrate-db"
       }
     }
