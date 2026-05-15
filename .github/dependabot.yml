@@ -1,0 +1,38 @@
+version: 2
+
+# Keep pkspec's external surfaces patched without a human polling release
+# notes. Three ecosystems are in scope:
+#
+#  - gomod: Go module deps under go.sum / go.mod.
+#  - github-actions: workflow `uses:` pins (actions/checkout, setup-go, ...).
+#  - nix is left out on purpose — flake.lock is bumped via the deliberate
+#    "Bump release version" commit so the Nix package's exact pin moves
+#    together with the release tag.
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(go)"
+    labels:
+      - dependencies
+      - go
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(actions)"
+    labels:
+      - dependencies
+      - github-actions

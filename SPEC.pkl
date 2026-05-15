@@ -229,6 +229,39 @@ scenarios {
     implementedBy = "code"
     implementedAt = ".github/workflows/go.yml:permissions"
   }
+  new {
+    id = "security.govulncheck-weekly"
+    name = "govulncheck_runs_weekly_in_ci"
+    description = "A standalone GitHub Actions workflow runs `govulncheck ./...` on a weekly cron (Mondays 09:00 UTC) plus on every PR that touches go.mod / go.sum / flake.nix, so newly disclosed Go stdlib vulnerabilities surface without a manual sweep."
+    tags { "spec"; "security"; "ci"; "github-actions" }
+    severity = "major"
+    reviewStatus = "review"
+    contributes { "goal.secure-release" }
+    implementedBy = "code"
+    implementedAt = ".github/workflows/govulncheck.yml"
+  }
+  new {
+    id = "security.dependabot-weekly"
+    name = "dependabot_keeps_deps_current"
+    description = "Dependabot is configured for gomod and github-actions ecosystems on a weekly cadence so Go module pins and workflow action versions do not drift silently."
+    tags { "spec"; "security"; "ci"; "dependabot" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.secure-release" }
+    implementedBy = "code"
+    implementedAt = ".github/dependabot.yml"
+  }
+  new {
+    id = "tooling.ci-concurrency"
+    name = "workflows_cancel_in_progress_runs"
+    description = "Go / Action / Nix workflows declare `concurrency.cancel-in-progress = true` keyed by `(workflow, ref)` so rapid successive pushes to a branch leave only the latest commit's CI executing; older queued runs are auto-cancelled and the badge always reflects the latest commit."
+    tags { "spec"; "ci"; "github-actions" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.ci-trustworthy" }
+    implementedBy = "code"
+    implementedAt = ".github/workflows/go.yml:concurrency"
+  }
 
   // ── goal.lang-independent ────────────────────────────────────────
 
