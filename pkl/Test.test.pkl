@@ -23,15 +23,30 @@ facts {
   ["empty cmd is rejected"] {
     module.catch(() -> (new Schema.Test { name = "x"; cmd = "" }).cmd) != null
   }
-  ["bad leading name characters are rejected"] {
-    module.catch(() -> (new Schema.Test { name = "-leading-dash"; cmd = "x" }).name) != null
+  ["empty / whitespace-surrounded / multi-line names are rejected"] {
+    // DisplayName disallows empty, leading/trailing space, and embedded newlines.
+    module.catch(() -> (new Schema.Test { name = ""; cmd = "x" }).name) != null
+    module.catch(() -> (new Schema.Test { name = " leading-space"; cmd = "x" }).name) != null
+    module.catch(() -> (new Schema.Test { name = "trailing-space "; cmd = "x" }).name) != null
+    module.catch(() -> (new Schema.Test { name = "two\nlines"; cmd = "x" }).name) != null
+  }
+  ["prose / punctuation / non-ASCII names are accepted"] {
+    (new Schema.Test { name = "Float Power, IntDivide and Modulo semantics"; cmd = "x" }).name
+      == "Float Power, IntDivide and Modulo semantics"
+    (new Schema.Test { name = "is this consistent?"; cmd = "x" }).name == "is this consistent?"
+    (new Schema.Test { name = "日本語 OK"; cmd = "x" }).name == "日本語 OK"
+    (new Schema.Test { name = "-leading-dash"; cmd = "x" }).name == "-leading-dash"
   }
   ["non-positive timeout is rejected"] {
-    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; timeoutSec = 0 }).timeoutSec) != null
+    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; timeoutSec = 0 }).timeoutSec)
+      != null
   }
   ["iteration seed must stay in uint32 range"] {
-    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; iterationSeed = -1 }).iterationSeed) != null
-    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; iterationSeed = 4294967296 }).iterationSeed) != null
+    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; iterationSeed = -1 }).iterationSeed)
+      != null
+    module.catch(() ->
+      (new Schema.Test { name = "x"; cmd = "x"; iterationSeed = 4294967296 }).iterationSeed
+    ) != null
   }
 }
 

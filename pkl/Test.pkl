@@ -8,13 +8,53 @@
 @ModuleInfo { minPklVersion = "0.31.0" }
 open module pkspec.Test
 
+/// Strict identifier used by `Scenario.id`, `Goal.id`,
+/// `Milestone.id`, cross-reference fields (`Test.specRef`,
+/// `Scenario.dependsOn` / `supersedes` / `contributes` / `parent`,
+/// `Milestone.goals`), and the `at` pointer of `kind = "test"`
+/// implementations. Convention is `<domain>.<slug>` (e.g. `auth.login`)
+/// or `<DOMAIN>-<number>` (e.g. `SIGNUP-001`). Path separators (`/`)
+/// are allowed so a hierarchical layout (`auth/login` parent of
+/// `auth/login/happy-path`) can mirror the source tree.
+typealias Id = String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))
+
+/// Human-facing display string for `Scenario.name` / `Test.name`.
+/// Accepts any single-line non-empty value with no surrounding
+/// whitespace — punctuation, prose, and non-ASCII letters all pass.
+/// `id` is the strict counterpart used by cross-references; `name`
+/// is what shows up in reports and SPEC.md headlines.
+typealias DisplayName =
+  String(length > 0 && !startsWith(" ") && !endsWith(" ") && !contains("\n") && !contains("\r"))
+
+/// Authoring lifecycle shared by `Scenario`, `Goal`, and `Milestone`.
+typealias ReviewStatus = ("draft" | "review" | "approved")
+
+/// Triage weight on a `Scenario`.
+typealias Severity = ("critical" | "major" | "minor")
+
+/// Strategy `Goal` and `Milestone` use to roll up coverage / progress
+/// into a single percentage. `scenario-count` weights every Scenario
+/// equally; `severity-weighted` assigns critical=5 / major=3 / minor=1.
+typealias GoalProgressMethod = ("scenario-count" | "severity-weighted")
+
+/// Milestone rollup. `goal-average` averages each referenced Goal's
+/// percentage; the other two flatten every contributing Scenario
+/// across the Milestone's Goals before computing the ratio.
+typealias MilestoneProgressMethod = (GoalProgressMethod | "goal-average")
+
+/// ISO-8601 calendar date (`YYYY-MM-DD`) for `Milestone.targetDate`
+/// and `Decision.date`. Time-of-day / timezone components are
+/// deliberately not accepted — these fields express a day, not an
+/// instant.
+typealias IsoDate = String(matches(Regex(#"^\d{4}-\d{2}-\d{2}$"#)))
+
 /// HTTP request authored on a Step. When `Step.http` is non-null, the
 /// runner takes the HTTP path: it dispatches the request via Go's
 /// `net/http`, applies the `expectStatus` / `expectBody*` /
 /// `expectHeaders` assertions, and feeds `captureBody` /
 /// `captureStatus` back into the sequential step's env map.
 class HttpRequest {
-  method: String(matches(Regex(#"^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$"#))) = "GET"
+  method: ("GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS") = "GET"
   url: String(length > 0)
   headers: Mapping<String, String> = new {}
 
@@ -90,12 +130,18 @@ class Step {
   /// field is the discriminator that survives the migration without
   /// touching the executor or the reporter.
   kind: String =
-    if (cmd != null) "shell"
-    else if (http != null) "http"
-    else if (playwright != null) "playwright"
-    else if (playwrightTest != null) "playwright-test"
-    else if (sql != null) "sql"
-    else "invalid"
+    if (cmd != null)
+      "shell"
+    else if (http != null)
+      "http"
+    else if (playwright != null)
+      "playwright"
+    else if (playwrightTest != null)
+      "playwright-test"
+    else if (sql != null)
+      "sql"
+    else
+      "invalid"
 
   env: Mapping<String, String> = new {}
   workdir: String? = null
@@ -326,7 +372,7 @@ class Eventually {
 /// comparison otherwise.
 class PlaywrightSpec {
   script: String(length > 0)
-  browser: String(matches(Regex(#"^(chromium|firefox|webkit)$"#))) = "chromium"
+  browser: ("chromium" | "firefox" | "webkit") = "chromium"
 
   /// Visual regression: capture a screenshot from the script's
   /// return value and compare against a committed PNG snapshot.
@@ -584,10 +630,11 @@ class Background {
 class Test {
   /// Names may start with a letter, digit, or underscore (number
   /// prefixes like `01_setup` are useful for sort-order control,
-  /// matching the convention hook keys use). The regex was widened
-  /// in phase 28 after dogfooding (phase 27) revealed digit-prefix
-  /// names were rejected.
-  name: String(matches(Regex(#"^[a-zA-Z0-9_][a-zA-Z0-9_:.\-/ ]*$"#)))
+  /// matching the convention hook keys use). Constraint is delegated
+  /// to the `DisplayName` typealias so prose names with commas,
+  /// parentheses, question marks, and non-ASCII letters all pass —
+  /// the strict-identifier role is owned by `specRef` / `Scenario.id`.
+  name: DisplayName
   description: String? = null
 
   /// Free-form classification tags. Used by `pkspec exec --tag <name>` to
@@ -613,9 +660,10 @@ class Test {
   /// Auto-populated by `Spec.pkl` when a Scenario carries an `id`:
   /// the resulting Test inherits `specRef = { id }`.
   ///
-  /// Element regex `^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$` — same character
-  /// set as test names so cross-references stay typo-resistant.
-  specRef: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+  /// Element constraint is the shared `Id` typealias — see its
+  /// definition near the top of this file for the full character
+  /// set, and `Scenario.id` for the canonical declaration site.
+  specRef: Listing<Id> = new {}
 
   shell: String = "bash"
   env: Mapping<String, String> = new {}
@@ -794,7 +842,7 @@ class Hook {
   cmd: String(length > 0)
 
   /// Lifecycle scope: "all" (once per Run) or "each" (per test).
-  scope: String(matches(Regex(#"^(all|each)$"#))) = "each"
+  scope: ("all" | "each") = "each"
 
   shell: String = "bash"
   env: Mapping<String, String> = new {}
@@ -1031,11 +1079,11 @@ class RenderedScenario {
   /// `pkspec next` aggregates open contributions to suggest
   /// which spec to implement next.
   contributes: Listing<String>
-  reviewStatus: String        // "draft" | "review" | "approved"
+  reviewStatus: String // "draft" | "review" | "approved"
   deprecated: Boolean
   deprecatedReason: String?
   replacedBy: String?
-  severity: String            // "critical" | "major" | "minor"
+  severity: String // "critical" | "major" | "minor"
   /// Implementation pointers (kind + at). Empty list means
   /// "verified only by matching Test.specRef links in Test.pkl
   /// modules." `pkspec check --strict` verifies the file portion
@@ -1048,7 +1096,7 @@ class RenderedScenario {
 /// One implementation pointer rendered for the Go runner. See
 /// `class Implementation` in `Spec.pkl` for the authoring shape.
 class RenderedImplementation {
-  kind: String       // "test" | "code" | "doc"
+  kind: String // "test" | "code" | "doc"
   at: String?
 }
 
@@ -1064,7 +1112,7 @@ class RenderedGoal {
   /// Higher = more important. No fixed scale; the runner only
   /// uses it for relative ordering in `pkspec goals` and `pkspec next`.
   priority: Int
-  reviewStatus: String        // "draft" | "review" | "approved"
+  reviewStatus: String // "draft" | "review" | "approved"
   deprecated: Boolean
   rationale: String?
   /// Goal achievement calculation method. Currently:
@@ -1080,7 +1128,7 @@ class RenderedMilestone {
   name: String
   description: String?
   targetDate: String?
-  reviewStatus: String        // "draft" | "review" | "approved"
+  reviewStatus: String // "draft" | "review" | "approved"
   deprecated: Boolean
   goals: Listing<String>
   /// Milestone rollup calculation method:
@@ -1128,9 +1176,8 @@ after: Mapping<String, Hook> = new {}
 
 local testNames: List<String> = tests.toList().map((t) -> t.name)
 
-local duplicateNames: List<String> = testNames
-  .filter((n) -> testNames.count((m) -> m == n) > 1)
-  .distinct
+local duplicateNames: List<String> =
+  testNames.filter((n) -> testNames.count((m) -> m == n) > 1).distinct
 
 local function renderHttp(h: HttpRequest): RenderedHttpRequest = new {
   method = h.method
@@ -1144,14 +1191,22 @@ local function renderHttp(h: HttpRequest): RenderedHttpRequest = new {
 local function renderPlaywright(p: PlaywrightSpec): RenderedPlaywrightSpec = new {
   script = p.script
   browser = p.browser
-  expectScreenshot = if (p.expectScreenshot == null) null else new RenderedScreenshotSnapshot {
-    name = p.expectScreenshot.name
-    thresholdPct = p.expectScreenshot.thresholdPct
-  }
-  expectConsole = if (p.expectConsole == null) null else new RenderedConsoleAssertion {
-    containsAll = p.expectConsole.containsAll
-    containsNone = p.expectConsole.containsNone
-  }
+  expectScreenshot =
+    if (p.expectScreenshot == null)
+      null
+    else
+      new RenderedScreenshotSnapshot {
+        name = p.expectScreenshot.name
+        thresholdPct = p.expectScreenshot.thresholdPct
+      }
+  expectConsole =
+    if (p.expectConsole == null)
+      null
+    else
+      new RenderedConsoleAssertion {
+        containsAll = p.expectConsole.containsAll
+        containsNone = p.expectConsole.containsNone
+      }
 }
 
 local function renderPlaywrightTest(p: PlaywrightTestSpec): RenderedPlaywrightTestSpec = new {
@@ -1210,16 +1265,24 @@ local function renderStep(s: Step): RenderedStep = new {
   captureBody = s.captureBody
   captureStatus = s.captureStatus
   captureBodyJsonPath = s.captureBodyJsonPath
-  eventually = if (s.eventually == null) null else new RenderedEventually {
-    intervalMs = s.eventually.intervalMs
-    timeoutSec = s.eventually.timeoutSec
-  }
-  expectAi = if (s.expectAi == null) null else new RenderedAiAssertion {
-    prompt = s.expectAi.prompt
-    cmd = s.expectAi.cmd
-    snapshotName = s.expectAi.snapshotName
-    preferDeterministic = s.expectAi.preferDeterministic
-  }
+  eventually =
+    if (s.eventually == null)
+      null
+    else
+      new RenderedEventually {
+        intervalMs = s.eventually.intervalMs
+        timeoutSec = s.eventually.timeoutSec
+      }
+  expectAi =
+    if (s.expectAi == null)
+      null
+    else
+      new RenderedAiAssertion {
+        prompt = s.expectAi.prompt
+        cmd = s.expectAi.cmd
+        snapshotName = s.expectAi.snapshotName
+        preferDeterministic = s.expectAi.preferDeterministic
+      }
   cassette = s.cassette
   always = s.always
   repeat = s.repeat
@@ -1278,11 +1341,15 @@ local function renderTest(t: Test): RenderedTest = new {
   expectStdoutJsonPath = t.expectStdoutJsonPath
   expectStderrJsonPath = t.expectStderrJsonPath
   expectStdoutSnapshot =
-    if (t.expectStdoutSnapshot == null) null
-    else renderSnapshot(t.expectStdoutSnapshot)
+    if (t.expectStdoutSnapshot == null)
+      null
+    else
+      renderSnapshot(t.expectStdoutSnapshot)
   expectStderrSnapshot =
-    if (t.expectStderrSnapshot == null) null
-    else renderSnapshot(t.expectStderrSnapshot)
+    if (t.expectStderrSnapshot == null)
+      null
+    else
+      renderSnapshot(t.expectStderrSnapshot)
   inlineStdout = t.inlineStdout
   inlineStderr = t.inlineStderr
   steps = new Listing<RenderedStep> {
@@ -1350,8 +1417,11 @@ renderedDomains: Listing<String> = new {}
 output {
   value = new Rendered {
     defaults = module.defaults
-    tests = if (duplicateNames.isEmpty) rendered
-      else throw("duplicate test names: \(duplicateNames.join(", "))")
+    tests =
+      if (duplicateNames.isEmpty)
+        rendered
+      else
+        throw("duplicate test names: \(duplicateNames.join(", "))")
     before = renderedBefore
     after = renderedAfter
     scenarios = renderedScenarios
