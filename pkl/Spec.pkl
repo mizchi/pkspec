@@ -15,7 +15,9 @@
 /// The runner is unchanged — Spec.pkl `amends Test.pkl`, so the
 /// rendered output shape is identical.
 @ModuleInfo { minPklVersion = "0.31.0" }
-module pkspec.Spec extends "Test.pkl"
+module pkspec.Spec
+
+extends "Test.pkl"
 
 import "Test.pkl" as base
 
@@ -66,9 +68,10 @@ class Implementation {
 /// ranks unimplemented scenarios by their Goal's priority to
 /// suggest where to invest next.
 class Goal {
-  /// Stable identifier. Same regex as `Scenario.id`; convention is
-  /// to use a `GOAL-` prefix so the two namespaces don't collide.
-  id: String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))
+  /// Stable identifier. Same `Id` typealias as `Scenario.id`;
+  /// convention is to use a `GOAL-` prefix so the two namespaces
+  /// don't collide.
+  id: Id
 
   /// Short label used in headings.
   name: String(length > 0)
@@ -82,7 +85,7 @@ class Goal {
   priority: Int = 50
 
   /// Authoring lifecycle. Same semantics as `Scenario.reviewStatus`.
-  reviewStatus: ("draft" | "review" | "approved") = "draft"
+  reviewStatus: ReviewStatus = "draft"
 
   /// Marks the Goal as retired. `pkspec goals` excludes
   /// deprecated Goals from the active list (they remain visible
@@ -98,7 +101,7 @@ class Goal {
   /// by all contributing scenarios. `severity-weighted` gives
   /// critical / major / minor scenarios weights of 5 / 3 / 1 so
   /// higher-impact scenarios dominate the percentage.
-  progressMethod: ("scenario-count" | "severity-weighted") = "scenario-count"
+  progressMethod: GoalProgressMethod = "scenario-count"
 }
 
 /// A Milestone groups Goals into a release / planning checkpoint.
@@ -107,7 +110,7 @@ class Goal {
 class Milestone {
   /// Stable identifier. Convention: use an `ms.` or `MILESTONE-`
   /// namespace to keep ids distinct from Goal and Scenario ids.
-  id: String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))
+  id: Id
 
   /// Short label used in headings.
   name: String(length > 0)
@@ -116,23 +119,23 @@ class Milestone {
   description: String? = null
 
   /// Optional target date in `YYYY-MM-DD` form.
-  targetDate: String(matches(Regex(#"^\d{4}-\d{2}-\d{2}$"#)))? = null
+  targetDate: IsoDate? = null
 
   /// Authoring lifecycle. Same semantics as `Goal.reviewStatus`.
-  reviewStatus: ("draft" | "review" | "approved") = "draft"
+  reviewStatus: ReviewStatus = "draft"
 
   /// Marks the Milestone as retired. `pkspec milestones` excludes
   /// deprecated Milestones from the active list.
   deprecated: Boolean = false
 
   /// Goal ids included in this Milestone.
-  goals: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+  goals: Listing<Id> = new {}
 
   /// Rollup strategy for the Milestone percentage.
   /// `goal-average` averages each referenced Goal's percentage.
   /// `scenario-count` / `severity-weighted` flatten all contributing
   /// scenarios across referenced Goals before computing the ratio.
-  progressMethod: ("goal-average" | "scenario-count" | "severity-weighted") = "goal-average"
+  progressMethod: MilestoneProgressMethod = "goal-average"
 }
 
 /// One entry in a scenario's decision log. Append-only by convention
@@ -142,9 +145,9 @@ class Milestone {
 /// `pkspec decisions` renders these chronologically across the
 /// whole project so reviewers can read the design trail.
 class Decision {
-  /// ISO-8601 date the decision was made. Regex enforces
-  /// `YYYY-MM-DD` so date sorts work without parsing.
-  date: String(matches(Regex(#"^\d{4}-\d{2}-\d{2}$"#)))
+  /// ISO-8601 date the decision was made. Enforced via the `IsoDate`
+  /// typealias so date sorts work without parsing.
+  date: IsoDate
 
   /// Optional author of the decision. Free-form string —
   /// usernames, real names, or "PM/EngLead/QA" group labels.
@@ -165,7 +168,10 @@ class Decision {
 /// `then` if it's a smoke check, or `given` + `when` if there's
 /// nothing to assert beyond exit code.
 class Scenario {
-  name: String(matches(Regex(#"^[a-zA-Z0-9_][a-zA-Z0-9_:.\-/ ]*$"#)))
+  /// Human-facing headline — prose, commas, parentheses, non-ASCII
+  /// all welcome. See the `DisplayName` typealias for the exact
+  /// shape. The strict-identifier role is owned by `id` below.
+  name: DisplayName
   description: String? = null
 
   /// Stable identifier for this scenario across the project — the
@@ -176,9 +182,9 @@ class Scenario {
   /// counts as its own implementation marker until a sibling test
   /// in `Test.pkl` overrides it.
   ///
-  /// Element regex `^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$` — same as
-  /// `Test.specRef` elements.
-  id: String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))? = null
+  /// Constraint is the shared `Id` typealias — same character set
+  /// as `Test.specRef` elements.
+  id: Id? = null
 
   /// Free-form classification tags propagated to the rendered Test.
   /// Same semantics as `Test.tags` — see `docs/notes/spec.md`. A
@@ -243,13 +249,13 @@ class Scenario {
   /// `docs/advanced/recipes/open-questions-policy.md` for how it
   /// differs from `openQuestions` (unresolved ambiguities) and
   /// `decisions` (append-only resolutions).
-  dependsOn: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+  dependsOn: Listing<Id> = new {}
 
   /// Other `Scenario.id` values that this spec replaces. The
   /// superseded specs should themselves be `deprecated = true`
   /// with `replacedBy` pointing back at this one — `pkspec spec`
   /// cross-checks both directions.
-  supersedes: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+  supersedes: Listing<Id> = new {}
 
   /// Parent Scenario's id when this scenario is a *sub-spec* — a
   /// more specific case of a broader spec. Example: AUTH-001
@@ -258,14 +264,14 @@ class Scenario {
   /// password"). Distinct from `dependsOn` (preconditions) and
   /// from `supersedes` (lifecycle replacement) — this is purely
   /// a refinement / containment edge.
-  parent: String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))? = null
+  parent: Id? = null
 
   /// `Goal.id` values this scenario contributes toward. A single
   /// scenario can advance multiple goals (e.g. "login works" goal
   /// AND "audit log captures auth events" goal). `pkspec next`
   /// uses these edges to rank unimplemented specs by the priority
   /// of the goals they would unblock.
-  contributes: Listing<String(matches(Regex(#"^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$"#)))> = new {}
+  contributes: Listing<Id> = new {}
 
   // ── Lifecycle ────────────────────────────────────────────────
 
@@ -273,7 +279,7 @@ class Scenario {
   /// `pkspec check` ignores draft specs (no failure even when
   /// unimplemented). "review" = under stakeholder review.
   /// "approved" = signed off, must be implemented before merging.
-  reviewStatus: ("draft" | "review" | "approved") = "draft"
+  reviewStatus: ReviewStatus = "draft"
 
   /// Marks the spec as retired. `pkspec check` skips deprecated
   /// specs, but they remain in `pkspec decisions` / `pkspec graph`
@@ -292,7 +298,7 @@ class Scenario {
   /// `pkspec check` weighs unimplemented specs — `critical`
   /// triggers failure, `major` warns, `minor` is silent. Default
   /// `major` so most specs land in the middle bucket.
-  severity: ("critical" | "major" | "minor") = "major"
+  severity: Severity = "major"
 
   /// Implementation pointers (kind + path) declared for this
   /// scenario. One Scenario can carry multiple entries (e.g. code
@@ -414,10 +420,13 @@ local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.St
   repeat = s.impl.repeat
 }
 
-local function tagSteps(prefix: String, items: Listing<SpecStep>, runAlways: Boolean): Listing<base.Step> =
-  new {
-    for (s in items) { tagStep(prefix, s, runAlways) }
-  }
+local function tagSteps(
+  prefix: String,
+  items: Listing<SpecStep>,
+  runAlways: Boolean,
+): Listing<base.Step> = new {
+  for (s in items) { tagStep(prefix, s, runAlways) }
+}
 
 local function scenarioToTest(s: Scenario): base.Test = new {
   name = s.name
@@ -437,12 +446,14 @@ local function scenarioToTest(s: Scenario): base.Test = new {
   // module-level `prelude` does NOT count toward "has a body" —
   // shared setup steps are always supporting cast for some
   // scenario-specific Given/When/Then.
-  pending = s.pending || (
-    s.given.isEmpty
-    && s.`when`.isEmpty
-    && s.then.isEmpty
-    && s.cleanup.isEmpty
-  )
+  pending =
+    s.pending
+      || (
+        s.given.isEmpty
+          && s.`when`.isEmpty
+          && s.then.isEmpty
+          && s.cleanup.isEmpty
+      )
   // Order matters: Prelude (Background:) → Given → When → Then →
   // Cleanup. Prelude steps are tagged "Background" in the runner's
   // report so the spec-side shared-setup is visible.
