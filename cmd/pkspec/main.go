@@ -56,6 +56,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return cmdInit(args[1:], stdout, stderr)
 	case "doctor":
 		return cmdDoctor(args[1:], stdout, stderr)
+	case "migrate":
+		return cmdMigrate(args[1:], stdout, stderr)
 	case "run":
 		return cmdRun(args[1:], stdout, stderr)
 	case "exec":
@@ -681,7 +683,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if *lint {
-		issues := spec.LintWithSources(plans, sourceRefs)
+		issues := spec.Lint(plans, spec.LintOptions{Sources: sourceRefs})
 		if *lintDisable != "" {
 			disabled := map[string]struct{}{}
 			for _, r := range strings.Split(*lintDisable, ",") {
@@ -722,7 +724,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if *graph {
-		_, err := io.WriteString(stdout, spec.GraphWithSources(plans, rootDir, sourceRefs))
+		_, err := io.WriteString(stdout, spec.Graph(plans, rootDir, spec.GraphOptions{Sources: sourceRefs}))
 		return err
 	}
 	if *decisions {

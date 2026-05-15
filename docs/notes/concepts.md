@@ -54,13 +54,21 @@ Detail: `docs/notes/spec.md`, `docs/notes/spec-graph.md`.
 
 ### 1.4 Verification
 
-Three ways a Scenario can declare it is implemented:
+A Scenario can declare zero or more `Implementation` entries on its
+`implementations: Listing<Implementation>` field. Each entry pairs a
+`kind` with an optional `at` pointer:
 
-| `implementedBy` | `implementedAt`                                 | Required gate                                 |
-| --------------- | ----------------------------------------------- | --------------------------------------------- |
-| `"test"`        | unused                                          | a Test.pkl declares matching `specRef`        |
-| `"code"`        | `path:Symbol`                                   | `pkspec check --strict` verifies the path     |
-| `"doc"`         | `docs/notes/foo.md#anchor`                      | `pkspec check --strict` verifies the path     |
+| `Implementation { kind }` | `at`                            | What it asserts                                              |
+| ------------------------- | ------------------------------- | ------------------------------------------------------------ |
+| `"test"`                  | unused                          | a Test.pkl declares matching `specRef` (Test.pkl-side link). |
+| `"code"`                  | `path:Symbol`                   | `pkspec check --strict` verifies the path part exists.       |
+| `"doc"`                   | `docs/notes/foo.md#anchor`      | `pkspec check --strict` verifies the path part exists.       |
+
+A Scenario with an empty `implementations` list still counts as
+verified when a Test.pkl elsewhere declares `specRef = { its.id }`
+— pkspec's check walks both surfaces. The multi-entry shape is for
+specs that are enforced by two or more artefacts at once (a test +
+a code guard + a doc note).
 
 `Scenario.openQuestions: Listing<String>` records unanswered design
 questions; lint promotes them to error if a `critical` scenario is

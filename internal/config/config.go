@@ -262,28 +262,32 @@ type Decision struct {
 // reads this; spec tooling (`pkspec check / coverage / graph / decisions /
 // goals / next`) does.
 type Scenario struct {
-	Name             string      `pkl:"name"`
-	ID               *string     `pkl:"id"`
-	Description      *string     `pkl:"description"`
-	Tags             []string    `pkl:"tags"`
-	Audience         []string    `pkl:"audience"`
-	UserDescription  *string     `pkl:"userDescription"`
-	PMNotes          *string     `pkl:"pmNotes"`
-	OperatorNotes    *string     `pkl:"operatorNotes"`
-	APINotes         *string     `pkl:"apiNotes"`
-	DependsOn        []string    `pkl:"dependsOn"`
-	Supersedes       []string    `pkl:"supersedes"`
-	Parent           *string     `pkl:"parent"`
-	Contributes      []string    `pkl:"contributes"`
-	ReviewStatus     string      `pkl:"reviewStatus"`
-	Deprecated       bool        `pkl:"deprecated"`
-	DeprecatedReason *string     `pkl:"deprecatedReason"`
-	ReplacedBy       *string     `pkl:"replacedBy"`
-	Severity         string      `pkl:"severity"`
-	ImplementedBy    string      `pkl:"implementedBy"`
-	ImplementedAt    *string     `pkl:"implementedAt"`
-	OpenQuestions    []string    `pkl:"openQuestions"`
-	Decisions        []*Decision `pkl:"decisions"`
+	Name             string            `pkl:"name"`
+	ID               *string           `pkl:"id"`
+	Description      *string           `pkl:"description"`
+	Tags             []string          `pkl:"tags"`
+	Audience         []string          `pkl:"audience"`
+	AudienceNotes    map[string]string `pkl:"audienceNotes"`
+	DependsOn        []string          `pkl:"dependsOn"`
+	Supersedes       []string          `pkl:"supersedes"`
+	Parent           *string           `pkl:"parent"`
+	Contributes      []string          `pkl:"contributes"`
+	ReviewStatus     string            `pkl:"reviewStatus"`
+	Deprecated       bool              `pkl:"deprecated"`
+	DeprecatedReason *string           `pkl:"deprecatedReason"`
+	ReplacedBy       *string           `pkl:"replacedBy"`
+	Severity         string            `pkl:"severity"`
+	Implementations  []*Implementation `pkl:"implementations"`
+	OpenQuestions    []string          `pkl:"openQuestions"`
+	Decisions        []*Decision       `pkl:"decisions"`
+}
+
+// Implementation mirrors `pkspec.Test#RenderedImplementation` — one
+// (kind, at) pair declared on a Scenario. Multiple entries per
+// Scenario are normal (one spec enforced by test + code + doc).
+type Implementation struct {
+	Kind string  `pkl:"kind"` // "test" | "code" | "doc"
+	At   *string `pkl:"at"`
 }
 
 // Goal mirrors `pkspec.Test#RenderedGoal` — a user-facing piece
@@ -352,6 +356,7 @@ func init() {
 	pkl.RegisterMapping("pkspec.Test#RenderedDecision", Decision{})
 	pkl.RegisterMapping("pkspec.Test#RenderedGoal", Goal{})
 	pkl.RegisterMapping("pkspec.Test#RenderedMilestone", Milestone{})
+	pkl.RegisterMapping("pkspec.Test#RenderedImplementation", Implementation{})
 }
 
 // Mode reports which body shape this test uses; the executor rejects

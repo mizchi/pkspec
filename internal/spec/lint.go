@@ -44,6 +44,16 @@ type LintIssue struct {
 	Fix     string
 }
 
+// LintOptions tunes lint behaviour for callers that want to feed
+// in extra signals (source-marker scan results, future hooks). Zero
+// value matches the prior `Lint(plans)` defaults — no source-marker
+// rule, no other extensions.
+type LintOptions struct {
+	// Sources are SourceRefs harvested by ScanSources. When
+	// non-empty, the `lint.dead-source-specRef` rule activates.
+	Sources []SourceRef
+}
+
 // Lint runs every built-in rule against the supplied plans. Returns
 // a flat issue list sorted by level desc, then rule, then subject.
 //
@@ -51,16 +61,19 @@ type LintIssue struct {
 // invariant on Scenarios / Goals / Decisions, with a short Fix hint.
 // Heuristics that need user context ("is this description
 // well-written?") belong outside the runner.
-func Lint(plans []*config.Plan) []LintIssue {
-	return LintWithSources(plans, nil)
+//
+// Optional extensions go through the variadic LintOptions arg. The
+// zero-arg form is the canonical entrypoint for callers that don't
+// need source-marker checks.
+func Lint(plans []*config.Plan, opts ...LintOptions) []LintIssue {
+	var o LintOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	return lintImpl(plans, o.Sources)
 }
 
-// LintWithSources is Lint plus the in-source `pkspec:spec=<id>`
-// reference check. When `sources` is non-nil and any of them point at
-// a Scenario.id that is not declared in `plans`, the rule
-// `lint.dead-source-specRef` fires at error level. Callers that have
-// no source scan to feed in can keep using `Lint(plans)`.
-func LintWithSources(plans []*config.Plan, sources []SourceRef) []LintIssue {
+func lintImpl(plans []*config.Plan, sources []SourceRef) []LintIssue {
 	var out []LintIssue
 
 	scenarioIDs := map[string]*config.Scenario{}
@@ -222,24 +235,30 @@ func LintWithSources(plans []*config.Plan, sources []SourceRef) []LintIssue {
 				})
 			}
 
-			if (sc.ImplementedBy == "test" || sc.ImplementedBy == "") &&
-				sc.ImplementedAt != nil && *sc.ImplementedAt != "" {
-				out = append(out, LintIssue{
-					Rule: "lint.implementedAt-without-code-doc", Level: LintInfo,
-					Subject: subject,
-					Message: "implementedAt is set but implementedBy is \"test\" — the pointer is ignored",
-					Fix:     "set implementedBy = \"code\" or \"doc\", or drop implementedAt",
-				})
-			}
-
-			if (sc.ImplementedBy == "code" || sc.ImplementedBy == "doc") &&
-				(sc.ImplementedAt == nil || *sc.ImplementedAt == "") {
-				out = append(out, LintIssue{
-					Rule: "lint.code-doc-without-implementedAt", Level: LintError,
-					Subject: subject,
-					Message: fmt.Sprintf("implementedBy=%q but implementedAt is unset — there is no pointer for pkspec check --strict to verify", sc.ImplementedBy),
-					Fix:     "set implementedAt = \"path:Symbol\" or change implementedBy back to \"test\"",
-				})
+			for _, impl := range sc.Implementations {
+				if impl == nil {
+					continue
+				}
+				switch impl.Kind {
+				case "test":
+					if impl.At != nil && *impl.At != "" {
+						out = append(out, LintIssue{
+							Rule: "lint.implementation-test-with-at", Level: LintInfo,
+							Subject: subject,
+							Message: "Implementation { kind=\"test\" } carries an `at` pointer — pkspec ignores it (Test.specRef is the link)",
+							Fix:     "drop `at` from the test entry, or change kind to \"code\"/\"doc\"",
+						})
+					}
+				case "code", "doc":
+					if impl.At == nil || *impl.At == "" {
+						out = append(out, LintIssue{
+							Rule: "lint.implementation-code-doc-without-at", Level: LintError,
+							Subject: subject,
+							Message: fmt.Sprintf("Implementation { kind=%q } has no `at` pointer — pkspec check --strict has nothing to verify", impl.Kind),
+							Fix:     "set `at = \"path:Symbol\"` (or `at = \"docs/...md#anchor\"` for doc), or change kind to \"test\"",
+						})
+					}
+				}
 			}
 
 			for _, d := range sc.Decisions {

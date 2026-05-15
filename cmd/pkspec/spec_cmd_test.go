@@ -279,9 +279,7 @@ goals {
   new Goal {
     id = "goal.launch"
     name = "launch ready"
-    progress {
-      method = "severity-weighted"
-    }
+    progressMethod = "severity-weighted"
   }
 }
 
@@ -306,16 +304,18 @@ scenarios {
     name = "upload content type"
     severity = "major"
     contributes { "goal.launch" }
-    implementedBy = "code"
-    implementedAt = "internal/upload/security.go:Check"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/upload/security.go:Check" }
+    }
   }
   new Scenario {
     id = "upload.preview"
     name = "upload preview"
     severity = "minor"
     contributes { "goal.launch" }
-    implementedBy = "code"
-    implementedAt = "internal/upload/security.go:Check"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/upload/security.go:Check" }
+    }
   }
 }
 `, filepath.ToSlash(schemaPath))

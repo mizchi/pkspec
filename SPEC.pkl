@@ -8,8 +8,9 @@
 ///   - "test" scenarios — verified by an `examples/*/Test.pkl` that
 ///     declares matching `specRef`.
 ///   - "code" / "doc" scenarios — verified by Go source or by a
-///     reviewed doc; `implementedBy + implementedAt` are the
-///     pointer. `pkspec check` accepts them without a Pkl Test.
+///     reviewed doc; an `Implementation { kind = "code"|"doc"; at = ... }`
+///     entry in `implementations` is the pointer. `pkspec check`
+///     accepts them without a Pkl Test.
 ///
 /// Canonical gate for pkspec itself:
 ///
@@ -71,9 +72,7 @@ goals {
     reviewStatus = "approved"
     description = "Published binaries, GitHub Actions, and schema-to-executor boundaries avoid known vulnerable toolchains, excess CI privileges, and unchecked numeric narrowing."
     rationale = "A test runner is part of the supply chain. Users should not have to audit every install path before trusting it in CI."
-    progress {
-      method = "severity-weighted"
-    }
+    progressMethod = "severity-weighted"
   }
   new Goal {
     id = "goal.lang-independent"
@@ -98,9 +97,7 @@ goals {
     reviewStatus = "approved"
     description = "Specs are first-class Pkl values with stable ids, lifecycle, and a knowledge graph. Tests declare which specs they verify."
     rationale = "Without traceability, specs rot into design-doc folklore and tests become orphaned artefacts. Cross-references are the load-bearing edge."
-    progress {
-      method = "severity-weighted"
-    }
+    progressMethod = "severity-weighted"
   }
   new Goal {
     id = "goal.parallel-execution"
@@ -177,8 +174,9 @@ scenarios {
     severity = "critical"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "cmd/pkspec/main.go:cmdRun"
+    implementations {
+      new Implementation { kind = "code"; at = "cmd/pkspec/main.go:cmdRun" }
+    }
   }
   new {
     id = "runner.exec.assert-streams"
@@ -197,8 +195,9 @@ scenarios {
     severity = "critical"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:Tally.IsGreen"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:Tally.IsGreen" }
+    }
   }
   new {
     id = "runner.junit-report"
@@ -220,8 +219,9 @@ scenarios {
     severity = "critical"
     reviewStatus = "approved"
     contributes { "goal.secure-release"; "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "flake.nix:go_1_26_3"
+    implementations {
+      new Implementation { kind = "code"; at = "flake.nix:go_1_26_3" }
+    }
     decisions {
       new Decision {
         date = "2026-05-14"
@@ -239,8 +239,9 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.secure-release"; "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = ".github/workflows/go.yml:permissions"
+    implementations {
+      new Implementation { kind = "code"; at = ".github/workflows/go.yml:permissions" }
+    }
   }
   new {
     id = "security.govulncheck-weekly"
@@ -250,8 +251,9 @@ scenarios {
     severity = "major"
     reviewStatus = "review"
     contributes { "goal.secure-release" }
-    implementedBy = "code"
-    implementedAt = ".github/workflows/govulncheck.yml"
+    implementations {
+      new Implementation { kind = "code"; at = ".github/workflows/govulncheck.yml" }
+    }
   }
   new {
     id = "security.dependabot-weekly"
@@ -261,8 +263,21 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.secure-release" }
-    implementedBy = "code"
-    implementedAt = ".github/dependabot.yml"
+    implementations {
+      new Implementation { kind = "code"; at = ".github/dependabot.yml" }
+    }
+  }
+  new {
+    id = "tooling.migrate"
+    name = "migrate_command_text_transforms_v01_to_v02"
+    description = "`pkspec migrate [--dry-run|--check] <path>...` is a text-only Pkl-source rewriter from the v0.1.x schema (implementedBy/implementedAt, userDescription/pmNotes/operatorNotes/apiNotes, GoalProgress) to v0.2.0 (Implementations Listing, audienceNotes Mapping, progressMethod). The transform never invokes Pkl eval — it works on sources that no longer parse under the current schema. Multiple audience-notes in one block consolidate into a single `audienceNotes { ... }` block. Idempotent."
+    tags { "spec"; "tooling"; "migration" }
+    severity = "major"
+    reviewStatus = "review"
+    contributes { "goal.spec-driven" }
+    implementations {
+      new Implementation { kind = "code"; at = "internal/migrate/migrate.go:MigrateV01ToV02" }
+    }
   }
   new {
     id = "tooling.source-scan"
@@ -272,8 +287,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/scan.go:ScanSources"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/scan.go:ScanSources" }
+    }
   }
   new {
     id = "tooling.dead-source-ref-lint"
@@ -284,8 +300,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "tooling.source-scan" }
     contributes { "goal.spec-driven"; "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/lint.go:LintWithSources"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/lint.go:LintWithSources" }
+    }
   }
   new {
     id = "spec.graph-source-backlinks"
@@ -296,8 +313,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "tooling.source-scan"; "spec.graph-implementation-links" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:GraphWithSources"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:GraphWithSources" }
+    }
   }
   new {
     id = "tooling.domain-lint"
@@ -307,8 +325,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/lint.go:Lint"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/lint.go:Lint" }
+    }
   }
   new {
     id = "tooling.ci-concurrency"
@@ -318,8 +337,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = ".github/workflows/go.yml:concurrency"
+    implementations {
+      new Implementation { kind = "code"; at = ".github/workflows/go.yml:concurrency" }
+    }
   }
 
   // ── goal.lang-independent ────────────────────────────────────────
@@ -341,8 +361,9 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.lang-independent"; "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:assertShellStream"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:assertShellStream" }
+    }
   }
   new {
     id = "runner.shell.stdout-jsonpath"
@@ -353,8 +374,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "runner.shell.stdout-patterns" }
     contributes { "goal.lang-independent"; "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:assertShellStream"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:assertShellStream" }
+    }
   }
   new {
     id = "runner.shell.capture-stdout"
@@ -365,8 +387,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "kind.shell" }
     contributes { "goal.lang-independent"; "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:runSteps"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:runSteps" }
+    }
   }
   new {
     id = "runner.steps.sequential"
@@ -376,8 +399,9 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:runSteps"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:runSteps" }
+    }
   }
   new {
     id = "runner.hooks.lifecycle"
@@ -387,8 +411,9 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:Run"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:Run" }
+    }
   }
   new {
     id = "kind.http"
@@ -417,8 +442,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "kind.playwright" }
     contributes { "goal.lang-independent"; "goal.differential" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/playwright.go:checkScreenshot"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/playwright.go:checkScreenshot" }
+    }
   }
   new {
     id = "runner.playwright.console-assertions"
@@ -429,8 +455,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "kind.playwright" }
     contributes { "goal.lang-independent"; "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/playwright.go:checkConsole"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/playwright.go:checkConsole" }
+    }
   }
   new {
     id = "kind.playwright-test"
@@ -450,8 +477,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "kind.playwright-test" }
     contributes { "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/playwrighttest.go:runPlaywrightTestStep"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/playwrighttest.go:runPlaywrightTestStep" }
+    }
   }
   new {
     id = "kind.sql"
@@ -470,8 +498,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.lang-independent" }
-    implementedBy = "doc"
-    implementedAt = "docs/notes/runner-design.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/notes/runner-design.md" }
+    }
   }
 
   // ── goal.adapter-dsl ────────────────────────────────────────────
@@ -484,8 +513,9 @@ scenarios {
     severity = "major"
     reviewStatus = "review"
     contributes { "goal.adapter-dsl"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "pkl/Adapter.pkl"
+    implementations {
+      new Implementation { kind = "code"; at = "pkl/Adapter.pkl" }
+    }
   }
   new {
     id = "adapter.extends-builtins"
@@ -496,8 +526,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "adapter.dsl" }
     contributes { "goal.adapter-dsl"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "pkl/adapters/Vitest.pkl"
+    implementations {
+      new Implementation { kind = "code"; at = "pkl/adapters/Vitest.pkl" }
+    }
   }
   new {
     id = "adapter.overlays-and-cases"
@@ -508,8 +539,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "adapter.dsl" }
     contributes { "goal.adapter-dsl"; "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "pkl/Adapter.test.pkl"
+    implementations {
+      new Implementation { kind = "code"; at = "pkl/Adapter.test.pkl" }
+    }
   }
   new {
     id = "adapter.examples"
@@ -520,8 +552,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "adapter.dsl"; "adapter.extends-builtins" }
     contributes { "goal.adapter-dsl" }
-    implementedBy = "doc"
-    implementedAt = "docs/notes/adapters.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/notes/adapters.md" }
+    }
   }
   new {
     id = "adapter.protocol-runtime"
@@ -532,8 +565,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "adapter.dsl"; "adapter.overlays-and-cases" }
     contributes { "goal.adapter-dsl"; "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "internal/adapter/adapter.go"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/adapter/adapter.go" }
+    }
   }
   new {
     id = "adapter.native-shims"
@@ -544,8 +578,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "adapter.protocol-runtime"; "adapter.extends-builtins" }
     contributes { "goal.adapter-dsl"; "goal.lang-independent"; "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "internal/adaptershim/shim.go"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/adaptershim/shim.go" }
+    }
     openQuestions {
       "native shim を core に promote する (= built-in command として ship する) 閾値の判断軸が定まっていない — どの runner が \"安定した\" と言えるかの基準が必要。"
     }
@@ -559,8 +594,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "adapter.dsl"; "adapter.protocol-runtime"; "adapter.native-shims" }
     contributes { "goal.adapter-dsl"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "pkl/Adapter.pkl"
+    implementations {
+      new Implementation { kind = "code"; at = "pkl/Adapter.pkl" }
+    }
     openQuestions {
       "Lcov / Cobertura parser を pkspec 本体に取り込むか、 ecosystem-specific shim 側に置くかの線引きが未確定。"
       "coverage metrics の `name` が runner ごとにバラバラ (e.g. vitest の per-file path vs go test の per-package) でも cross-runner 比較できる形にする必要があるか?"
@@ -575,8 +611,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "adapter.dsl"; "adapter.extends-builtins" }
     contributes { "goal.adapter-dsl" }
-    implementedBy = "code"
-    implementedAt = "cmd/pkspec/init_cmd.go"
+    implementations {
+      new Implementation { kind = "code"; at = "cmd/pkspec/init_cmd.go" }
+    }
   }
 
   // ── goal.spec-driven ─────────────────────────────────────────────
@@ -598,20 +635,22 @@ scenarios {
     severity = "critical"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:CheckUnimplemented"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:CheckUnimplemented" }
+    }
   }
   new {
     id = "spec.implementation-index"
     name = "spec_id_backlinks_aggregate_implementations"
-    description = "`pkspec spec` renders a per-spec implementation index, and `pkspec implementations` prints just that view: each Scenario.id points back to active Test.specRef implementers, plus code/doc implementedAt pointers."
+    description = "`pkspec spec` renders a per-spec implementation index, and `pkspec implementations` prints just that view: each Scenario.id points back to active Test.specRef implementers, plus code/doc entries from `Scenario.implementations`."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference"; "spec.implemented-by" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:ImplementationIndex"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:ImplementationIndex" }
+    }
   }
   new {
     id = "spec.lifecycle"
@@ -622,8 +661,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:checkFromScenarios"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:checkFromScenarios" }
+    }
   }
   new {
     id = "spec.knowledge-graph"
@@ -634,20 +674,22 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:Graph"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:Graph" }
+    }
   }
   new {
     id = "spec.graph-implementation-links"
     name = "spec_graph_includes_implementation_backlinks"
-    description = "`pkspec graph` includes implementation nodes derived from active Test.specRef and code/doc implementedAt pointers, with edges back to the Scenario.id they verify."
+    description = "`pkspec graph` includes implementation nodes derived from active Test.specRef and from `Scenario.implementations` code/doc entries, with edges back to the Scenario.id they verify."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.knowledge-graph"; "spec.implementation-index" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:Graph"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:Graph" }
+    }
   }
   new {
     id = "spec.decision-log"
@@ -657,8 +699,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:DecisionLog"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:DecisionLog" }
+    }
   }
   new {
     id = "spec.goals"
@@ -669,8 +712,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:Goals"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:Goals" }
+    }
   }
   new {
     id = "spec.goal-progress"
@@ -681,8 +725,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "spec.goals" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:goalProgress"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:goalProgress" }
+    }
   }
   new {
     id = "spec.milestones"
@@ -693,8 +738,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "spec.goals"; "spec.goal-progress" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:Milestones"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:Milestones" }
+    }
   }
   new {
     id = "docs.advanced-launch-readiness-recipe"
@@ -705,8 +751,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "spec.goal-progress"; "spec.milestones" }
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/advanced/recipes/launch-readiness.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/advanced/recipes/launch-readiness.md" }
+    }
   }
   new {
     id = "docs.advanced-open-questions-policy-recipe"
@@ -716,8 +763,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/advanced/recipes/open-questions-policy.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/advanced/recipes/open-questions-policy.md" }
+    }
   }
   new {
     id = "docs.advanced-doctor-recipe"
@@ -728,20 +776,22 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "tooling.doctor" }
     contributes { "goal.ci-trustworthy" }
-    implementedBy = "doc"
-    implementedAt = "docs/advanced/recipes/doctor-environment-check.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/advanced/recipes/doctor-environment-check.md" }
+    }
   }
   new {
     id = "docs.advanced-source-marker-recipe"
     name = "source_marker_recipe_is_copyable"
-    description = "Advanced docs include a recipe for the `pkspec:spec=<id>` source-marker workflow: authoring conventions, audit-then-CI rollout, graph rendering, walk semantics, and the boundary between marker (code-side breadcrumb) and `Scenario.implementedAt` (spec-side canonical pointer)."
+    description = "Advanced docs include a recipe for the `pkspec:spec=<id>` source-marker workflow: authoring conventions, audit-then-CI rollout, graph rendering, walk semantics, and the boundary between marker (code-side breadcrumb) and `Scenario.implementations` (spec-side canonical pointers)."
     tags { "spec"; "docs" }
     severity = "minor"
     reviewStatus = "review"
     dependsOn { "tooling.source-scan"; "tooling.dead-source-ref-lint"; "spec.graph-source-backlinks" }
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/advanced/recipes/source-marker-backlinks.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/advanced/recipes/source-marker-backlinks.md" }
+    }
   }
   new {
     id = "docs.example-spec-open-questions"
@@ -752,8 +802,9 @@ scenarios {
     reviewStatus = "review"
     dependsOn { "docs.advanced-open-questions-policy-recipe" }
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "examples/spec-open-questions/README.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "examples/spec-open-questions/README.md" }
+    }
   }
   new {
     id = "docs.usability-findings"
@@ -763,8 +814,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/notes/usability-findings.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/notes/usability-findings.md" }
+    }
   }
   new {
     id = "docs.concept-map"
@@ -774,8 +826,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/notes/concepts.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/notes/concepts.md" }
+    }
   }
   new {
     id = "docs.proposal-scenario-domain-enforcement"
@@ -785,8 +838,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/proposals/scenario-domain-enforcement.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/proposals/scenario-domain-enforcement.md" }
+    }
   }
   new {
     id = "docs.proposal-goal-driven-generation"
@@ -796,8 +850,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/proposals/goal-driven-scenario-generation.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/proposals/goal-driven-scenario-generation.md" }
+    }
   }
   new {
     id = "spec.prelude"
@@ -807,8 +862,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "pkl/Spec.pkl"
+    implementations {
+      new Implementation { kind = "code"; at = "pkl/Spec.pkl" }
+    }
   }
   new {
     id = "spec.cli-modes"
@@ -819,35 +875,40 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference"; "spec.goals" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "cmd/pkspec/main.go:cmdSpec"
+    implementations {
+      new Implementation { kind = "code"; at = "cmd/pkspec/main.go:cmdSpec" }
+    }
   }
   new {
     id = "docs.audience-projection"
     name = "audience_specific_docs_projection"
     description = "`pkspec docs --audience <name>` filters scenarios by `audience { ... }` or `audience:<name>` tags and renders stable Markdown for a target reader. The projection hides runner implementation details by default while preserving scenario prose, Goals, open questions, and decisions for PM/developer profiles."
-    pmNotes = "PM-facing docs can include product value, review status, open questions, and decisions without exposing shell commands or runner internals."
-    userDescription = "A project can generate simpler documentation for different readers from the same written specs."
     tags { "spec"; "audience:pm"; "audience:end-user"; "audience:developer" }
     audience { "pm"; "end-user"; "developer"; "api"; "operator"; "non-engineer" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cli-modes"; "spec.goals" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "cmd/pkspec/main.go:cmdDocs"
+    implementations {
+      new Implementation { kind = "code"; at = "cmd/pkspec/main.go:cmdDocs" }
+    }
+    audienceNotes {
+      ["pm"] = "PM-facing docs can include product value, review status, open questions, and decisions without exposing shell commands or runner internals."
+      ["end-user"] = "A project can generate simpler documentation for different readers from the same written specs."
+    }
   }
   new {
     id = "spec.implemented-by"
     name = "framework_internal_specs_carry_implementation_pointer"
-    description = "`Scenario.implementedBy = \"code\"` (or \"doc\") with `implementedAt = \"path:symbol\"` lets a Scenario claim implementation without a Pkl Test. `pkspec check --strict` verifies the file part exists."
+    description = "A `Scenario.implementations` entry of `new Implementation { kind = \"code\"; at = \"path:Symbol\" }` (or kind = \"doc\") lets a Scenario claim implementation without a Pkl Test. `pkspec check --strict` verifies the file part exists."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference" }
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/spec.go:scenarioIsImplemented"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/spec.go:scenarioIsImplemented" }
+    }
   }
   new {
     id = "tooling.doctor"
@@ -857,8 +918,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.ci-trustworthy" }
-    implementedBy = "code"
-    implementedAt = "cmd/pkspec/doctor_cmd.go:cmdDoctor"
+    implementations {
+      new Implementation { kind = "code"; at = "cmd/pkspec/doctor_cmd.go:cmdDoctor" }
+    }
   }
   new {
     id = "tooling.lint"
@@ -868,8 +930,9 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "internal/spec/lint.go:Lint"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/spec/lint.go:Lint" }
+    }
   }
   new {
     id = "tooling.template"
@@ -879,8 +942,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "code"
-    implementedAt = "cmd/pkspec/spec_templates.go"
+    implementations {
+      new Implementation { kind = "code"; at = "cmd/pkspec/spec_templates.go" }
+    }
   }
   new {
     id = "tooling.authoring-guide"
@@ -890,8 +954,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/notes/authoring-guide.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/notes/authoring-guide.md" }
+    }
   }
   new {
     id = "docs.quick-start"
@@ -899,12 +964,13 @@ scenarios {
     description = "A quick-start document introduces what pkspec is, the author's intent (Pkl-backed robustness, language neutrality, structured flow-to-test mapping, and spec-driven documentation), installation, the first Test.pkl, the first Spec.pkl, where to go next, and pkfire as the sibling task runner for cached project tasks rather than presenting caching as a pkspec responsibility."
     tags { "spec"; "docs" }
     audience { "developer"; "pm"; "non-engineer" }
-    userDescription = "New readers can understand what pkspec is and run a minimal example before reading the full authoring guide."
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/quick-start.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/quick-start.md" }
+    }
+    audienceNotes { ["end-user"] = "New readers can understand what pkspec is and run a minimal example before reading the full authoring guide." }
   }
   new {
     id = "docs.quick-start-ja"
@@ -912,12 +978,13 @@ scenarios {
     description = "A Japanese quick-start document covers the same introductory path as the English quick-start: concept, author intent, installation, first Test.pkl, first Spec.pkl, common commands, next documents, and the pkfire boundary for cached project tasks."
     tags { "spec"; "docs"; "lang:ja" }
     audience { "developer"; "pm"; "non-engineer" }
-    userDescription = "Japanese readers can understand what pkspec is and run a minimal example before reading detailed references."
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/quick-start-ja.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/quick-start-ja.md" }
+    }
+    audienceNotes { ["end-user"] = "Japanese readers can understand what pkspec is and run a minimal example before reading detailed references." }
   }
   new {
     id = "docs.pkfire-boundary"
@@ -928,8 +995,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/quick-start.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/quick-start.md" }
+    }
   }
   new {
     id = "docs.project-gates"
@@ -939,8 +1007,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
-    implementedBy = "doc"
-    implementedAt = "docs/notes/project-gates.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/notes/project-gates.md" }
+    }
   }
   new {
     id = "docs.contract-strength"
@@ -950,8 +1019,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven"; "goal.ci-trustworthy" }
-    implementedBy = "doc"
-    implementedAt = "docs/notes/project-gates.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/notes/project-gates.md" }
+    }
   }
   new {
     id = "spec.strict-gate.recipe"
@@ -961,8 +1031,9 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.spec-driven"; "goal.ci-trustworthy" }
-    implementedBy = "doc"
-    implementedAt = "docs/notes/project-gates.md"
+    implementations {
+      new Implementation { kind = "doc"; at = "docs/notes/project-gates.md" }
+    }
   }
 
   // ── goal.parallel-execution ──────────────────────────────────────
@@ -993,8 +1064,9 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy"; "goal.parallel-execution" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:runStepEventually"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:runStepEventually" }
+    }
   }
   new {
     id = "parallel.dynamic-port"
@@ -1005,8 +1077,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "parallel.background" }
     contributes { "goal.parallel-execution" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:getFreePort"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:getFreePort" }
+    }
   }
 
   // ── goal.history-aware ───────────────────────────────────────────
@@ -1038,8 +1111,9 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.history-aware" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:Run"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:Run" }
+    }
   }
   new {
     id = "history.rerun-failed"
@@ -1050,8 +1124,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "history.timings-jsonl" }
     contributes { "goal.history-aware" }
-    implementedBy = "code"
-    implementedAt = "cmd/pkspec/rerun.go:pickRerunFailed"
+    implementations {
+      new Implementation { kind = "code"; at = "cmd/pkspec/rerun.go:pickRerunFailed" }
+    }
   }
   new {
     id = "history.timings-cli"
@@ -1062,8 +1137,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "history.timings-jsonl"; "history.shard-lpt" }
     contributes { "goal.history-aware" }
-    implementedBy = "code"
-    implementedAt = "cmd/pkspec/timings_cmd.go"
+    implementations {
+      new Implementation { kind = "code"; at = "cmd/pkspec/timings_cmd.go" }
+    }
   }
 
   // ── goal.property-based ──────────────────────────────────────────
@@ -1086,8 +1162,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "pbt.iterations" }
     contributes { "goal.property-based"; "goal.secure-release" }
-    implementedBy = "code"
-    implementedAt = "pkl/Test.pkl:iterationSeed"
+    implementations {
+      new Implementation { kind = "code"; at = "pkl/Test.pkl:iterationSeed" }
+    }
   }
   new {
     id = "pbt.inputs"
@@ -1108,8 +1185,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "pbt.inputs" }
     contributes { "goal.property-based" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/inputs.go"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/inputs.go" }
+    }
   }
   new {
     id = "pbt.pkl-int-shrinking"
@@ -1120,8 +1198,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "pbt.iterations" }
     contributes { "goal.property-based" }
-    implementedBy = "code"
-    implementedAt = "pkl/QuickCheck.pkl"
+    implementations {
+      new Implementation { kind = "code"; at = "pkl/QuickCheck.pkl" }
+    }
   }
   new {
     id = "pbt.steps-mode"
@@ -1132,8 +1211,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "pbt.iterations" }
     contributes { "goal.property-based"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/inputs.go:runInputIterated"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/inputs.go:runInputIterated" }
+    }
   }
 
   // ── goal.differential ────────────────────────────────────────────
@@ -1146,8 +1226,9 @@ scenarios {
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.differential" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:checkSnapshot"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:checkSnapshot" }
+    }
   }
   new {
     id = "diff.inline-snapshot"
@@ -1157,8 +1238,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.differential" }
-    implementedBy = "code"
-    implementedAt = "internal/inline/rewriter.go:ReplaceField"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/inline/rewriter.go:ReplaceField" }
+    }
   }
   new {
     id = "diff.inline-http-body"
@@ -1169,8 +1251,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:runHttpStep"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:runHttpStep" }
+    }
   }
   new {
     id = "diff.inline-jsonpath"
@@ -1181,8 +1264,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "internal/inline/rewriter.go:ReplaceMappingEntryValue"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/inline/rewriter.go:ReplaceMappingEntryValue" }
+    }
   }
   new {
     id = "diff.inline-headers"
@@ -1193,8 +1277,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "diff.inline-jsonpath" }
     contributes { "goal.differential"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:runHttpStep"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:runHttpStep" }
+    }
   }
   new {
     id = "diff.inline-sql-rows"
@@ -1205,8 +1290,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "diff.inline-jsonpath" }
     contributes { "goal.differential"; "goal.lang-independent" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/sql.go:runSqlStep"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/sql.go:runSqlStep" }
+    }
   }
   new {
     id = "diff.inline-console-log"
@@ -1217,8 +1303,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/playwright.go:runPlaywrightStep"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/playwright.go:runPlaywrightStep" }
+    }
   }
   new {
     id = "diff.inline-multiline"
@@ -1229,8 +1316,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential" }
-    implementedBy = "code"
-    implementedAt = "internal/inline/rewriter.go:shouldUseTripleQuoted"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/inline/rewriter.go:shouldUseTripleQuoted" }
+    }
   }
   new {
     id = "diff.inline-concurrent-safety"
@@ -1241,8 +1329,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential" }
-    implementedBy = "code"
-    implementedAt = "internal/inline/rewriter.go:RewriteUnderLock"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/inline/rewriter.go:RewriteUnderLock" }
+    }
   }
   new {
     id = "diff.cross-language"
@@ -1264,8 +1353,9 @@ scenarios {
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.ai-assertions" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go" }
+    }
   }
   new {
     id = "ai.prefer-deterministic"
@@ -1276,8 +1366,9 @@ scenarios {
     reviewStatus = "approved"
     dependsOn { "ai.expect-ai" }
     contributes { "goal.ai-assertions" }
-    implementedBy = "code"
-    implementedAt = "internal/executor/executor.go:stepHasDeterministicAssertion"
+    implementations {
+      new Implementation { kind = "code"; at = "internal/executor/executor.go:stepHasDeterministicAssertion" }
+    }
     decisions {
       new Decision {
         date = "2026-05-12"

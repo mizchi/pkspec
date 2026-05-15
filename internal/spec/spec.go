@@ -347,16 +347,38 @@ func docsDescription(e Entry, audience string) string {
 }
 
 func docsDescriptionCandidates(sc *config.Scenario, audience string) []*string {
+	// Look up audience-specific prose in the new `audienceNotes`
+	// Mapping. Fall back to the generic `description`. `non-engineer`
+	// maps to "end-user"; "pm" cascades through "pm" → "end-user"
+	// (PMs benefit from the user-readable note when the PM-specific
+	// one is unset).
+	get := func(key string) *string {
+		if sc.AudienceNotes == nil {
+			return nil
+		}
+		v, ok := sc.AudienceNotes[key]
+		if !ok || v == "" {
+			return nil
+		}
+		s := v
+		return &s
+	}
 	switch audience {
 	case "end-user", "non-engineer":
-		return []*string{sc.UserDescription, sc.Description}
+		return []*string{get("end-user"), sc.Description}
 	case "pm":
-		return []*string{sc.PMNotes, sc.UserDescription, sc.Description}
+		return []*string{get("pm"), get("end-user"), sc.Description}
 	case "api":
-		return []*string{sc.APINotes, sc.Description}
+		return []*string{get("api"), sc.Description}
 	case "operator":
-		return []*string{sc.OperatorNotes, sc.Description}
+		return []*string{get("operator"), sc.Description}
 	default:
+		// Custom audience: look it up by the literal key. No
+		// cascade — projects defining their own audience are
+		// expected to declare an explicit note.
+		if note := get(audience); note != nil {
+			return []*string{note, sc.Description}
+		}
 		return []*string{sc.Description}
 	}
 }
@@ -596,13 +618,22 @@ func (b *implementationIndexBuilder) addScenario(sourcePath string, sc *config.S
 		item.Severity = sc.Severity
 		item.Deprecated = sc.Deprecated
 	}
-	if sc.ImplementedBy == "" || sc.ImplementedBy == "test" || sc.ImplementedAt == nil || *sc.ImplementedAt == "" {
-		return
+	// One Scenario can declare multiple Implementation entries; emit
+	// a backlink for each `code` / `doc` entry that carries a path.
+	// `kind = "test"` entries are skipped — the Test.specRef walk
+	// already covers them.
+	for _, impl := range sc.Implementations {
+		if impl == nil || impl.Kind == "" || impl.Kind == "test" {
+			continue
+		}
+		if impl.At == nil || *impl.At == "" {
+			continue
+		}
+		b.addRef(*sc.ID, ImplementationRef{
+			Kind:   impl.Kind,
+			Target: *impl.At,
+		})
 	}
-	b.addRef(*sc.ID, ImplementationRef{
-		Kind:   sc.ImplementedBy,
-		Target: *sc.ImplementedAt,
-	})
 }
 
 func (b *implementationIndexBuilder) addTest(sourcePath, name string, t *config.Test) {
@@ -928,22 +959,34 @@ func checkFromScenarios(plans []*config.Plan) []SpecIssue {
 }
 
 // scenarioIsImplemented decides whether a Scenario should be
-// considered verified. Three paths:
-//   - "test"  (default): an active Test.pkl carries the id in specRef
-//   - "code"             implementedAt is non-null (the impl lives in
-//     framework / language source, not a Pkl test)
-//   - "doc"              implementedAt is non-null (the guarantee is a
-//     reviewed doc, not a runnable assertion)
+// considered verified. Two paths, satisfied in OR:
+//
+//   - any Implementation entry with kind=code/doc that carries a
+//     non-empty `at` is sufficient (the spec-side declaration);
+//   - any Implementation entry with kind=test, OR an active
+//     Test.pkl matching the Scenario.id via specRef, is sufficient
+//     (the test-side link).
+//
+// A Scenario with no implementations and no matching Test.specRef
+// is unimplemented.
 func scenarioIsImplemented(sc *config.Scenario, impls map[string][]string) bool {
-	switch sc.ImplementedBy {
-	case "code", "doc":
-		return sc.ImplementedAt != nil && *sc.ImplementedAt != ""
-	default: // "test" or empty
-		if sc.ID == nil {
-			return false
+	for _, impl := range sc.Implementations {
+		if impl == nil {
+			continue
 		}
-		return len(impls[*sc.ID]) > 0
+		switch impl.Kind {
+		case "code", "doc":
+			if impl.At != nil && *impl.At != "" {
+				return true
+			}
+		case "test":
+			return true
+		}
 	}
+	if sc.ID == nil {
+		return false
+	}
+	return len(impls[*sc.ID]) > 0
 }
 
 func checkLegacy(plans []*config.Plan) []SpecIssue {
@@ -1105,17 +1148,27 @@ func FormatCoverage(rep CoverageReport) string {
 // replacedBy (dotted), and implementation backlinks from active tests
 // / code / doc artefacts to the spec id they verify. Node colour
 // encodes severity; deprecated nodes use a dashed border.
-func Graph(plans []*config.Plan, root string) string {
-	return GraphWithSources(plans, root, nil)
+// GraphOptions tunes Graph behaviour. Zero value reproduces the
+// classic `Graph(plans, root)` output.
+type GraphOptions struct {
+	// Sources are SourceRefs harvested by ScanSources. When
+	// non-empty, the graph gains green-filled `src:<path>` nodes
+	// plus per-(file, id) edges into matching Scenario nodes.
+	Sources []SourceRef
 }
 
-// GraphWithSources extends Graph with in-source backlinks discovered
-// via the `pkspec:spec=<id>` marker (see ScanSources). Each unique
-// source file becomes one node; one edge per (file, spec id) pair
-// pulls into the matching Scenario node. The label on the edge shows
-// the occurrence count so a reviewer can see "this spec is named in
-// 7 places in adapter.go" at a glance.
-func GraphWithSources(plans []*config.Plan, root string, sources []SourceRef) string {
+// Graph emits a graphviz `dot` document describing the project's
+// spec knowledge graph. Optional extensions go through the variadic
+// GraphOptions arg.
+func Graph(plans []*config.Plan, root string, opts ...GraphOptions) string {
+	var o GraphOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	return graphImpl(plans, root, o.Sources)
+}
+
+func graphImpl(plans []*config.Plan, root string, sources []SourceRef) string {
 	var b strings.Builder
 	b.WriteString("digraph specs {\n")
 	b.WriteString("  rankdir=LR;\n")
@@ -1879,47 +1932,56 @@ type ImplIssue struct {
 	Reason string
 }
 
-// VerifyImplementedAt walks every Scenario with implementedAt set
-// and checks that the file portion of the pointer (before any
-// `:Symbol` suffix) exists relative to `repoRoot`. Symbol names are
-// not verified — the runner can't reasonably parse Go / Pkl AST for
-// every kind of marker. Missing files are returned as ImplIssues.
+// VerifyImplementedAt walks every Scenario's Implementation entries
+// of kind=code/doc and checks that the file portion of each `at`
+// pointer (before any `:Symbol` / `#anchor` suffix) exists relative
+// to `repoRoot`. Symbol names are not verified — the runner can't
+// reasonably parse every language's AST. Missing files are
+// returned as ImplIssues.
 func VerifyImplementedAt(plans []*config.Plan, repoRoot string) []ImplIssue {
 	var out []ImplIssue
 	seen := map[string]struct{}{}
 	for _, p := range plans {
 		for _, sc := range p.Scenarios {
-			if sc.ImplementedAt == nil || *sc.ImplementedAt == "" {
-				continue
+			for _, impl := range sc.Implementations {
+				if impl == nil {
+					continue
+				}
+				if impl.Kind != "code" && impl.Kind != "doc" {
+					continue
+				}
+				if impl.At == nil || *impl.At == "" {
+					continue
+				}
+				pathPart := *impl.At
+				if idx := strings.IndexByte(pathPart, ':'); idx >= 0 {
+					pathPart = pathPart[:idx]
+				}
+				if idx := strings.IndexByte(pathPart, '#'); idx >= 0 {
+					pathPart = pathPart[:idx]
+				}
+				abs := pathPart
+				if !filepath.IsAbs(abs) {
+					abs = filepath.Join(repoRoot, pathPart)
+				}
+				if _, err := os.Stat(abs); err == nil {
+					continue
+				}
+				id := sc.Name
+				if sc.ID != nil {
+					id = *sc.ID
+				}
+				key := id + "|" + pathPart
+				if _, dup := seen[key]; dup {
+					continue
+				}
+				seen[key] = struct{}{}
+				out = append(out, ImplIssue{
+					SpecID: id,
+					Path:   pathPart,
+					Reason: "file not found",
+				})
 			}
-			pathPart := *sc.ImplementedAt
-			if idx := strings.IndexByte(pathPart, ':'); idx >= 0 {
-				pathPart = pathPart[:idx]
-			}
-			if idx := strings.IndexByte(pathPart, '#'); idx >= 0 {
-				pathPart = pathPart[:idx]
-			}
-			abs := pathPart
-			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(repoRoot, pathPart)
-			}
-			if _, err := os.Stat(abs); err == nil {
-				continue
-			}
-			id := sc.Name
-			if sc.ID != nil {
-				id = *sc.ID
-			}
-			key := id + "|" + pathPart
-			if _, dup := seen[key]; dup {
-				continue
-			}
-			seen[key] = struct{}{}
-			out = append(out, ImplIssue{
-				SpecID: id,
-				Path:   pathPart,
-				Reason: "file not found",
-			})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].SpecID < out[j].SpecID })

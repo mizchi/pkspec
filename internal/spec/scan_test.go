@@ -184,7 +184,7 @@ func TestLintWithSourcesFlagsDeadRef(t *testing.T) {
 		{SpecID: liveID, Path: "cmd/pkspec/main.go", Line: 10},
 		{SpecID: "runner.ghost", Path: "cmd/pkspec/main.go", Line: 20},
 	}
-	issues := LintWithSources(plans, refs)
+	issues := Lint(plans, LintOptions{Sources: refs})
 	found := false
 	for _, iss := range issues {
 		if iss.Rule == "lint.dead-source-specRef" {
@@ -226,7 +226,7 @@ func TestGraphIncludesSourceNodes(t *testing.T) {
 		{SpecID: id, Path: "cmd/pkspec/main.go", Line: 5},
 		{SpecID: id, Path: "cmd/pkspec/main.go", Line: 12},
 	}
-	dot := GraphWithSources(plans, "/repo", refs)
+	dot := Graph(plans, "/repo", GraphOptions{Sources: refs})
 	if !strings.Contains(dot, `"src:cmd/pkspec/main.go"`) {
 		t.Errorf("graph missing source node, got:\n%s", dot)
 	}
