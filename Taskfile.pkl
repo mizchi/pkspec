@@ -1,6 +1,6 @@
 amends "package://pkg.pkl-lang.org/github.com/mizchi/pkfire/pkfire@0.9.0#/Taskfile.pkl"
 
-local releaseVersion = "0.1.13"
+local releaseVersion = "0.2.0"
 
 local goSources: Listing<String> = new {
   "*.go"
