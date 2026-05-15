@@ -20,7 +20,7 @@ func TestImplementedByCodeWithAt(t *testing.T) {
 	want := `  new {
     id = "x"
     implementations {
-      new Implementation { kind = "code"; at = "cmd/pkspec/main.go:cmdRun" }
+      new CodeImpl { at = "cmd/pkspec/main.go:cmdRun" }
     }
   }
 `
@@ -143,7 +143,7 @@ func TestIdempotent(t *testing.T) {
 	in := `  new {
     id = "x"
     implementations {
-      new Implementation { kind = "code"; at = "a.go:f" }
+      new CodeImpl { at = "a.go:f" }
     }
     audienceNotes { ["pm"] = "hi" }
     progressMethod = "scenario-count"

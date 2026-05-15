@@ -6,10 +6,13 @@
 // Migration rules (v0.1.x → v0.2.0):
 //
 //  1. `implementedBy = "X"` (+ optional sibling `implementedAt = Y`)
-//     folds into a single `implementations` Listing entry:
+//     folds into a single `implementations` Listing entry, using
+//     the typed subclass for X (TestImpl / CodeImpl / DocImpl /
+//     TaskImpl). The flat `new Implementation { ... }` shape is
+//     no longer accepted because the base class became abstract:
 //
 //        implementations {
-//          new Implementation { kind = "X"; at = Y }
+//          new CodeImpl { at = Y }   // for X = "code"
 //        }
 //
 //     `implementedBy = "test"` with no `implementedAt` becomes an
@@ -175,13 +178,13 @@ func MigrateV01ToV02(source []byte, path string) ([]byte, []Note, error) {
 					Message: fmt.Sprintf("implementedBy=%q has no sibling implementedAt; emitting implementations entry without `at`.", kind),
 				})
 				fmt.Fprintf(&out, "%simplementations {\n", indent)
-				fmt.Fprintf(&out, "%s  new Implementation { kind = %q }\n", indent, kind)
+				fmt.Fprintf(&out, "%s  new %s {}\n", indent, implSubclass(kind))
 				fmt.Fprintf(&out, "%s}\n", indent)
 				i += advance
 				continue
 			}
 			fmt.Fprintf(&out, "%simplementations {\n", indent)
-			fmt.Fprintf(&out, "%s  new Implementation { kind = %q; at = %s }\n", indent, kind, at)
+			fmt.Fprintf(&out, "%s  new %s { at = %s }\n", indent, implSubclass(kind), at)
 			fmt.Fprintf(&out, "%s}\n", indent)
 			i += advance
 			continue
@@ -287,4 +290,25 @@ func splitKeepEOL(b []byte) []string {
 
 func stripEOL(s string) string {
 	return strings.TrimRight(s, "\r\n")
+}
+
+// implSubclass maps an `implementedBy` kind to the typed
+// `Implementation` subclass it should be rewritten as. The kinds
+// come from the v0.1.x enum (`"test" | "code" | "doc"`); v0.2.x
+// adds `"task"` for pkfire integration. An unknown kind falls back
+// to the generic name — pkl evaluation will then reject it, which
+// is the right failure mode (silent abandonment would be worse).
+func implSubclass(kind string) string {
+	switch kind {
+	case "test":
+		return "TestImpl"
+	case "code":
+		return "CodeImpl"
+	case "doc":
+		return "DocImpl"
+	case "task":
+		return "TaskImpl"
+	default:
+		return "Implementation"
+	}
 }
