@@ -10,6 +10,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/apple/pkl-go/pkl"
 )
@@ -403,7 +405,7 @@ func Load(ctx context.Context, path string) (*Plan, error) {
 	src := pkl.FileSource(path)
 	var plan *Plan
 	if err := ev.EvaluateOutputValue(ctx, src, &plan); err != nil {
-		return nil, fmt.Errorf("evaluate %s: %w", path, err)
+		return nil, annotatePklError(err, path)
 	}
 	if plan == nil {
 		return nil, errors.New("Test module returned no value")
@@ -413,9 +415,86 @@ func Load(ctx context.Context, path string) (*Plan, error) {
 	}
 	canonical, err := ev.EvaluateOutputBytes(ctx, src)
 	if err != nil {
-		return nil, fmt.Errorf("canonicalize %s: %w", path, err)
+		return nil, annotatePklError(err, path)
 	}
 	plan.Canonical = canonical
 	plan.SourcePath = path
 	return plan, nil
+}
+
+// userSideAtRE matches one of the `at <Module>#<path> (file://...)`
+// lines in a pkl-go diagnostic. We pick the entry whose file path
+// matches the user-side source — pkl-go emits several "at" frames,
+// one per evaluation hop, and the one in the user's own file is the
+// only one a downstream reader can act on. The module portion uses
+// a lazy match so the first `#` (module → field separator) wins over
+// the inner `#` that Pkl's Listing index syntax injects (e.g.
+// `tests[#1].name`).
+var userSideAtRE = regexp.MustCompile(`(?m)^at \S+?#([^ ]+) \(file://([^)]+)\)$`)
+
+// pklErrorSummaryRE matches the cause line that pkl-go emits as the
+// first content after the `–– Pkl Error ––` banner. We look for one
+// of the well-known Pkl diagnostic prefixes ("Type constraint ...",
+// "Cannot find ...", "Cannot resolve ...", "Expected ...", or a bare
+// quoted token followed by `violated`) and capture the whole line.
+var pklErrorSummaryRE = regexp.MustCompile(`(?m)^((?:Type constraint|Cannot find|Cannot resolve|Expected|throw\(|Constraint).*)$`)
+
+// annotatePklError wraps a pkl-go diagnostic with a one-line
+// "where in the user module" header. The full diagnostic stays in
+// the wrapped error so detail-hunting still works; the header
+// short-circuits the common case where the user just wants to know
+// which scenario / test / field they need to fix (T3-5).
+func annotatePklError(err error, srcPath string) error {
+	msg := err.Error()
+	if !strings.Contains(msg, "Pkl Error") {
+		// Not a typed-decode error — surface as-is with the path.
+		return fmt.Errorf("evaluate %s: %w", srcPath, err)
+	}
+	field := extractUserSideField(msg, srcPath)
+	if field == "" {
+		return fmt.Errorf("evaluate %s: %w", srcPath, err)
+	}
+	summary := ""
+	if m := pklErrorSummaryRE.FindStringSubmatch(msg); len(m) >= 2 {
+		summary = strings.TrimSpace(m[1])
+	}
+	value := strings.TrimSpace(firstMatchAfter(msg, `(?m)^Value:\s*(.*)$`))
+	header := fmt.Sprintf("evaluate %s: %s (at %s)", srcPath, shortenDiag(summary), field)
+	if value != "" {
+		header += " value: " + value
+	}
+	return fmt.Errorf("%s\n%w", header, err)
+}
+
+func extractUserSideField(msg, srcPath string) string {
+	matches := userSideAtRE.FindAllStringSubmatch(msg, -1)
+	for _, m := range matches {
+		if len(m) < 3 {
+			continue
+		}
+		// pkl-go emits the user's file path under several forms (with
+		// or without a /private/ prefix on macOS). Match by suffix so
+		// the comparison is host-portable.
+		if strings.HasSuffix(m[2], srcPath) {
+			return m[1]
+		}
+	}
+	return ""
+}
+
+func firstMatchAfter(msg, pattern string) string {
+	re := regexp.MustCompile(pattern)
+	if m := re.FindStringSubmatch(msg); len(m) >= 2 {
+		return m[1]
+	}
+	return ""
+}
+
+func shortenDiag(s string) string {
+	const max = 120
+	s = strings.TrimSuffix(s, ".")
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-3] + "..."
 }
