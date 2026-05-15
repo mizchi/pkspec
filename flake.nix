@@ -11,7 +11,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        version = "0.1.12";
+        version = "0.1.13";
         go_1_26_3 = pkgs.go_1_26.overrideAttrs (_old: {
           version = "1.26.3";
           src = pkgs.fetchurl {
