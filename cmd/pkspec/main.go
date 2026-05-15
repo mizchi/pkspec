@@ -287,6 +287,9 @@ func usageSpecMode(w io.Writer, mode string) {
 		fmt.Fprint(w, "  --strict               also verify implementedAt file paths\n")
 	case "lint":
 		fmt.Fprint(w, "  --lint-disable IDS     comma-separated lint rule ids to suppress\n")
+		fmt.Fprint(w, "  --scan PATH            scan PATH (file or directory) for `pkspec:spec=<id>` markers (repeatable)\n")
+	case "graph":
+		fmt.Fprint(w, "  --scan PATH            scan PATH (file or directory) for `pkspec:spec=<id>` markers and draw source backlinks (repeatable)\n")
 	case "spec":
 		fmt.Fprint(w, "  --output PATH          write Markdown SPEC to PATH\n")
 		fmt.Fprint(w, "  --tag TAG              include tests whose tags contain TAG\n")
@@ -575,6 +578,8 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 	template := fs.String("template", "", "instead of rendering, print a Pkl skeleton for one of: scenario, goal, module")
 	var tags multiString
 	fs.Var(&tags, "tag", "only include tests whose `tags` Listing contains this exact value (repeatable; OR)")
+	var scan multiString
+	fs.Var(&scan, "scan", "scan this path (file or directory) for `pkspec:spec=<id>` markers in source files. Repeatable. Used by lint mode (adds `lint.dead-source-specRef`) and graph mode (adds source backlinks)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -650,8 +655,23 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		plans = spec.FilterPlansForSpec(plans, *goalFilter, *severityFilter)
 	}
 
+	// `--scan` is only meaningful for the two surfaces that consume it.
+	// Reject combinations that would silently ignore the scan instead
+	// of surprising the user with a quiet no-op.
+	if len(scan) > 0 && !*lint && !*graph {
+		return fmt.Errorf("--scan is only supported by lint and graph modes")
+	}
+	var sourceRefs []spec.SourceRef
+	if len(scan) > 0 {
+		refs, err := spec.ScanSources([]string(scan))
+		if err != nil {
+			return err
+		}
+		sourceRefs = refs
+	}
+
 	if *lint {
-		issues := spec.Lint(plans)
+		issues := spec.LintWithSources(plans, sourceRefs)
 		if *lintDisable != "" {
 			disabled := map[string]struct{}{}
 			for _, r := range strings.Split(*lintDisable, ",") {
@@ -692,7 +712,7 @@ func cmdSpec(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if *graph {
-		_, err := io.WriteString(stdout, spec.Graph(plans, rootDir))
+		_, err := io.WriteString(stdout, spec.GraphWithSources(plans, rootDir, sourceRefs))
 		return err
 	}
 	if *decisions {

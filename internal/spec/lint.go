@@ -52,6 +52,15 @@ type LintIssue struct {
 // Heuristics that need user context ("is this description
 // well-written?") belong outside the runner.
 func Lint(plans []*config.Plan) []LintIssue {
+	return LintWithSources(plans, nil)
+}
+
+// LintWithSources is Lint plus the in-source `pkspec:spec=<id>`
+// reference check. When `sources` is non-nil and any of them point at
+// a Scenario.id that is not declared in `plans`, the rule
+// `lint.dead-source-specRef` fires at error level. Callers that have
+// no source scan to feed in can keep using `Lint(plans)`.
+func LintWithSources(plans []*config.Plan, sources []SourceRef) []LintIssue {
 	var out []LintIssue
 
 	scenarioIDs := map[string]*config.Scenario{}
@@ -316,6 +325,32 @@ func Lint(plans []*config.Plan) []LintIssue {
 					})
 				}
 			}
+		}
+	}
+
+	// In-source references via the `pkspec:spec=<id>` marker. Build
+	// the union of declared Scenario.id values across all plans, then
+	// flag any source-grep hit that does not resolve. Subject is the
+	// `path:line` of the first occurrence so a code reviewer can jump
+	// straight to the offending line.
+	if len(sources) > 0 && len(scenarioIDs) > 0 {
+		grouped := SourceRefsByID(sources)
+		ids := make([]string, 0, len(grouped))
+		for id := range grouped {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			if _, ok := scenarioIDs[id]; ok {
+				continue
+			}
+			ref := grouped[id][0]
+			out = append(out, LintIssue{
+				Rule: "lint.dead-source-specRef", Level: LintError,
+				Subject: fmt.Sprintf("%s:%d", ref.Path, ref.Line),
+				Message: fmt.Sprintf("pkspec:spec=%q has no matching Scenario.id (%d occurrence(s) across the scan)", id, len(grouped[id])),
+				Fix:     "fix the typo in the source marker, declare the Scenario, or remove the marker if the spec was retired",
+			})
 		}
 	}
 

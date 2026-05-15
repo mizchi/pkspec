@@ -1106,6 +1106,16 @@ func FormatCoverage(rep CoverageReport) string {
 // / code / doc artefacts to the spec id they verify. Node colour
 // encodes severity; deprecated nodes use a dashed border.
 func Graph(plans []*config.Plan, root string) string {
+	return GraphWithSources(plans, root, nil)
+}
+
+// GraphWithSources extends Graph with in-source backlinks discovered
+// via the `pkspec:spec=<id>` marker (see ScanSources). Each unique
+// source file becomes one node; one edge per (file, spec id) pair
+// pulls into the matching Scenario node. The label on the edge shows
+// the occurrence count so a reviewer can see "this spec is named in
+// 7 places in adapter.go" at a glance.
+func GraphWithSources(plans []*config.Plan, root string, sources []SourceRef) string {
 	var b strings.Builder
 	b.WriteString("digraph specs {\n")
 	b.WriteString("  rankdir=LR;\n")
@@ -1133,6 +1143,7 @@ func Graph(plans []*config.Plan, root string) string {
 
 	impls := ImplementationIndex(plans)
 	writeImplementationGraphNodes(&b, impls, root)
+	writeSourceGraphNodes(&b, sources, root)
 	b.WriteString("\n")
 
 	for _, sc := range scenarios {
@@ -1149,9 +1160,69 @@ func Graph(plans []*config.Plan, root string) string {
 		}
 	}
 	writeImplementationGraphEdges(&b, impls)
+	writeSourceGraphEdges(&b, sources)
 
 	b.WriteString("}\n")
 	return b.String()
+}
+
+// writeSourceGraphNodes emits one node per unique source file that
+// carries a `pkspec:spec=<id>` marker, using a distinct fill colour so
+// they are visually separable from impl: nodes.
+func writeSourceGraphNodes(b *strings.Builder, sources []SourceRef, root string) {
+	if len(sources) == 0 {
+		return
+	}
+	files := map[string]int{}
+	for _, r := range sources {
+		files[r.Path]++
+	}
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		fmt.Fprintf(b, "  %q [label=%q, shape=note, color=darkgreen, style=filled, fillcolor=%q];\n",
+			"src:"+p,
+			fmt.Sprintf("source\n%s\n(%d ref)", displayPath(p, root), files[p]),
+			"#eef9ee")
+	}
+}
+
+// writeSourceGraphEdges emits one edge per (file, spec id) pair. The
+// edge label carries the occurrence count when the file references
+// the same id more than once.
+func writeSourceGraphEdges(b *strings.Builder, sources []SourceRef) {
+	if len(sources) == 0 {
+		return
+	}
+	type pair struct {
+		path string
+		id   string
+	}
+	counts := map[pair]int{}
+	for _, r := range sources {
+		counts[pair{r.Path, r.SpecID}]++
+	}
+	keys := make([]pair, 0, len(counts))
+	for k := range counts {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].path != keys[j].path {
+			return keys[i].path < keys[j].path
+		}
+		return keys[i].id < keys[j].id
+	})
+	for _, k := range keys {
+		label := "references"
+		if n := counts[k]; n > 1 {
+			label = fmt.Sprintf("references × %d", n)
+		}
+		fmt.Fprintf(b, "  %q -> %q [color=darkgreen, label=%q];\n",
+			"src:"+k.path, k.id, label)
+	}
 }
 
 func graphScenarios(plans []*config.Plan) []*config.Scenario {

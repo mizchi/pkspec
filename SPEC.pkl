@@ -265,6 +265,41 @@ scenarios {
     implementedAt = ".github/dependabot.yml"
   }
   new {
+    id = "tooling.source-scan"
+    name = "scan_extracts_pkspec_spec_markers"
+    description = "`pkspec lint --scan PATH` and `pkspec graph --scan PATH` walk every file (or every supported-extension file inside a directory) for the marker `pkspec:spec=<id>` and yield SourceRef{specId, path, line} for downstream rules. node_modules / vendor / dist / build / .git are pruned. The id char class matches Scenario.id and cannot end with `.` so markers embedded in prose capture cleanly."
+    tags { "spec"; "tooling"; "lint" }
+    severity = "minor"
+    reviewStatus = "review"
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/scan.go:ScanSources"
+  }
+  new {
+    id = "tooling.dead-source-ref-lint"
+    name = "lint_dead_source_specref_is_error"
+    description = "When `pkspec lint --scan` finds a `pkspec:spec=<id>` marker whose id is not declared as any Scenario.id across the loaded plans, `lint.dead-source-specRef` fires at error level. Subject is `path:line` of the first occurrence; the message includes the occurrence count when the id is referenced from multiple lines."
+    tags { "spec"; "tooling"; "lint" }
+    severity = "major"
+    reviewStatus = "review"
+    dependsOn { "tooling.source-scan" }
+    contributes { "goal.spec-driven"; "goal.ci-trustworthy" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/lint.go:LintWithSources"
+  }
+  new {
+    id = "spec.graph-source-backlinks"
+    name = "graph_includes_source_marker_backlinks"
+    description = "`pkspec graph --scan PATH` emits a green-filled `src:<path>` node per source file carrying a `pkspec:spec=<id>` marker, plus one edge per (file, id) pair to the matching Scenario node. The edge label carries the occurrence count when one file references the same id multiple times."
+    tags { "spec"; "tooling" }
+    severity = "minor"
+    reviewStatus = "review"
+    dependsOn { "tooling.source-scan"; "spec.graph-implementation-links" }
+    contributes { "goal.spec-driven" }
+    implementedBy = "code"
+    implementedAt = "internal/spec/spec.go:GraphWithSources"
+  }
+  new {
     id = "tooling.domain-lint"
     name = "lint_unknown_domain_prefix_is_opt_in"
     description = "When a Spec.pkl module declares the optional module-level `domains` allow-list, `pkspec lint` reports any Scenario.id whose first dot-segment is not in the list as `lint.unknown-domain-prefix` at info level. Modules that leave `domains` empty (e.g. `examples/*`) get no new lint output, so the rule is opt-in."
