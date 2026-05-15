@@ -8,11 +8,11 @@ inputs:
   version:
     description: |
       pkspec version to install. Accepts `local`, a release tag such as
-      `v0.1.8`, a bare semver `0.1.8`, the floating major `v0`, or `latest`.
+      `v0.1.9`, a bare semver `0.1.9`, the floating major `v0`, or `latest`.
       `local` installs from this action checkout and is intended for this
       repository's own CI.
       When empty, the action reads its own ref (so pinning via
-      `mizchi/pkspec@v0.1.8` or `@v0` just works) and falls back to the
+      `mizchi/pkspec@v0.1.9` or `@v0` just works) and falls back to the
       latest published release.
     required: false
     default: ""
