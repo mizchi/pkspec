@@ -311,9 +311,9 @@ Beyond the per-test plumbing:
 ### Nix (recommended)
 
 ```sh
-nix run github:mizchi/pkspec/v0.1.10 -- init --dir pkspec
-nix run github:mizchi/pkspec/v0.1.10 -- exec -f path/to/Test.pkl
-nix profile install github:mizchi/pkspec/v0.1.10
+nix run github:mizchi/pkspec/v0.1.11 -- init --dir pkspec
+nix run github:mizchi/pkspec/v0.1.11 -- exec -f path/to/Test.pkl
+nix profile install github:mizchi/pkspec/v0.1.11
 ```
 
 The flake builds `pkspec` plus the built-in adapter shim binaries and
@@ -328,7 +328,7 @@ In a home-manager flake:
 
 ```nix
 {
-  inputs.pkspec.url = "github:mizchi/pkspec/v0.1.10";
+  inputs.pkspec.url = "github:mizchi/pkspec/v0.1.11";
   inputs.pkspec.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = { self, nixpkgs, home-manager, pkspec, ... }:
@@ -357,7 +357,7 @@ you only want the wrapped `pkspec` binary and do not want a standalone
 ### Go
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/...@v0.1.10
+go install github.com/mizchi/pkspec/cmd/...@v0.1.11
 pkspec init --dir pkspec
 ```
 
@@ -388,7 +388,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: mizchi/pkspec@v0.1.10
+      - uses: mizchi/pkspec@v0.1.11
         with:
           init-schema-dir: pkspec
       - run: pkspec exec -f Test.pkl
@@ -403,7 +403,7 @@ Inputs:
 
 | Input | Default | Notes |
 | --- | --- | --- |
-| `version` | the action ref, falling back to latest release | Accepts `local`, `v0.1.10`, `0.1.10`, `v0`, or `latest`. |
+| `version` | the action ref, falling back to latest release | Accepts `local`, `v0.1.11`, `0.1.11`, `v0`, or `latest`. |
 | `pkl-version` | `0.31.1` | Set to `none` to skip Pkl install. |
 | `setup-go` | `true` | Uses this action's `go.mod` to install the Go toolchain needed for `go install`. |
 | `install-dir` | `${{ runner.temp }}/pkspec-bin` | Added to `PATH`. |
@@ -482,7 +482,7 @@ pkf run release-check
 push a release tag after `release-check` passes:
 
 ```sh
-pkf run tag --version=0.1.10
+pkf run tag --version=0.1.11
 ```
 
 Pushing `v*.*.*` tags triggers the Release workflow. It validates the
