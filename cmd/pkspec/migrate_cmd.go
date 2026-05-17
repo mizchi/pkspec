@@ -126,7 +126,7 @@ recursively and any .pkl file under them is migrated. The transform
 is text-only — Pkl semantics are never invoked — so this command
 works on sources that no longer parse under the current schema.
 
-Migration rules applied (v0.1.x → v0.2.x):
+Migration rules applied (v0.1.x → v0.2.x → v0.3.0):
 
   1. implementedBy/implementedAt pair  → implementations { new <Kind>Impl { ... } }
                                        (TestImpl / CodeImpl / DocImpl / TaskImpl —
@@ -136,6 +136,18 @@ Migration rules applied (v0.1.x → v0.2.x):
                                        → audienceNotes { ["<audience>"] = ... }
   3. progress { method = "X" } block   → progressMethod = "X"
   3a. progress = new {}                → removed (default)
+  4. inlineStdout / inlineStderr / inlineHttpBody / inlineConsoleLog
+                                       → new InlineSnapshot { state = "match"; value = "..." }
+                                         (""-sentinel → new InlineSnapshot {} = capture)
+  5. new Implementation { kind = "X"; at = "Y" }
+                                       → new XImpl { at = "Y" }
+                                         (bridge for 0.2.0-pre-abstract shape)
+  6. Sibling expect* fields            → shellExpectations { expectExitCode; ... }
+                                         (consolidated per Test / Step block)
+  7. Step / Test body discriminator    → body = new ShellBody / HttpBody /
+                                         PlaywrightBody / PlaywrightTestBody / SqlBody
+                                         / CmdTest / SequentialTest / ParallelTest { ... }
+                                         (v0.3.0 abstract hierarchy wrap)
 
 The transform is idempotent: running it on already-migrated source
 is a no-op.
