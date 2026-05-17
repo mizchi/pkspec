@@ -131,7 +131,7 @@ goals {
 // prelude {
 //   new SpecStep {
 //     description = "shared setup that every scenario assumes"
-//     impl = new Step { cmd = "true" }
+//     impl = new Step { body = new ShellBody { cmd = "true" } }
 //   }
 // }
 

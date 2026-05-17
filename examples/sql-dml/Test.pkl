@@ -9,66 +9,81 @@ tests {
     steps {
       new {
         name = "create"
-        sql = new SqlSpec {
-          dsn = "sqlite:work.db"
-          query = "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, role TEXT)"
+        body = new SqlBody {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query = "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, role TEXT)"
+          }
         }
       }
       new {
         name = "insert_2"
-        sql = new SqlSpec {
-          dsn = "sqlite:work.db"
-          query = "INSERT INTO users (email, role) VALUES ('a@x.test', 'admin'), ('b@x.test', 'user')"
-          expectRowCount = 2
+        body = new SqlBody {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query =
+              "INSERT INTO users (email, role) VALUES ('a@x.test', 'admin'), ('b@x.test', 'user')"
+            expectRowCount = 2
+          }
         }
       }
       new {
         name = "verify_initial"
-        sql = new SqlSpec {
-          dsn = "sqlite:work.db"
-          query = "SELECT email, role FROM users ORDER BY id"
-          expectRowCount = 2
-          expectRowsJsonPath {
-            ["0.email"] = "a@x.test"
-            ["1.role"] = "user"
+        body = new SqlBody {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query = "SELECT email, role FROM users ORDER BY id"
+            expectRowCount = 2
+            expectRowsJsonPath {
+              ["0.email"] = "a@x.test"
+              ["1.role"] = "user"
+            }
           }
         }
       }
       new {
         name = "update_1"
-        sql = new SqlSpec {
-          dsn = "sqlite:work.db"
-          query = "UPDATE users SET role = 'superadmin' WHERE email = 'a@x.test'"
-          expectRowCount = 1
+        body = new SqlBody {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query = "UPDATE users SET role = 'superadmin' WHERE email = 'a@x.test'"
+            expectRowCount = 1
+          }
         }
       }
       new {
         name = "verify_updated"
-        sql = new SqlSpec {
-          dsn = "sqlite:work.db"
-          query = "SELECT role FROM users WHERE email = 'a@x.test'"
-          expectRowsJsonPath { ["0.role"] = "superadmin" }
+        body = new SqlBody {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query = "SELECT role FROM users WHERE email = 'a@x.test'"
+            expectRowsJsonPath { ["0.role"] = "superadmin" }
+          }
         }
       }
       new {
         name = "delete_all"
-        sql = new SqlSpec {
-          dsn = "sqlite:work.db"
-          query = "DELETE FROM users"
-          expectRowCount = 2
+        body = new SqlBody {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query = "DELETE FROM users"
+            expectRowCount = 2
+          }
         }
       }
       new {
         name = "verify_empty"
-        sql = new SqlSpec {
-          dsn = "sqlite:work.db"
-          query = "SELECT COUNT(*) AS n FROM users"
-          expectRowsJsonPath { ["0.n"] = 0 }
+        body = new SqlBody {
+          sql = new SqlSpec {
+            dsn = "sqlite:work.db"
+            query = "SELECT COUNT(*) AS n FROM users"
+            expectRowsJsonPath { ["0.n"] = 0 }
+          }
         }
       }
       new {
         name = "cleanup"
-        cmd = "rm -f work.db"
+        body = new ShellBody { cmd = "rm -f work.db" }
       }
     }
   }

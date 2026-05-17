@@ -400,31 +400,11 @@ domains: Listing<String> = new {}
 
 local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.Step = new {
   name = "\(prefix) \(s.description)"
-  // body slots — every kind the runner knows about
-  cmd = s.impl.cmd
-  http = s.impl.http
-  playwright = s.impl.playwright
-  playwrightTest = s.impl.playwrightTest
-  sql = s.impl.sql
-  // shell-specific
-  shell = s.impl.shell
-  stdin = s.impl.stdin
-  shellExpectations = s.impl.shellExpectations
-  inlineStdout = s.impl.inlineStdout
-  captureStdout = s.impl.captureStdout
-  captureExitCode = s.impl.captureExitCode
-  // http-specific
-  expectStatus = s.impl.expectStatus
-  expectStatusBetween = s.impl.expectStatusBetween
-  expectBodyEquals = s.impl.expectBodyEquals
-  expectBodyContains = s.impl.expectBodyContains
-  expectHeaderEquals = s.impl.expectHeaderEquals
-  expectBodyJsonPath = s.impl.expectBodyJsonPath
-  captureBody = s.impl.captureBody
-  captureStatus = s.impl.captureStatus
-  captureBodyJsonPath = s.impl.captureBodyJsonPath
-  cassette = s.impl.cassette
-  // common
+  // Body is opaque — the chosen subclass (ShellBody / HttpBody / ...)
+  // carries every kind-specific assertion, inline snapshot, and
+  // capture along with it.
+  body = s.impl.body
+  // Cross-kind fields stay on the outer Step.
   env = s.impl.env
   workdir = s.impl.workdir
   timeoutSec = s.impl.timeoutSec

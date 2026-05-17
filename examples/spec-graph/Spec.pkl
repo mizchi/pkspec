@@ -14,7 +14,8 @@ goals {
     name = "users can authenticate securely"
     priority = 90
     reviewStatus = "approved"
-    description = "End users can sign in with credentials and have the session protected against common attacks."
+    description =
+      "End users can sign in with credentials and have the session protected against common attacks."
     rationale = "Without secure auth, every downstream feature is unusable for any real workload."
   }
   new Goal {
@@ -37,7 +38,7 @@ goals {
 prelude {
   new SpecStep {
     description = "the database is seeded with a known user"
-    impl = new Step { cmd = "true" }
+    impl = new Step { body = new ShellBody { cmd = "true" } }
   }
 }
 
@@ -55,7 +56,8 @@ scenarios {
         date = "2026-03-01"
         author = "mizchi"
         summary = "lock the spec to require 200 + Set-Cookie"
-        rationale = "earlier draft accepted bearer-token responses; security review chose cookies for SSR compatibility"
+        rationale =
+          "earlier draft accepted bearer-token responses; security review chose cookies for SSR compatibility"
       }
     }
   }
@@ -128,7 +130,8 @@ scenarios {
         date = "2026-03-01"
         author = "mizchi"
         summary = "retired in favour of cookie-based AUTH-001"
-        rationale = "JWT validation logic doubled the auth-middleware footprint; cookie path covers the same SSR + CSRF surface"
+        rationale =
+          "JWT validation logic doubled the auth-middleware footprint; cookie path covers the same SSR + CSRF surface"
       }
     }
   }

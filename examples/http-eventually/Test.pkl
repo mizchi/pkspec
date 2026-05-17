@@ -10,19 +10,22 @@ tests {
       new {
         name = "server"
         cmd = "python3 server.py"
-        readyProbe = "curl -fs -o /dev/null -w '%{http_code}' http://127.0.0.1:19012/ | grep -E '503|200' > /dev/null"
+        readyProbe =
+          "curl -fs -o /dev/null -w '%{http_code}' http://127.0.0.1:19012/ | grep -E '503|200' > /dev/null"
         readyTimeoutSec = 5
       }
     }
     steps {
       new {
         name = "wait"
-        http = new HttpRequest {
-          method = "GET"
-          url = "http://127.0.0.1:19012/health"
+        body = new HttpBody {
+          http = new HttpRequest {
+            method = "GET"
+            url = "http://127.0.0.1:19012/health"
+          }
+          expectStatus = 200
+          expectBodyJsonPath { ["ready"] = true }
         }
-        expectStatus = 200
-        expectBodyJsonPath { ["ready"] = true }
         eventually = new Eventually {
           intervalMs = 200
           timeoutSec = 5

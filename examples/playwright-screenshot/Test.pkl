@@ -9,12 +9,14 @@ tests {
     steps {
       new {
         name = "render_and_shoot"
-        playwright = new PlaywrightSpec {
-          script = "scripts/render.mjs"
-          expectScreenshot = new ScreenshotSnapshot {
-            name = "fixed_label"
-            // 0.5% pixel-difference tolerance (absorbs font AA flicker).
-            thresholdPct = 0.5
+        body = new PlaywrightBody {
+          playwright = new PlaywrightSpec {
+            script = "scripts/render.mjs"
+            expectScreenshot = new ScreenshotSnapshot {
+              name = "fixed_label"
+              // 0.5% pixel-difference tolerance (absorbs font AA flicker).
+              thresholdPct = 0.5
+            }
           }
         }
         timeoutSec = 30

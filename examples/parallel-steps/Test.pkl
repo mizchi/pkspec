@@ -8,9 +8,9 @@ tests {
     tags { "unit" }
     specRef { "runner.steps.sequential"; "kind.shell" }
     steps {
-      new { name = "s1"; cmd = "sleep 0.2" }
-      new { name = "s2"; cmd = "sleep 0.2" }
-      new { name = "s3"; cmd = "sleep 0.2" }
+      new { name = "s1"; body = new ShellBody { cmd = "sleep 0.2" } }
+      new { name = "s2"; body = new ShellBody { cmd = "sleep 0.2" } }
+      new { name = "s3"; body = new ShellBody { cmd = "sleep 0.2" } }
     }
   }
   // Same 3 steps in parallel — should finish in ~200ms.
@@ -20,9 +20,9 @@ tests {
     tags { "unit" }
     specRef { "parallel.parallel-steps" }
     parallelSteps {
-      new { name = "p1"; cmd = "sleep 0.2" }
-      new { name = "p2"; cmd = "sleep 0.2" }
-      new { name = "p3"; cmd = "sleep 0.2" }
+      new { name = "p1"; body = new ShellBody { cmd = "sleep 0.2" } }
+      new { name = "p2"; body = new ShellBody { cmd = "sleep 0.2" } }
+      new { name = "p3"; body = new ShellBody { cmd = "sleep 0.2" } }
     }
   }
 }

@@ -18,12 +18,12 @@ goals {
     name = "sessions cannot be hijacked or replayed"
     priority = 90
     reviewStatus = "review"
-    description = "Authenticated sessions must survive expected attack vectors (fixation, replay across tabs, refresh-token theft) without expanding into stolen privileges."
+    description =
+      "Authenticated sessions must survive expected attack vectors (fixation, replay across tabs, refresh-token theft) without expanding into stolen privileges."
   }
 }
 
 scenarios {
-
   // Critical scenario carrying unanswered questions. While kept at
   // reviewStatus = "review", lint does NOT fail — the project-wide
   // gate stays green. Flipping this to "approved" before answering
@@ -31,7 +31,8 @@ scenarios {
   new {
     id = "auth.session-fixation"
     name = "session_id_rotates_on_login"
-    description = "After a successful login, the server issues a new opaque session id; the pre-login session id stops being accepted within one request round-trip."
+    description =
+      "After a successful login, the server issues a new opaque session id; the pre-login session id stops being accepted within one request round-trip."
     tags { "spec" }
     severity = "critical"
     reviewStatus = "review"
@@ -48,7 +49,8 @@ scenarios {
   new {
     id = "auth.refresh-token-rotation"
     name = "refresh_token_rotates_per_use"
-    description = "Each /refresh request issues a new refresh token and invalidates the previous one. Reusing an invalidated token revokes the family."
+    description =
+      "Each /refresh request issues a new refresh token and invalidates the previous one. Reusing an invalidated token revokes the family."
     tags { "spec" }
     severity = "major"
     reviewStatus = "review"
@@ -66,7 +68,8 @@ scenarios {
   new {
     id = "auth.session-id-is-opaque"
     name = "session_id_is_opaque_to_clients"
-    description = "Session ids returned by /login are opaque strings — no embedded user id, role, or timestamp that a client could parse. The format is documented as implementation-private."
+    description =
+      "Session ids returned by /login are opaque strings — no embedded user id, role, or timestamp that a client could parse. The format is documented as implementation-private."
     tags { "spec" }
     severity = "critical"
     reviewStatus = "approved"

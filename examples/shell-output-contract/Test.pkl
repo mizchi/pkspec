@@ -25,10 +25,12 @@ tests {
     steps {
       new {
         name = "graph_edge"
-        cmd = "printf '%s\n' 'spec_check --> check'"
-        shellExpectations {
-          expectStdoutContains { "spec_check --> check" }
-          expectStdoutMatches { #"(?m)^spec_check\s+-->\s+check$"# }
+        body = new ShellBody {
+          cmd = "printf '%s\n' 'spec_check --> check'"
+          shellExpectations {
+            expectStdoutContains { "spec_check --> check" }
+            expectStdoutMatches { #"(?m)^spec_check\s+-->\s+check$"# }
+          }
         }
       }
     }

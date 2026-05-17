@@ -9,17 +9,21 @@ tests {
     steps {
       new {
         name = "generate_id"
-        // Deterministic seed so the captured value is stable across
-        // runs; in a real fixture this might be `date +%s` (then
-        // downstream output should use expectStdoutMatches instead
-        // of an inline byte-exact assertion).
-        cmd = "echo evt-abc123"
-        captureStdout = "EVENT_ID"
+        body = new ShellBody {
+          // Deterministic seed so the captured value is stable across
+          // runs; in a real fixture this might be `date +%s` (then
+          // downstream output should use expectStdoutMatches instead
+          // of an inline byte-exact assertion).
+          cmd = "echo evt-abc123"
+          captureStdout = "EVENT_ID"
+        }
       }
       new {
         name = "use_id"
-        cmd = "echo processed $EVENT_ID"
-        inlineStdout = new InlineSnapshot {}
+        body = new ShellBody {
+          cmd = "echo processed $EVENT_ID"
+          inlineStdout = new InlineSnapshot {}
+        }
       }
     }
   }
