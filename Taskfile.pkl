@@ -1,6 +1,6 @@
 amends "package://pkg.pkl-lang.org/github.com/mizchi/pkfire/pkfire@0.9.0#/Taskfile.pkl"
 
-local releaseVersion = "0.2.1"
+local releaseVersion = "0.3.0"
 
 local goSources: Listing<String> = new {
   "*.go"
@@ -59,7 +59,8 @@ local test: Task = new {
 local build: Task = new {
   name = "build"
   description = "Build the pkspec binaries"
-  cmd = """
+  cmd =
+    """
     set -euo pipefail
     mkdir -p ./bin
     go build -trimpath -ldflags "-s -w -X main.version=\(releaseVersion)" -o ./bin/pkspec ./cmd/pkspec
@@ -86,7 +87,8 @@ local build: Task = new {
 local smoke: Task = new {
   name = "smoke"
   description = "Smoke-test the locally built binary"
-  cmd = """
+  cmd =
+    """
     set -euo pipefail
     ./bin/pkspec version
     ./bin/pkspec help >/dev/null
@@ -99,7 +101,8 @@ local smoke: Task = new {
 local initSmoke: Task = new {
   name = "init-smoke"
   description = "Verify generated schemas can run a minimal test"
-  cmd = #"""
+  cmd =
+    #"""
     set -euo pipefail
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
@@ -110,7 +113,7 @@ local initSmoke: Task = new {
     tests {
       new {
         name = "smoke"
-        cmd = "true"
+        body = new CmdTest { cmd = "true" }
       }
     }
     PKL
@@ -167,7 +170,8 @@ local releaseCheck: Task = new {
 local tag: Task = new {
   name = "tag"
   description = "Run release-check and push a v<version> tag; CI publishes the GitHub release"
-  cmd = """
+  cmd =
+    """
     set -euo pipefail
     git diff --exit-code
     git diff --cached --exit-code
