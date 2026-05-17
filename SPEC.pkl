@@ -191,6 +191,15 @@ milestones {
       "Toolchain, CI permissions, and trusted-input boundaries have explicit specs before the next patch release."
     goals { "goal.secure-release" }
   }
+  new Milestone {
+    id = "ms.typed-author-surface"
+    name = "0.3.0 typed author surface"
+    targetDate = "2026-05-17"
+    reviewStatus = "approved"
+    description =
+      "Step / Test body slots, shell expectations, inline-snapshot encoding, and Implementation pointers all move to typed Pkl classes — the runtime ABI stays flat so only the author surface breaks. Migrator Rules 4-7 carry v0.2.x sources through in one pass."
+    goals { "goal.lang-independent"; "goal.spec-driven"; "goal.differential" }
+  }
 }
 
 // ── Scenarios ───────────────────────────────────────────────────────
@@ -310,12 +319,12 @@ scenarios {
   }
   new {
     id = "tooling.migrate"
-    name = "migrate_command_text_transforms_v01_to_v02"
+    name = "migrate_command_text_transforms_v01_to_v03"
     description =
-      "`pkspec migrate [--dry-run|--check] <path>...` is a text-only Pkl-source rewriter from the v0.1.x schema (implementedBy/implementedAt, userDescription/pmNotes/operatorNotes/apiNotes, GoalProgress) to v0.2.0 (Implementations Listing, audienceNotes Mapping, progressMethod). The transform never invokes Pkl eval — it works on sources that no longer parse under the current schema. Multiple audience-notes in one block consolidate into a single `audienceNotes { ... }` block. Idempotent."
+      "`pkspec migrate [--dry-run|--check] <path>...` is a text-only Pkl-source rewriter that carries authored modules from v0.1.x through v0.3.0 in one pass. Pass-1 fires line-level rules: Rule 1 collapses `implementedBy` / `implementedAt` into typed `implementations { new XImpl { at = ... } }` entries; Rule 2 consolidates the four audience-note fields into `audienceNotes { [...] = ... }`; Rule 3 flattens `progress { method = X }` into `progressMethod = X`; Rule 4 rewrites `inlineStdout = \"\"` / `\"X\"` into `new InlineSnapshot { ... }`; Rule 5 bridges the brief 0.2.0-pre-abstract `new Implementation { kind = ...; at = ... }` shape to typed subclasses; Rule 6 consolidates sibling `expect*` lines into a `shellExpectations { ... }` block. Pass-2 (Rule 7) is a two-pass scope-aware walker: Step bodies are wrapped first (`body = new ShellBody / HttpBody / PlaywrightBody / PlaywrightTestBody / SqlBody`), then Test bodies (`body = new CmdTest / SequentialTest / ParallelTest`); multi-line nested classes ride along via brace tracking, triple-quoted `cmd` literals via a separate tracker, and dense one-liners via regex pre-pass. The transform never invokes Pkl eval, so it works on sources that no longer parse under the current schema. Idempotent across all rules — already-migrated source is a no-op."
     tags { "spec"; "tooling"; "migration" }
     severity = "major"
-    reviewStatus = "review"
+    reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
       new CodeImpl { at = "internal/migrate/migrate.go:MigrateV01ToV02" }
@@ -554,13 +563,76 @@ scenarios {
     id = "kind.pluggable"
     name = "kind_is_pluggable_via_pkl_class_plus_go_executor"
     description =
-      "Adding a new kind = a Pkl Spec class on Step + a `Step.kind` value + a Go function under internal/executor/. No core changes."
+      "Adding a new kind = a new concrete `StepBody` subclass in `pkl/Test.pkl` + a corresponding executor switch under `internal/executor/`. The renderer (`renderStep`) writes the matching tag into `RenderedStep.kind` via an `is`-check; the Go executor still dispatches on the flat `kind` string. No core schema changes."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.lang-independent" }
     implementations {
       new DocImpl { at = "docs/notes/runner-design.md" }
+    }
+  }
+  new {
+    id = "kind.abstract-step-body"
+    name = "step_body_is_an_abstract_class_hierarchy"
+    description =
+      "`Step.body: StepBody` (abstract) is authored as exactly one of the five concrete subclasses `ShellBody` / `HttpBody` / `PlaywrightBody` / `PlaywrightTestBody` / `SqlBody`. Each subclass owns its kind-specific assertions, snapshots, captures, and (for HTTP) cassette field, so an `expectStatus` on a shell step is a type error rather than a lint. The synthesized `Step.kind` field is gone — `renderStep` derives the discriminator from `is`-checks on the body subclass and writes it into `RenderedStep.kind` for Go-side dispatch. Cross-kind concerns (name / env / workdir / timeoutSec / eventually / expectAi / always / repeat) stay on `Step`. Runtime ABI is unchanged via the renderer's flatten cascade."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.lang-independent" }
+    implementations {
+      new CodeImpl { at = "pkl/Test.pkl" }
+    }
+    decisions {
+      new Decision {
+        date = "2026-05-17"
+        author = "mizchi"
+        summary = "abstract-hierarchy refactor lands in 0.3.0 alongside T2-3 / T3-2 / T3-3"
+        rationale =
+          "Doing the four typed-author-surface refactors as one schema break collapses downstream migration to a single `pkspec migrate` pass; staggering them across patch releases would force four migrations."
+      }
+    }
+  }
+  new {
+    id = "kind.abstract-test-body"
+    name = "test_body_is_an_abstract_class_hierarchy"
+    description =
+      "`Test.body: TestBody?` (abstract) is authored as one of `CmdTest` (top-level shell command + shellExpectations + inline / reference snapshots), `SequentialTest` (steps Listing), or `ParallelTest` (parallelSteps Listing). `body = null` is the pending / spec-only marker; the auto-pending rule (tag `\"spec\"` + null body) is unchanged. `Test.shell` stays on `Test` itself because it's a fallback default that nested Steps inherit, not body-specific. Runtime ABI: `renderTest` flattens the typed body back into the existing `RenderedTest.cmd / stdin / expect* / inlineStdout / steps / parallelSteps` shape so the Go executor and inline rewriter need no changes."
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    dependsOn { "kind.abstract-step-body" }
+    contributes { "goal.lang-independent" }
+    implementations {
+      new CodeImpl { at = "pkl/Test.pkl" }
+    }
+  }
+  new {
+    id = "kind.shell-expectations"
+    name = "shell_expectations_are_extracted_into_a_shared_class"
+    description =
+      "The nine shell-stream assertion fields (`expectExitCode`, `expectStdout`, `expectStderr`, `expect{Stdout,Stderr}Contains`, `expect{Stdout,Stderr}Matches`, `expect{Stdout,Stderr}JsonPath`) live on a single `ShellExpectations` class that both `ShellBody` and `CmdTest` embed as `shellExpectations: ShellExpectations = new {}`. Adding a new shell assertion changes one class instead of two. `renderStep` / `renderTest` flatten the embed back to the existing flat `RenderedStep` / `RenderedTest` fields so the Go executor sees the same shape it always saw."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    dependsOn { "kind.abstract-step-body"; "kind.abstract-test-body" }
+    contributes { "goal.lang-independent" }
+    implementations {
+      new CodeImpl { at = "pkl/Test.pkl" }
+    }
+  }
+  new {
+    id = "kind.inline-snapshot-class"
+    name = "inline_snapshot_replaces_the_string_sentinel"
+    description =
+      "`class InlineSnapshot { state: (\"capture\" | \"match\"); value: String? }` replaces the v0.2.x three-state `String?` sentinel where `null` meant skip, `\"\"` meant capture, and anything else meant match. Authors opt in with `new InlineSnapshot {}` (state defaults to `\"capture\"`); the rewriter flips it to `state = \"match\"; value = ...` on the first `--update-inline-snapshots` run. Applies to every scalar inline-snapshot field across the body subclasses (`ShellBody.inlineStdout`, `HttpBody.inlineHttpBody`, `PlaywrightBody.inlineConsoleLog`, `CmdTest.inlineStdout` / `inlineStderr`). Mapping-valued inline fields (`inlineJsonPath` / `inlineHeaders` / `inlineSqlRows`) keep the per-key string opt-in contract — the sentinel ambiguity that motivated this refactor doesn't apply there."
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "approved"
+    contributes { "goal.differential"; "goal.lang-independent" }
+    implementations {
+      new CodeImpl { at = "pkl/Test.pkl" }
     }
   }
 
@@ -998,7 +1070,7 @@ scenarios {
     id = "spec.implemented-by"
     name = "framework_internal_specs_carry_implementation_pointer"
     description =
-      "A `Scenario.implementations` entry of `new Implementation { kind = \"code\"; at = \"path:Symbol\" }` (or kind = \"doc\") lets a Scenario claim implementation without a Pkl Test. `pkspec check --strict` verifies the file part exists."
+      "A `Scenario.implementations` entry of `new CodeImpl { at = \"path:Symbol\" }` (or `new DocImpl { at = \"path#anchor\" }` / `new TaskImpl { at = \"Taskfile.pkl#task\" }` / `new TestImpl {}`) lets a Scenario claim implementation without a Pkl Test. The four typed subclasses are mutually exclusive at the schema level — `Implementation` itself is abstract since v0.3.0 so the previous `new Implementation { kind = ... }` flat shape no longer parses (migrator Rule 5 bridges old sources). `pkspec check --strict` verifies the file part exists; for `TaskImpl` it additionally cross-checks the task is declared via `pkf list --json` when `pkf` is on PATH."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -1364,13 +1436,13 @@ scenarios {
     id = "diff.inline-snapshot"
     name = "inline_snapshot_rewrite"
     description =
-      "inlineStdout / inlineStderr (Test + Step) and inlineHttpBody (Step on http kind) carry an in-source snapshot value. Mismatch on a regular run fails the step; `--update-inline-snapshots` rewrites the field in place with the captured value. The schema file itself is the snapshot artefact."
+      "Every scalar inline-snapshot field (`CmdTest.inlineStdout` / `inlineStderr`, `ShellBody.inlineStdout`, `HttpBody.inlineHttpBody`, `PlaywrightBody.inlineConsoleLog`) is typed `InlineSnapshot? = null`. Authoring opt-in is `new InlineSnapshot {}` (state defaults to `\"capture\"`); after the first `--update-inline-snapshots` run the rewriter flips it to `state = \"match\"; value = \"<captured>\"`. The schema file itself is the snapshot artefact. `null` (the schema default) means \"skip this assertion entirely\"; the three-state sentinel encoding the v0.2.x `String?` carried (null/skip, \"\"/capture, anything-else/match) is gone."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.differential" }
     implementations {
-      new CodeImpl { at = "internal/inline/rewriter.go:ReplaceField" }
+      new CodeImpl { at = "internal/inline/rewriter.go:ReplaceInlineSnapshotField" }
     }
   }
   new {
@@ -1433,7 +1505,7 @@ scenarios {
     id = "diff.inline-console-log"
     name = "inline_snapshot_of_playwright_console_stream"
     description =
-      "`Step.inlineConsoleLog: String?` captures the playwright page's full console output as a newline-joined string. Same single-string contract as `inlineStdout` and `inlineHttpBody`: opt in by setting any string, mismatch fails, `--update-inline-snapshots` rewrites. Multi-line bodies are emitted as Pkl triple-quoted literals when long. Only takes effect for kind = \"playwright\"; ignored on other kinds."
+      "`PlaywrightBody.inlineConsoleLog: InlineSnapshot?` captures the playwright page's full console output as a newline-joined string. Same `InlineSnapshot` opt-in contract as `inlineStdout` and `inlineHttpBody`: `new InlineSnapshot {}` to opt in, mismatch fails, `--update-inline-snapshots` flips `state` to `\"match\"` and populates `value`. Multi-line bodies are emitted as Pkl triple-quoted literals when long. The field lives on `PlaywrightBody` since v0.3.0 (was a `Step`-level field on the v0.2.x flat shape), so it's a type error to set it on any other body kind."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
