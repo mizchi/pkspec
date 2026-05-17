@@ -60,8 +60,10 @@ jobs:
           tests {
             new {
               name = "action_smoke"
-              cmd = "printf 'hello from action\n'"
-              inlineStdout = "hello from action\n"
+              body = new CmdTest {
+                cmd = "printf 'hello from action\n'"
+                inlineStdout = new InlineSnapshot { state = "match"; value = "hello from action\n" }
+              }
             }
           }
           EOF
