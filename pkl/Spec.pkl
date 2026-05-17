@@ -450,14 +450,22 @@ local function scenarioToTest(s: Scenario): base.Test = new {
       )
   // Order matters: Prelude (Background:) → Given → When → Then →
   // Cleanup. Prelude steps are tagged "Background" in the runner's
-  // report so the spec-side shared-setup is visible.
-  steps = new Listing<base.Step> {
-    ...tagSteps("Background", prelude, false)
-    ...tagSteps("Given", s.given, false)
-    ...tagSteps("When", s.`when`, false)
-    ...tagSteps("Then", s.then, false)
-    ...tagSteps("Cleanup", s.cleanup, true)
-  }
+  // report so the spec-side shared-setup is visible. Pending
+  // scenarios get `body = null` (the v0.3.0 schema treats null body
+  // as the pending / spec-only marker).
+  body =
+    if (s.pending && s.given.isEmpty && s.`when`.isEmpty && s.then.isEmpty && s.cleanup.isEmpty)
+      null
+    else
+      new base.SequentialTest {
+        steps = new Listing<base.Step> {
+          ...tagSteps("Background", prelude, false)
+          ...tagSteps("Given", s.given, false)
+          ...tagSteps("When", s.`when`, false)
+          ...tagSteps("Then", s.then, false)
+          ...tagSteps("Cleanup", s.cleanup, true)
+        }
+      }
 }
 
 local function renderDecision(d: Decision): base.RenderedDecision = new {

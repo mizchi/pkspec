@@ -5,54 +5,54 @@ import "Test.pkl" as Schema
 
 local tcp: Schema.Test = new {
   name = "tcp"
-  cmd = "curl -fsS http://localhost:8080/health"
-  shellExpectations {
-    expectStdout = "ok\n"
+  body = new Schema.CmdTest {
+    cmd = "curl -fsS http://localhost:8080/health"
+    shellExpectations {
+      expectStdout = "ok\n"
+    }
   }
 }
+
+local emptyCmd: Schema.CmdTest = new { cmd = "x" }
 
 facts {
   ["name and cmd are preserved"] {
     tcp.name == "tcp"
-    tcp.cmd == "curl -fsS http://localhost:8080/health"
+    (tcp.body as Schema.CmdTest).cmd == "curl -fsS http://localhost:8080/health"
   }
   ["defaults: shell is bash, exit code is 0, timeout is 60s"] {
     tcp.shell == "bash"
-    tcp.shellExpectations.expectExitCode == 0
+    (tcp.body as Schema.CmdTest).shellExpectations.expectExitCode == 0
     tcp.timeoutSec == 60
   }
-  ["shellExpectations defaults to all-empty"] {
-    (new Schema.Test { name = "x"; cmd = "x" }).shellExpectations.expectExitCode == 0
-    (new Schema.Test { name = "x"; cmd = "x" }).shellExpectations.expectStdout == null
-    (new Schema.Test { name = "x"; cmd = "x" }).shellExpectations.expectStdoutContains.isEmpty
+  ["CmdTest.shellExpectations defaults to all-empty"] {
+    emptyCmd.shellExpectations.expectExitCode == 0
+    emptyCmd.shellExpectations.expectStdout == null
+    emptyCmd.shellExpectations.expectStdoutContains.isEmpty
   }
-  ["empty cmd is rejected"] {
-    module.catch(() -> (new Schema.Test { name = "x"; cmd = "" }).cmd) != null
+  ["empty CmdTest.cmd is rejected"] {
+    module.catch(() -> new Schema.CmdTest { cmd = "" }.cmd) != null
   }
   ["empty / whitespace-surrounded / multi-line names are rejected"] {
-    // DisplayName disallows empty, leading/trailing space, and embedded newlines.
-    module.catch(() -> (new Schema.Test { name = ""; cmd = "x" }).name) != null
-    module.catch(() -> (new Schema.Test { name = " leading-space"; cmd = "x" }).name) != null
-    module.catch(() -> (new Schema.Test { name = "trailing-space "; cmd = "x" }).name) != null
-    module.catch(() -> (new Schema.Test { name = "two\nlines"; cmd = "x" }).name) != null
+    module.catch(() -> (new Schema.Test { name = "" }).name) != null
+    module.catch(() -> (new Schema.Test { name = " leading-space" }).name) != null
+    module.catch(() -> (new Schema.Test { name = "trailing-space " }).name) != null
+    module.catch(() -> (new Schema.Test { name = "two\nlines" }).name) != null
   }
   ["prose / punctuation / non-ASCII names are accepted"] {
-    (new Schema.Test { name = "Float Power, IntDivide and Modulo semantics"; cmd = "x" }).name
+    (new Schema.Test { name = "Float Power, IntDivide and Modulo semantics" }).name
       == "Float Power, IntDivide and Modulo semantics"
-    (new Schema.Test { name = "is this consistent?"; cmd = "x" }).name == "is this consistent?"
-    (new Schema.Test { name = "日本語 OK"; cmd = "x" }).name == "日本語 OK"
-    (new Schema.Test { name = "-leading-dash"; cmd = "x" }).name == "-leading-dash"
+    (new Schema.Test { name = "is this consistent?" }).name == "is this consistent?"
+    (new Schema.Test { name = "日本語 OK" }).name == "日本語 OK"
+    (new Schema.Test { name = "-leading-dash" }).name == "-leading-dash"
   }
   ["non-positive timeout is rejected"] {
-    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; timeoutSec = 0 }).timeoutSec)
-      != null
+    module.catch(() -> (new Schema.Test { name = "x"; timeoutSec = 0 }).timeoutSec) != null
   }
   ["iteration seed must stay in uint32 range"] {
-    module.catch(() -> (new Schema.Test { name = "x"; cmd = "x"; iterationSeed = -1 }).iterationSeed)
+    module.catch(() -> (new Schema.Test { name = "x"; iterationSeed = -1 }).iterationSeed) != null
+    module.catch(() -> (new Schema.Test { name = "x"; iterationSeed = 4294967296 }).iterationSeed)
       != null
-    module.catch(() ->
-      (new Schema.Test { name = "x"; cmd = "x"; iterationSeed = 4294967296 }).iterationSeed
-    ) != null
   }
   ["InlineSnapshot defaults to capture state with null value"] {
     (new Schema.InlineSnapshot {}).state == "capture"
@@ -62,17 +62,19 @@ facts {
     (new Schema.InlineSnapshot { state = "match" }).state == "match"
     module.catch(() -> (new Schema.InlineSnapshot { state = "skip" }).state) != null
   }
-  ["inlineStdout accepts InlineSnapshot? on Test"] {
+  ["CmdTest.inlineStdout accepts InlineSnapshot?"] {
     (
-      new Schema.Test {
-        name = "x"
+      new Schema.CmdTest {
         cmd = "x"
         inlineStdout = new Schema.InlineSnapshot { state = "match"; value = "hi\n" }
       }
     )
       .inlineStdout
       .value == "hi\n"
-    (new Schema.Test { name = "x"; cmd = "x" }).inlineStdout == null
+    (new Schema.CmdTest { cmd = "x" }).inlineStdout == null
+  }
+  ["Test.body == null is the pending marker"] {
+    (new Schema.Test { name = "x" }).body == null
   }
 }
 

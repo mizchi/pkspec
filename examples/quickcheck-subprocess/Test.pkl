@@ -10,8 +10,9 @@ tests {
     specRef { "pbt.iterations" }
     iterations = 50
     iterationSeed = 20260512
-    cmd =
-      """
+    body = new CmdTest {
+      cmd =
+        """
         set -e
         # Derive three values from the seed; modulo keeps numbers small.
         a=$(( PKSPEC_SEED % 1000 ))
@@ -23,7 +24,8 @@ tests {
           echo "iter=$PKSPEC_ITERATION seed=$PKSPEC_SEED a=$a b=$b c=$c lhs=$lhs rhs=$rhs"
           exit 1
         fi
-      """
+        """
+    }
   }
 
   // FAILING property (deliberate): "this number is even" is false
@@ -37,13 +39,15 @@ tests {
     pending = true // disabled by default; flip to false to see the report
     iterations = 50
     iterationSeed = 20260512
-    cmd =
-      """
+    body = new CmdTest {
+      cmd =
+        """
         if [ $(( PKSPEC_SEED % 2 )) -ne 0 ]; then
           echo "iter=$PKSPEC_ITERATION seed=$PKSPEC_SEED is odd"
           exit 1
         fi
-      """
+        """
+    }
   }
 
   // SHRINK demo: large seed → "fail when val ≥ 50". Shrinking
@@ -57,13 +61,15 @@ tests {
     iterationSeed = 999999
     shrink = true
     shrinkAttempts = 32
-    cmd =
-      """
+    body = new CmdTest {
+      cmd =
+        """
         val=$(( PKSPEC_SEED % 100 ))
         if [ $val -ge 50 ]; then
           echo "PKSPEC_SEED=$PKSPEC_SEED → val=$val (>= 50)"
           exit 1
         fi
-      """
+        """
+    }
   }
 }

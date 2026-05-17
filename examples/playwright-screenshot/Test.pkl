@@ -6,20 +6,22 @@ tests {
     description = "visual regression with pixel-diff thresholdPct"
     tags { "unit" }
     specRef { "kind.playwright"; "runner.playwright.pixel-diff" }
-    steps {
-      new {
-        name = "render_and_shoot"
-        body = new PlaywrightBody {
-          playwright = new PlaywrightSpec {
-            script = "scripts/render.mjs"
-            expectScreenshot = new ScreenshotSnapshot {
-              name = "fixed_label"
-              // 0.5% pixel-difference tolerance (absorbs font AA flicker).
-              thresholdPct = 0.5
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "render_and_shoot"
+          body = new PlaywrightBody {
+            playwright = new PlaywrightSpec {
+              script = "scripts/render.mjs"
+              expectScreenshot = new ScreenshotSnapshot {
+                name = "fixed_label"
+                // 0.5% pixel-difference tolerance (absorbs font AA flicker).
+                thresholdPct = 0.5
+              }
             }
           }
+          timeoutSec = 30
         }
-        timeoutSec = 30
       }
     }
   }

@@ -6,7 +6,9 @@ tests {
     description = "one-line shell with inline-snapshot assertion"
     tags { "unit" }
     specRef { "kind.shell"; "runner.exec.assert-streams"; "diff.inline-snapshot" }
-    cmd = "echo pong"
-    inlineStdout = new InlineSnapshot { state = "match"; value = "pong\n" }
+    body = new CmdTest {
+      cmd = "echo pong"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "pong\n" }
+    }
   }
 }

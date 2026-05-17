@@ -654,7 +654,57 @@ class Background {
   portEnv: String? = null
 }
 
-/// A single test. Choose exactly one of `cmd`, `steps`, `parallelSteps`.
+/// Abstract body slot for a `Test`. Authored as exactly one of
+/// `CmdTest` / `SequentialTest` / `ParallelTest`; pending tests leave
+/// `Test.body = null` and rely on `pending = true` (or the implicit
+/// auto-pending when tag = "spec" and body is null).
+///
+/// T3-2 in TODO.md: replaces the v0.2.x flat `Test { cmd | steps |
+/// parallelSteps = ... }` shape so the "exactly one of three"
+/// invariant is a type-system guarantee instead of a runtime check.
+abstract class TestBody {}
+
+/// A top-level shell command Test — the runner spawns one subprocess,
+/// applies the assertions, captures snapshots. Same role as
+/// `ShellBody` for steps, but at the Test level.
+class CmdTest extends TestBody {
+  cmd: String(length > 0)
+  stdin: String? = null
+
+  /// Shell-stream assertions (see `ShellExpectations` for the field
+  /// list).
+  shellExpectations: ShellExpectations = new {}
+
+  /// Match captured stdout/stderr against a committed snapshot file.
+  /// Composes with `shellExpectations.expectStdout` / `expectStderr`.
+  expectStdoutSnapshot: ReferenceSnapshot? = null
+  expectStderrSnapshot: ReferenceSnapshot? = null
+
+  /// Inline snapshots of stdout / stderr. Opt in via `new
+  /// InlineSnapshot {}`; the rewriter populates `value` on the next
+  /// `--update-inline-snapshots` run.
+  inlineStdout: InlineSnapshot? = null
+  inlineStderr: InlineSnapshot? = null
+}
+
+/// A sequential Test composed of `Step`s — the runner executes them
+/// one after another, threading `captureStdout` / `captureBody` env
+/// vars between steps.
+class SequentialTest extends TestBody {
+  steps: Listing<Step>
+}
+
+/// A concurrent Test — steps run in parallel. `always` and `repeat`
+/// fields on each step are ignored inside `parallelSteps`; captures
+/// don't compose because of the lack of ordering.
+class ParallelTest extends TestBody {
+  parallelSteps: Listing<Step>
+}
+
+/// A single test. The `body` slot picks the runner shape — `CmdTest`
+/// for a one-shot subprocess, `SequentialTest` for a steps list,
+/// `ParallelTest` for a fan-out. `null` is reserved for pending
+/// tests (`pending = true` or the auto-pending `"spec"`-tagged case).
 class Test {
   /// Names may start with a letter, digit, or underscore (number
   /// prefixes like `01_setup` are useful for sort-order control,
@@ -796,42 +846,11 @@ class Test {
   /// per-input shrink budget when inputs are present.
   inputs: Mapping<String, Input> = new {}
 
-  // ── Body: pick exactly one ─────────────────────────────────────
-  cmd: (String(length > 0))? = null
-  stdin: String? = null
-
-  /// Shell-stream assertions shared with `Step.shellExpectations` —
-  /// see the `ShellExpectations` class for the field list. Only
-  /// meaningful for tests with a top-level `cmd`; tests built from
-  /// `steps` / `parallelSteps` push the assertions onto each step's
-  /// own `shellExpectations`.
-  shellExpectations: ShellExpectations = new {}
-
-  /// Match captured stdout against a committed snapshot file.
-  /// Composes with `shellExpectations.expectStdout`; both checks must
-  /// pass when both set.
-  expectStdoutSnapshot: ReferenceSnapshot? = null
-  expectStderrSnapshot: ReferenceSnapshot? = null
-
-  /// Inline snapshot of stdout. Opt in by writing `inlineStdout = new
-  /// InlineSnapshot {}` (state defaults to `"capture"`); the rewriter
-  /// captures the live stdout and flips the field to `state = "match";
-  /// value = "..."` on the next `--update-inline-snapshots` run.
-  /// Subsequent runs do exact-match comparison against `value`.
-  ///
-  /// `null` (the default) means "no inline assertion here" — the
-  /// runner skips this field entirely.
-  ///
-  /// Composes with `expectStdout` — both checks run if both are set.
-  /// Distinct from `expectStdoutSnapshot`, which stores bytes in a
-  /// separate file (.bytes); inline snapshots live in the Pkl source
-  /// itself and show up in code review diffs.
-  inlineStdout: InlineSnapshot? = null
-  inlineStderr: InlineSnapshot? = null
-
-  steps: Listing<Step> = new {}
-  parallelSteps: Listing<Step> = new {}
-  // ───────────────────────────────────────────────────────────────
+  /// Required body — one of `CmdTest` / `SequentialTest` /
+  /// `ParallelTest`. `null` (default) marks the test as pending or
+  /// spec-only; the auto-pending rule (tag = "spec" + body = null)
+  /// keeps `tags { "spec" }` placeholders skippable.
+  body: TestBody? = null
 
   background: Listing<Background> = new {}
 }
@@ -1398,63 +1417,98 @@ local function renderBackground(b: Background): RenderedBackground = new {
 // snapshot has a generator: the generator is itself a Test that needs
 // rendering (its own `expectStdoutSnapshot` etc. could in principle
 // cycle, but in practice generators are leaf shell invocations).
-local function renderTest(t: Test): RenderedTest = new {
-  description = t.description
-  tags = t.tags
-  specRef = t.specRef
-  shell = t.shell
-  env = t.env
-  workdir = t.workdir
-  ephemeralWorkdir = t.ephemeralWorkdir
-  timeoutSec = t.timeoutSec
-  retries = t.retries
-  flakyAcceptable = t.flakyAcceptable
-  pending = t.pending
-  iterations = t.iterations
-  iterationSeed = t.iterationSeed
-  shrink = t.shrink
-  shrinkAttempts = t.shrinkAttempts
-  inputs = new Mapping<String, RenderedInput> {
-    for (k, v in t.inputs) {
-      [k] = new RenderedIntInput {
-        lo = v.lo
-        hi = v.hi
+local function renderTest(t: Test): RenderedTest =
+  let (body = t.body)
+    new {
+      description = t.description
+      tags = t.tags
+      specRef = t.specRef
+      shell = t.shell
+      env = t.env
+      workdir = t.workdir
+      ephemeralWorkdir = t.ephemeralWorkdir
+      timeoutSec = t.timeoutSec
+      retries = t.retries
+      flakyAcceptable = t.flakyAcceptable
+      pending = t.pending
+      iterations = t.iterations
+      iterationSeed = t.iterationSeed
+      shrink = t.shrink
+      shrinkAttempts = t.shrinkAttempts
+      inputs = new Mapping<String, RenderedInput> {
+        for (k, v in t.inputs) {
+          [k] = new RenderedIntInput {
+            lo = v.lo
+            hi = v.hi
+          }
+        }
+      }
+
+      // ── CmdTest body ───────────────────────────────────────────
+      cmd = if (body is CmdTest) body.cmd else null
+      stdin = if (body is CmdTest) body.stdin else null
+      expectExitCode = if (body is CmdTest) body.shellExpectations.expectExitCode else 0
+      expectStdout = if (body is CmdTest) body.shellExpectations.expectStdout else null
+      expectStderr = if (body is CmdTest) body.shellExpectations.expectStderr else null
+      expectStdoutContains =
+        if (body is CmdTest) body.shellExpectations.expectStdoutContains else new Listing<String> {}
+      expectStderrContains =
+        if (body is CmdTest) body.shellExpectations.expectStderrContains else new Listing<String> {}
+      expectStdoutMatches =
+        if (body is CmdTest) body.shellExpectations.expectStdoutMatches else new Listing<String> {}
+      expectStderrMatches =
+        if (body is CmdTest) body.shellExpectations.expectStderrMatches else new Listing<String> {}
+      expectStdoutJsonPath =
+        if (body is CmdTest)
+          body.shellExpectations.expectStdoutJsonPath
+        else
+          new Mapping<String, Any> {}
+      expectStderrJsonPath =
+        if (body is CmdTest)
+          body.shellExpectations.expectStderrJsonPath
+        else
+          new Mapping<String, Any> {}
+      expectStdoutSnapshot =
+        if (body is CmdTest && body.expectStdoutSnapshot != null)
+          renderSnapshot(body.expectStdoutSnapshot)
+        else
+          null
+      expectStderrSnapshot =
+        if (body is CmdTest && body.expectStderrSnapshot != null)
+          renderSnapshot(body.expectStderrSnapshot)
+        else
+          null
+      inlineStdout = if (body is CmdTest) flattenInlineSnapshot(body.inlineStdout) else null
+      inlineStderr = if (body is CmdTest) flattenInlineSnapshot(body.inlineStderr) else null
+
+      // ── SequentialTest body ────────────────────────────────────
+      steps =
+        if (body is SequentialTest)
+          new Listing<RenderedStep> {
+            for (s in body.steps) {
+              renderStep(s)
+            }
+          }
+        else
+          new Listing<RenderedStep> {}
+
+      // ── ParallelTest body ──────────────────────────────────────
+      parallelSteps =
+        if (body is ParallelTest)
+          new Listing<RenderedStep> {
+            for (s in body.parallelSteps) {
+              renderStep(s)
+            }
+          }
+        else
+          new Listing<RenderedStep> {}
+
+      background = new Listing<RenderedBackground> {
+        for (b in t.background) {
+          renderBackground(b)
+        }
       }
     }
-  }
-  cmd = t.cmd
-  stdin = t.stdin
-  expectExitCode = t.shellExpectations.expectExitCode
-  expectStdout = t.shellExpectations.expectStdout
-  expectStderr = t.shellExpectations.expectStderr
-  expectStdoutContains = t.shellExpectations.expectStdoutContains
-  expectStderrContains = t.shellExpectations.expectStderrContains
-  expectStdoutMatches = t.shellExpectations.expectStdoutMatches
-  expectStderrMatches = t.shellExpectations.expectStderrMatches
-  expectStdoutJsonPath = t.shellExpectations.expectStdoutJsonPath
-  expectStderrJsonPath = t.shellExpectations.expectStderrJsonPath
-  expectStdoutSnapshot =
-    if (t.expectStdoutSnapshot == null)
-      null
-    else
-      renderSnapshot(t.expectStdoutSnapshot)
-  expectStderrSnapshot =
-    if (t.expectStderrSnapshot == null)
-      null
-    else
-      renderSnapshot(t.expectStderrSnapshot)
-  inlineStdout = flattenInlineSnapshot(t.inlineStdout)
-  inlineStderr = flattenInlineSnapshot(t.inlineStderr)
-  steps = new Listing<RenderedStep> {
-    for (s in t.steps) { renderStep(s) }
-  }
-  parallelSteps = new Listing<RenderedStep> {
-    for (s in t.parallelSteps) { renderStep(s) }
-  }
-  background = new Listing<RenderedBackground> {
-    for (b in t.background) { renderBackground(b) }
-  }
-}
 
 local function renderSnapshot(s: ReferenceSnapshot): RenderedSnapshot = new {
   name = s.name

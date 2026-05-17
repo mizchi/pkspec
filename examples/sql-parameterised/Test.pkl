@@ -7,65 +7,67 @@ tests {
     tags { "unit" }
     specRef { "kind.sql"; "runner.steps.sequential" }
     env { ["TARGET_EMAIL"] = "alice@x.test" }
-    steps {
-      new {
-        name = "setup"
-        body = new SqlBody {
-          sql = new SqlSpec {
-            dsn = "sqlite:work.db"
-            query = "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, role TEXT)"
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "setup"
+          body = new SqlBody {
+            sql = new SqlSpec {
+              dsn = "sqlite:work.db"
+              query = "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, role TEXT)"
+            }
           }
         }
-      }
-      new {
-        name = "insert"
-        body = new SqlBody {
-          sql = new SqlSpec {
-            dsn = "sqlite:work.db"
-            query = "INSERT INTO users (email, role) VALUES (?, ?), (?, ?)"
-            args { "alice@x.test"; "admin"; "bob@x.test"; "user" }
-            expectRowCount = 2
+        new {
+          name = "insert"
+          body = new SqlBody {
+            sql = new SqlSpec {
+              dsn = "sqlite:work.db"
+              query = "INSERT INTO users (email, role) VALUES (?, ?), (?, ?)"
+              args { "alice@x.test"; "admin"; "bob@x.test"; "user" }
+              expectRowCount = 2
+            }
           }
         }
-      }
-      new {
-        name = "select_by_env"
-        body = new SqlBody {
-          sql = new SqlSpec {
-            dsn = "sqlite:work.db"
-            query = "SELECT role FROM users WHERE email = ?"
-            args { "$TARGET_EMAIL" }
-            expectRowCount = 1
-            expectRowsJsonPath { ["0.role"] = "admin" }
+        new {
+          name = "select_by_env"
+          body = new SqlBody {
+            sql = new SqlSpec {
+              dsn = "sqlite:work.db"
+              query = "SELECT role FROM users WHERE email = ?"
+              args { "$TARGET_EMAIL" }
+              expectRowCount = 1
+              expectRowsJsonPath { ["0.role"] = "admin" }
+            }
           }
         }
-      }
-      new {
-        name = "injection_safe"
-        // The bound arg contains SQL-shaped text but lands as a string
-        // literal — table stays intact.
-        body = new SqlBody {
-          sql = new SqlSpec {
-            dsn = "sqlite:work.db"
-            query = "SELECT email FROM users WHERE email = ?"
-            args { "'; DROP TABLE users; --" }
-            expectRowCount = 0
+        new {
+          name = "injection_safe"
+          // The bound arg contains SQL-shaped text but lands as a string
+          // literal — table stays intact.
+          body = new SqlBody {
+            sql = new SqlSpec {
+              dsn = "sqlite:work.db"
+              query = "SELECT email FROM users WHERE email = ?"
+              args { "'; DROP TABLE users; --" }
+              expectRowCount = 0
+            }
           }
         }
-      }
-      new {
-        name = "verify_intact"
-        body = new SqlBody {
-          sql = new SqlSpec {
-            dsn = "sqlite:work.db"
-            query = "SELECT COUNT(*) AS n FROM users"
-            expectRowsJsonPath { ["0.n"] = 2 }
+        new {
+          name = "verify_intact"
+          body = new SqlBody {
+            sql = new SqlSpec {
+              dsn = "sqlite:work.db"
+              query = "SELECT COUNT(*) AS n FROM users"
+              expectRowsJsonPath { ["0.n"] = 2 }
+            }
           }
         }
-      }
-      new {
-        name = "cleanup"
-        body = new ShellBody { cmd = "rm -f work.db" }
+        new {
+          name = "cleanup"
+          body = new ShellBody { cmd = "rm -f work.db" }
+        }
       }
     }
   }

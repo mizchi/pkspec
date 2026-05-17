@@ -7,13 +7,17 @@ tests {
   new {
     name = "login_happy_path"
     specRef { "AUTH-001" }
-    cmd = "echo 200"
-    inlineStdout = new InlineSnapshot { state = "match"; value = "200\n" }
+    body = new CmdTest {
+      cmd = "echo 200"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "200\n" }
+    }
   }
   new {
     name = "login_wrong_password"
     specRef { "AUTH-002" }
-    cmd = "echo 401"
-    inlineStdout = new InlineSnapshot { state = "match"; value = "401\n" }
+    body = new CmdTest {
+      cmd = "echo 401"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "401\n" }
+    }
   }
 }

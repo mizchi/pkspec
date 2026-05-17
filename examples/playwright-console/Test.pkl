@@ -6,19 +6,21 @@ tests {
     description = "page logs the init breadcrumb; no errors / pageerrors"
     tags { "unit" }
     specRef { "kind.playwright"; "runner.playwright.console-assertions" }
-    steps {
-      new {
-        name = "load"
-        body = new PlaywrightBody {
-          playwright = new PlaywrightSpec {
-            script = "scripts/clean.mjs"
-            expectConsole = new ConsoleAssertion {
-              containsAll { "init complete" }
-              containsNone { "[error]"; "[pageerror]"; "Uncaught" }
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "load"
+          body = new PlaywrightBody {
+            playwright = new PlaywrightSpec {
+              script = "scripts/clean.mjs"
+              expectConsole = new ConsoleAssertion {
+                containsAll { "init complete" }
+                containsNone { "[error]"; "[pageerror]"; "Uncaught" }
+              }
             }
           }
+          timeoutSec = 30
         }
-        timeoutSec = 30
       }
     }
   }

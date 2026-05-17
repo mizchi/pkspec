@@ -7,14 +7,18 @@ tests {
   new {
     name = "signup_happy_path"
     specRef { "SIGNUP-001" }
-    cmd = "echo 201"
-    inlineStdout = new InlineSnapshot { state = "match"; value = "201\n" }
+    body = new CmdTest {
+      cmd = "echo 201"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "201\n" }
+    }
   }
   new {
     name = "signup_duplicate"
     specRef { "SIGNUP-002" }
-    cmd = "echo 409"
-    inlineStdout = new InlineSnapshot { state = "match"; value = "409\n" }
+    body = new CmdTest {
+      cmd = "echo 409"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "409\n" }
+    }
   }
   // SIGNUP-003 deliberately has no implementing test —
   // `pkspec check` should surface it as unimplemented.

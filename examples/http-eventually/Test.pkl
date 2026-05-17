@@ -15,20 +15,22 @@ tests {
         readyTimeoutSec = 5
       }
     }
-    steps {
-      new {
-        name = "wait"
-        body = new HttpBody {
-          http = new HttpRequest {
-            method = "GET"
-            url = "http://127.0.0.1:19012/health"
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "wait"
+          body = new HttpBody {
+            http = new HttpRequest {
+              method = "GET"
+              url = "http://127.0.0.1:19012/health"
+            }
+            expectStatus = 200
+            expectBodyJsonPath { ["ready"] = true }
           }
-          expectStatus = 200
-          expectBodyJsonPath { ["ready"] = true }
-        }
-        eventually = new Eventually {
-          intervalMs = 200
-          timeoutSec = 5
+          eventually = new Eventually {
+            intervalMs = 200
+            timeoutSec = 5
+          }
         }
       }
     }
