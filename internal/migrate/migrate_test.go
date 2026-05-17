@@ -236,6 +236,166 @@ func TestPreAbstractImplementationFlatRewrite(t *testing.T) {
 	}
 }
 
+func TestBodyConsolidationShellStep(t *testing.T) {
+	in := `tests {
+  new {
+    name = "echo"
+    steps {
+      new {
+        name = "say"
+        cmd = "echo hi"
+        shellExpectations {
+          expectStdout = "hi\n"
+        }
+      }
+    }
+  }
+}
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Test.pkl")
+	got := string(out)
+	if !strings.Contains(got, `body = new ShellBody {`) {
+		t.Fatalf("missing ShellBody wrap, got:\n%s", got)
+	}
+	if !strings.Contains(got, `cmd = "echo hi"`) {
+		t.Errorf("cmd missing from wrap, got:\n%s", got)
+	}
+}
+
+func TestBodyConsolidationHttpStep(t *testing.T) {
+	in := `tests {
+  new {
+    name = "fetch"
+    steps {
+      new {
+        name = "call"
+        http = new HttpRequest {
+          method = "GET"
+          url = "http://localhost/items"
+        }
+        expectStatus = 200
+        expectBodyJsonPath {
+          ["ok"] = true
+        }
+      }
+    }
+  }
+}
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Test.pkl")
+	got := string(out)
+	if !strings.Contains(got, `body = new HttpBody {`) {
+		t.Fatalf("missing HttpBody wrap, got:\n%s", got)
+	}
+	if !strings.Contains(got, `http = new HttpRequest {`) {
+		t.Errorf("http multi-line block missing, got:\n%s", got)
+	}
+	if !strings.Contains(got, `expectStatus = 200`) {
+		t.Errorf("expectStatus missing from wrap, got:\n%s", got)
+	}
+}
+
+func TestBodyConsolidationParallelStep(t *testing.T) {
+	in := `tests {
+  new {
+    name = "fan_out"
+    parallelSteps {
+      new { name = "p1"; cmd = "sleep 0.2" }
+      new { name = "p2"; cmd = "sleep 0.2" }
+    }
+  }
+}
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Test.pkl")
+	got := string(out)
+	if !strings.Contains(got, `body = new ParallelTest`) {
+		t.Fatalf("missing ParallelTest body, got:\n%s", got)
+	}
+}
+
+func TestBodyConsolidationCmdTest(t *testing.T) {
+	in := `tests {
+  new {
+    name = "echo"
+    cmd = "echo hi"
+    shellExpectations {
+      expectStdout = "hi\n"
+    }
+  }
+}
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Test.pkl")
+	got := string(out)
+	if !strings.Contains(got, `body = new CmdTest {`) {
+		t.Fatalf("missing CmdTest wrap, got:\n%s", got)
+	}
+	if !strings.Contains(got, `cmd = "echo hi"`) {
+		t.Errorf("cmd missing from wrap, got:\n%s", got)
+	}
+}
+
+func TestBodyConsolidationSequentialTest(t *testing.T) {
+	in := `tests {
+  new {
+    name = "seq"
+    steps {
+      new {
+        name = "step1"
+        cmd = "echo 1"
+      }
+    }
+  }
+}
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Test.pkl")
+	got := string(out)
+	if !strings.Contains(got, `body = new SequentialTest`) {
+		t.Fatalf("missing SequentialTest body, got:\n%s", got)
+	}
+	if !strings.Contains(got, `body = new ShellBody`) {
+		t.Fatalf("inner step's ShellBody wrap missing, got:\n%s", got)
+	}
+}
+
+func TestBodyConsolidationIdempotent(t *testing.T) {
+	in := `tests {
+  new {
+    name = "echo"
+    body = new CmdTest {
+      cmd = "echo hi"
+    }
+  }
+}
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Test.pkl")
+	if string(out) != in {
+		t.Fatalf("idempotent run mutated source:\ngot:\n%s\nwant:\n%s", out, in)
+	}
+}
+
+func TestBodyConsolidationImplStep(t *testing.T) {
+	in := `scenarios {
+  new {
+    id = "x"
+    given {
+      new SpecStep {
+        description = "set up"
+        impl = new Step {
+          cmd = "echo seed"
+          captureStdout = "S"
+        }
+      }
+    }
+  }
+}
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	got := string(out)
+	if !strings.Contains(got, `body = new ShellBody`) {
+		t.Fatalf("missing ShellBody wrap for impl-Step, got:\n%s", got)
+	}
+}
+
 func TestShellExpectationsScalarConsolidation(t *testing.T) {
 	in := `  new {
     name = "echo"
