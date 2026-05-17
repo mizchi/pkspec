@@ -483,8 +483,32 @@ migration.
 
 ### T3-3. Rework `inlineStdout` sentinel encoding
 
-**Status (deferred to 0.3.0):** Bundled with T2-2 / T2-3 / T3-2
-in the 0.3.0 author-surface batch.
+**Status (resolved in 0.3.0):** Done — `class InlineSnapshot { state =
+"capture" | "match"; value: String? }` replaces the three-state
+`String?` sentinel on `Test.inlineStdout` / `Test.inlineStderr` and
+`Step.inlineStdout` / `Step.inlineHttpBody` / `Step.inlineConsoleLog`.
+Mapping-valued inline fields (`inlineJsonPath` / `inlineHeaders` /
+`inlineSqlRows`) keep their `String` element type — per-key opt-in
+already gave them a per-entry state, so the sentinel ambiguity that
+motivated this ticket doesn't apply there.
+
+The renderer (`pkl/Test.pkl#flattenInlineSnapshot`) collapses the
+class back to the `Rendered{Test,Step}.inlineStdout: String?` sentinel,
+so the Go decoder + executor + cassette + diff layers are unchanged.
+The only Go-side change is `internal/inline/rewriter.go`, which
+gained `ReplaceInlineSnapshotField` to emit `new InlineSnapshot {
+state = "match"; value = ... }` blocks (single-line for short values,
+multi-line triple-quoted for long ones); the dead `ReplaceField`
+helper was deleted. `pkspec migrate` gained Rule 4 for the old
+sentinel:
+
+    inlineStdout = ""        → new InlineSnapshot {}
+    inlineStdout = "pong\n"  → new InlineSnapshot { state = "match"; value = "pong\n" }
+    inlineStdout = null      → (unchanged — null still means skip)
+
+Also picked up Rule 5 (`new Implementation { kind = "X"; at = "Y"
+}` → `new XImpl { at = "Y" }`) so repos stuck on the intermediate
+0.2.0-pre-abstract shape can upgrade with one `pkspec migrate` pass.
 
 **Problem.** `inlineStdout: String? = null` carries three
 semantic states:
@@ -641,11 +665,12 @@ This is a runner change (Go-side), not a schema change.
 
 ---
 
-## Migration sequencing note (added 2026-05-15)
+## Migration sequencing note (added 2026-05-15, updated 2026-05-17)
 
 After Tier 1 + T2-1 + T3-4 + T3-5 landed, the remaining four
 tickets (**T2-2 / T2-3 / T3-2 / T3-3**) were bundled and deferred
-to a dedicated **0.3.0** release. They all touch the **author
+to a dedicated **0.3.0** release. T3-3 has since shipped as the
+first 0.3.0 batch commit; T2-2 / T2-3 / T3-2 are still pending. They all touch the **author
 surface** of every Test.pkl / Spec.pkl in existence:
 
 - T2-2  every `Step { cmd | http | playwright | playwrightTest | sql = ... }`
