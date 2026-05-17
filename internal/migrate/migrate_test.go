@@ -236,6 +236,96 @@ func TestPreAbstractImplementationFlatRewrite(t *testing.T) {
 	}
 }
 
+func TestShellExpectationsScalarConsolidation(t *testing.T) {
+	in := `  new {
+    name = "echo"
+    cmd = "echo hi"
+    expectExitCode = 0
+    expectStdout = "hi\n"
+  }
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	got := string(out)
+	if !strings.Contains(got, `shellExpectations {`) {
+		t.Fatalf("expected wrapping block in:\n%s", got)
+	}
+	for _, want := range []string{
+		`expectExitCode = 0`,
+		`expectStdout = "hi\n"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	// The original sibling lines must not remain at the Test scope.
+	if strings.Count(got, "expectExitCode = 0") != 1 {
+		t.Errorf("expectExitCode should appear exactly once (inside shellExpectations), got:\n%s", got)
+	}
+}
+
+func TestShellExpectationsBlockFieldConsolidation(t *testing.T) {
+	in := `  new {
+    name = "contracts"
+    cmd = "echo {}"
+    expectStdoutContains { "tasks" }
+    expectStdoutJsonPath { ["ok"] = true }
+  }
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	got := string(out)
+	if !strings.Contains(got, `shellExpectations {`) {
+		t.Fatalf("expected wrapping block in:\n%s", got)
+	}
+	for _, want := range []string{
+		`expectStdoutContains { "tasks" }`,
+		`expectStdoutJsonPath { ["ok"] = true }`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestShellExpectationsAlreadyMigratedIsIdempotent(t *testing.T) {
+	in := `  new {
+    name = "echo"
+    cmd = "echo hi"
+    shellExpectations {
+      expectStdout = "hi\n"
+    }
+  }
+`
+	out, notes, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	if string(out) != in {
+		t.Fatalf("idempotent run mutated source:\ngot:\n%s\nwant:\n%s", out, in)
+	}
+	if strings.Count(string(out), "shellExpectations {") != 1 {
+		t.Errorf("nested wrapping occurred, got:\n%s", out)
+	}
+	if len(notes) != 0 {
+		t.Errorf("idempotent run should not emit notes, got: %+v", notes)
+	}
+}
+
+func TestShellExpectationsMultiLineBlockEmitsNote(t *testing.T) {
+	in := `  new {
+    name = "contracts"
+    cmd = "echo hi"
+    expectStdoutMatches {
+      "pattern1"
+      "pattern2"
+    }
+  }
+`
+	_, notes, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	if len(notes) == 0 {
+		t.Fatalf("expected a Note for multi-line expect block, got none")
+	}
+	if !strings.Contains(notes[0].Message, "expectStdoutMatches") {
+		t.Errorf("Note should name the offending field, got: %s", notes[0].Message)
+	}
+}
+
 func TestInlineCoversAllFourScalarNames(t *testing.T) {
 	in := `  new {
     name = "any-shape"

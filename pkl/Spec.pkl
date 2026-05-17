@@ -409,15 +409,7 @@ local function tagStep(prefix: String, s: SpecStep, runAlways: Boolean): base.St
   // shell-specific
   shell = s.impl.shell
   stdin = s.impl.stdin
-  expectExitCode = s.impl.expectExitCode
-  expectStdout = s.impl.expectStdout
-  expectStderr = s.impl.expectStderr
-  expectStdoutContains = s.impl.expectStdoutContains
-  expectStderrContains = s.impl.expectStderrContains
-  expectStdoutMatches = s.impl.expectStdoutMatches
-  expectStderrMatches = s.impl.expectStderrMatches
-  expectStdoutJsonPath = s.impl.expectStdoutJsonPath
-  expectStderrJsonPath = s.impl.expectStderrJsonPath
+  shellExpectations = s.impl.shellExpectations
   inlineStdout = s.impl.inlineStdout
   captureStdout = s.impl.captureStdout
   captureExitCode = s.impl.captureExitCode
