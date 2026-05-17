@@ -50,8 +50,20 @@ feature = "pkspec — language-agnostic Pkl-based spec & test runner"
 // before introducing a new prefix so the lint and the convention move
 // together.
 domains {
-  "adapter"; "ai"; "diff"; "docs"; "goal"; "history"; "kind"
-  "ms"; "parallel"; "pbt"; "runner"; "security"; "spec"; "tooling"
+  "adapter"
+  "ai"
+  "diff"
+  "docs"
+  "goal"
+  "history"
+  "kind"
+  "ms"
+  "parallel"
+  "pbt"
+  "runner"
+  "security"
+  "spec"
+  "tooling"
 }
 
 // ── Goals ───────────────────────────────────────────────────────────
@@ -62,16 +74,20 @@ goals {
     name = "CI gets a trustworthy exit code"
     priority = 95
     reviewStatus = "approved"
-    description = "Any test failure surfaces as a non-zero exit. pkl test's silent-zero-on-failure gap is closed."
-    rationale = "Without this, no other feature matters — a green CI lying about a red suite poisons every downstream decision."
+    description =
+      "Any test failure surfaces as a non-zero exit. pkl test's silent-zero-on-failure gap is closed."
+    rationale =
+      "Without this, no other feature matters — a green CI lying about a red suite poisons every downstream decision."
   }
   new Goal {
     id = "goal.secure-release"
     name = "release artifacts are hardened"
     priority = 88
     reviewStatus = "approved"
-    description = "Published binaries, GitHub Actions, and schema-to-executor boundaries avoid known vulnerable toolchains, excess CI privileges, and unchecked numeric narrowing."
-    rationale = "A test runner is part of the supply chain. Users should not have to audit every install path before trusting it in CI."
+    description =
+      "Published binaries, GitHub Actions, and schema-to-executor boundaries avoid known vulnerable toolchains, excess CI privileges, and unchecked numeric narrowing."
+    rationale =
+      "A test runner is part of the supply chain. Users should not have to audit every install path before trusting it in CI."
     progressMethod = "severity-weighted"
   }
   new Goal {
@@ -79,24 +95,30 @@ goals {
     name = "tests are language-agnostic"
     priority = 90
     reviewStatus = "approved"
-    description = "Authoring happens in Pkl, execution dispatches to per-kind Go executors. A new test kind = a Pkl class + a Go file."
-    rationale = "Bash chains and per-ecosystem runners both break at the seams of cross-language projects. The schema lives above the language."
+    description =
+      "Authoring happens in Pkl, execution dispatches to per-kind Go executors. A new test kind = a Pkl class + a Go file."
+    rationale =
+      "Bash chains and per-ecosystem runners both break at the seams of cross-language projects. The schema lives above the language."
   }
   new Goal {
     id = "goal.adapter-dsl"
     name = "native runners are adapter-defined"
     priority = 75
     reviewStatus = "review"
-    description = "Whole native runners such as Vitest, Playwright, node:test, go test, and moon test are described by Pkl adapter modules instead of being hard-coded as Go executors."
-    rationale = "pkspec cannot register every ecosystem runner in core. The extensibility point should be Pkl data plus a small process protocol."
+    description =
+      "Whole native runners such as Vitest, Playwright, node:test, go test, and moon test are described by Pkl adapter modules instead of being hard-coded as Go executors."
+    rationale =
+      "pkspec cannot register every ecosystem runner in core. The extensibility point should be Pkl data plus a small process protocol."
   }
   new Goal {
     id = "goal.spec-driven"
     name = "specs and tests cross-reference"
     priority = 85
     reviewStatus = "approved"
-    description = "Specs are first-class Pkl values with stable ids, lifecycle, and a knowledge graph. Tests declare which specs they verify."
-    rationale = "Without traceability, specs rot into design-doc folklore and tests become orphaned artefacts. Cross-references are the load-bearing edge."
+    description =
+      "Specs are first-class Pkl values with stable ids, lifecycle, and a knowledge graph. Tests declare which specs they verify."
+    rationale =
+      "Without traceability, specs rot into design-doc folklore and tests become orphaned artefacts. Cross-references are the load-bearing edge."
     progressMethod = "severity-weighted"
   }
   new Goal {
@@ -104,40 +126,50 @@ goals {
     name = "tests run in parallel where possible"
     priority = 70
     reviewStatus = "approved"
-    description = "Within a test (parallelSteps), background-and-poll patterns (readyProbe), and across the test set (--shard)."
-    rationale = "Sequential CI wall-clock is a productivity tax; the framework should hide the orchestration."
+    description =
+      "Within a test (parallelSteps), background-and-poll patterns (readyProbe), and across the test set (--shard)."
+    rationale =
+      "Sequential CI wall-clock is a productivity tax; the framework should hide the orchestration."
   }
   new Goal {
     id = "goal.history-aware"
     name = "the runner learns from previous runs"
     priority = 65
     reviewStatus = "approved"
-    description = "Wall-clock history balances shards via LPT; the last-failed set is replayable; in-flight ctx-cancels become legible \"aborted by total-timeout\" outcomes."
-    rationale = "Static configuration can't model real test costs. Recording observations and feeding them back is the only path to a balanced 4-machine matrix."
+    description =
+      "Wall-clock history balances shards via LPT; the last-failed set is replayable; in-flight ctx-cancels become legible \"aborted by total-timeout\" outcomes."
+    rationale =
+      "Static configuration can't model real test costs. Recording observations and feeding them back is the only path to a balanced 4-machine matrix."
   }
   new Goal {
     id = "goal.property-based"
     name = "property-based + fuzzing first-class"
     priority = 50
     reviewStatus = "approved"
-    description = "Test.iterations + Test.inputs (polymorphic Input schema), seed-deterministic generation, input-space shrinking on failure."
-    rationale = "Examples cover known cases; properties cover the unknown ones. The framework should make both first-class so the gap between them is a choice, not friction."
+    description =
+      "Test.iterations + Test.inputs (polymorphic Input schema), seed-deterministic generation, input-space shrinking on failure."
+    rationale =
+      "Examples cover known cases; properties cover the unknown ones. The framework should make both first-class so the gap between them is a choice, not friction."
   }
   new Goal {
     id = "goal.differential"
     name = "snapshot + differential testing"
     priority = 45
     reviewStatus = "approved"
-    description = "Reference bytes are committed; ports of the same spec must produce identical output. Inline snapshots rewrite themselves on demand."
-    rationale = "Cross-language ports without diff testing degenerate into folklore comparisons of half-remembered behaviour."
+    description =
+      "Reference bytes are committed; ports of the same spec must produce identical output. Inline snapshots rewrite themselves on demand."
+    rationale =
+      "Cross-language ports without diff testing degenerate into folklore comparisons of half-remembered behaviour."
   }
   new Goal {
     id = "goal.ai-assertions"
     name = "natural-language assertions transition into code"
     priority = 30
     reviewStatus = "review"
-    description = "expectAi delegates fuzzy claims to an LLM judge with content-hash caching, so the team can write the spec before the deterministic test exists."
-    rationale = "Specs are often written before assertions can be made deterministic. The AI path is the placeholder, not the destination — `ai.prefer-deterministic` will surface coded checks once they exist."
+    description =
+      "expectAi delegates fuzzy claims to an LLM judge with content-hash caching, so the team can write the spec before the deterministic test exists."
+    rationale =
+      "Specs are often written before assertions can be made deterministic. The AI path is the placeholder, not the destination — `ai.prefer-deterministic` will surface coded checks once they exist."
   }
 }
 
@@ -155,7 +187,8 @@ milestones {
     id = "ms.release-hardening"
     name = "release hardening baseline"
     reviewStatus = "review"
-    description = "Toolchain, CI permissions, and trusted-input boundaries have explicit specs before the next patch release."
+    description =
+      "Toolchain, CI permissions, and trusted-input boundaries have explicit specs before the next patch release."
     goals { "goal.secure-release" }
   }
 }
@@ -163,25 +196,26 @@ milestones {
 // ── Scenarios ───────────────────────────────────────────────────────
 
 scenarios {
-
   // ── goal.ci-trustworthy ──────────────────────────────────────────
 
   new {
     id = "runner.exit-code.pkspec-run"
     name = "pkt_run_returns_nonzero_on_assertion_failure"
-    description = "`pkspec run` wraps `pkl test` and forces a non-zero exit code when any test fails or any example writes a fresh snapshot — closing pkl test's silent-zero gap."
+    description =
+      "`pkspec run` wraps `pkl test` and forces a non-zero exit code when any test fails or any example writes a fresh snapshot — closing pkl test's silent-zero gap."
     tags { "spec" }
     severity = "critical"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "cmd/pkspec/main.go:cmdRun" }
+      new CodeImpl { at = "cmd/pkspec/main.go:cmdRun" }
     }
   }
   new {
     id = "runner.exec.assert-streams"
     name = "pkt_exec_asserts_exit_and_streams"
-    description = "Each Test.cmd is run as a subprocess; expectExitCode, expectStdout / expectStderr (or inline equivalents) are checked literally."
+    description =
+      "Each Test.cmd is run as a subprocess; expectExitCode, expectStdout / expectStderr (or inline equivalents) are checked literally."
     tags { "spec" }
     severity = "critical"
     reviewStatus = "approved"
@@ -190,19 +224,21 @@ scenarios {
   new {
     id = "runner.tally.is-green"
     name = "tally_is_green_only_when_nothing_is_red"
-    description = "Tally.IsGreen returns true only when Failed == 0, Errored == 0, and Skipped == 0. Pending / flaky / passed do not block; timeout-skipped does."
+    description =
+      "Tally.IsGreen returns true only when Failed == 0, Errored == 0, and Skipped == 0. Pending / flaky / passed do not block; timeout-skipped does."
     tags { "spec" }
     severity = "critical"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:Tally.IsGreen" }
+      new CodeImpl { at = "internal/executor/executor.go:Tally.IsGreen" }
     }
   }
   new {
     id = "runner.junit-report"
     name = "junit_report_round_trips"
-    description = "--junit-reports DIR writes JUnit XML matching the Tally; failures and errors are surfaced as `<failure>` and `<error>` so downstream CI dashboards work unchanged."
+    description =
+      "--junit-reports DIR writes JUnit XML matching the Tally; failures and errors are surfaced as `<failure>` and `<error>` so downstream CI dashboards work unchanged."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -214,131 +250,142 @@ scenarios {
   new {
     id = "security.go-toolchain-vulnerability-floor"
     name = "go_toolchain_has_no_known_reachable_vulnerabilities"
-    description = "The Go module and Nix package use a patched Go toolchain so `govulncheck ./...` reports no known reachable vulnerabilities in pkspec or the standard library used by pkspec."
+    description =
+      "The Go module and Nix package use a patched Go toolchain so `govulncheck ./...` reports no known reachable vulnerabilities in pkspec or the standard library used by pkspec."
     tags { "spec"; "security"; "release"; "toolchain" }
     severity = "critical"
     reviewStatus = "approved"
     contributes { "goal.secure-release"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "flake.nix:go_1_26_3" }
+      new CodeImpl { at = "flake.nix:go_1_26_3" }
     }
     decisions {
       new Decision {
         date = "2026-05-14"
         author = "mizchi"
         summary = "pin Nix and Go module builds to Go 1.26.3 after govulncheck"
-        rationale = "The vulnerability was in reachable standard-library paths, so relying on a local auto-downloaded toolchain was insufficient; release artifacts built by Nix also need the patched compiler/runtime."
+        rationale =
+          "The vulnerability was in reachable standard-library paths, so relying on a local auto-downloaded toolchain was insufficient; release artifacts built by Nix also need the patched compiler/runtime."
       }
     }
   }
   new {
     id = "security.workflow-read-only-permissions"
     name = "non_release_workflows_are_read_only"
-    description = "Non-release GitHub Actions workflows declare `permissions: contents: read`; only the tag publishing workflow keeps `contents: write` for GitHub Release publication."
+    description =
+      "Non-release GitHub Actions workflows declare `permissions: contents: read`; only the tag publishing workflow keeps `contents: write` for GitHub Release publication."
     tags { "spec"; "security"; "ci"; "github-actions" }
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.secure-release"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = ".github/workflows/go.yml:permissions" }
+      new CodeImpl { at = ".github/workflows/go.yml:permissions" }
     }
   }
   new {
     id = "security.govulncheck-weekly"
     name = "govulncheck_runs_weekly_in_ci"
-    description = "A standalone GitHub Actions workflow runs `govulncheck ./...` on a weekly cron (Mondays 09:00 UTC) plus on every PR that touches go.mod / go.sum / flake.nix, so newly disclosed Go stdlib vulnerabilities surface without a manual sweep."
+    description =
+      "A standalone GitHub Actions workflow runs `govulncheck ./...` on a weekly cron (Mondays 09:00 UTC) plus on every PR that touches go.mod / go.sum / flake.nix, so newly disclosed Go stdlib vulnerabilities surface without a manual sweep."
     tags { "spec"; "security"; "ci"; "github-actions" }
     severity = "major"
     reviewStatus = "review"
     contributes { "goal.secure-release" }
     implementations {
-      new Implementation { kind = "code"; at = ".github/workflows/govulncheck.yml" }
+      new CodeImpl { at = ".github/workflows/govulncheck.yml" }
     }
   }
   new {
     id = "security.dependabot-weekly"
     name = "dependabot_keeps_deps_current"
-    description = "Dependabot is configured for gomod and github-actions ecosystems on a weekly cadence so Go module pins and workflow action versions do not drift silently."
+    description =
+      "Dependabot is configured for gomod and github-actions ecosystems on a weekly cadence so Go module pins and workflow action versions do not drift silently."
     tags { "spec"; "security"; "ci"; "dependabot" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.secure-release" }
     implementations {
-      new Implementation { kind = "code"; at = ".github/dependabot.yml" }
+      new CodeImpl { at = ".github/dependabot.yml" }
     }
   }
   new {
     id = "tooling.migrate"
     name = "migrate_command_text_transforms_v01_to_v02"
-    description = "`pkspec migrate [--dry-run|--check] <path>...` is a text-only Pkl-source rewriter from the v0.1.x schema (implementedBy/implementedAt, userDescription/pmNotes/operatorNotes/apiNotes, GoalProgress) to v0.2.0 (Implementations Listing, audienceNotes Mapping, progressMethod). The transform never invokes Pkl eval — it works on sources that no longer parse under the current schema. Multiple audience-notes in one block consolidate into a single `audienceNotes { ... }` block. Idempotent."
+    description =
+      "`pkspec migrate [--dry-run|--check] <path>...` is a text-only Pkl-source rewriter from the v0.1.x schema (implementedBy/implementedAt, userDescription/pmNotes/operatorNotes/apiNotes, GoalProgress) to v0.2.0 (Implementations Listing, audienceNotes Mapping, progressMethod). The transform never invokes Pkl eval — it works on sources that no longer parse under the current schema. Multiple audience-notes in one block consolidate into a single `audienceNotes { ... }` block. Idempotent."
     tags { "spec"; "tooling"; "migration" }
     severity = "major"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/migrate/migrate.go:MigrateV01ToV02" }
+      new CodeImpl { at = "internal/migrate/migrate.go:MigrateV01ToV02" }
     }
   }
   new {
     id = "tooling.source-scan"
     name = "scan_extracts_pkspec_spec_markers"
-    description = "`pkspec lint --scan PATH` and `pkspec graph --scan PATH` walk every file (or every supported-extension file inside a directory) for the marker `pkspec:spec=<id>` and yield SourceRef{specId, path, line} for downstream rules. node_modules / vendor / dist / build / .git are pruned. The id char class matches Scenario.id and cannot end with `.` so markers embedded in prose capture cleanly."
+    description =
+      "`pkspec lint --scan PATH` and `pkspec graph --scan PATH` walk every file (or every supported-extension file inside a directory) for the marker `pkspec:spec=<id>` and yield SourceRef{specId, path, line} for downstream rules. node_modules / vendor / dist / build / .git are pruned. The id char class matches Scenario.id and cannot end with `.` so markers embedded in prose capture cleanly."
     tags { "spec"; "tooling"; "lint" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/scan.go:ScanSources" }
+      new CodeImpl { at = "internal/spec/scan.go:ScanSources" }
     }
   }
   new {
     id = "tooling.dead-source-ref-lint"
     name = "lint_dead_source_specref_is_error"
-    description = "When `pkspec lint --scan` finds a `pkspec:spec=<id>` marker whose id is not declared as any Scenario.id across the loaded plans, `lint.dead-source-specRef` fires at error level. Subject is `path:line` of the first occurrence; the message includes the occurrence count when the id is referenced from multiple lines."
+    description =
+      "When `pkspec lint --scan` finds a `pkspec:spec=<id>` marker whose id is not declared as any Scenario.id across the loaded plans, `lint.dead-source-specRef` fires at error level. Subject is `path:line` of the first occurrence; the message includes the occurrence count when the id is referenced from multiple lines."
     tags { "spec"; "tooling"; "lint" }
     severity = "major"
     reviewStatus = "review"
     dependsOn { "tooling.source-scan" }
     contributes { "goal.spec-driven"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/lint.go:LintWithSources" }
+      new CodeImpl { at = "internal/spec/lint.go:LintWithSources" }
     }
   }
   new {
     id = "spec.graph-source-backlinks"
     name = "graph_includes_source_marker_backlinks"
-    description = "`pkspec graph --scan PATH` emits a green-filled `src:<path>` node per source file carrying a `pkspec:spec=<id>` marker, plus one edge per (file, id) pair to the matching Scenario node. The edge label carries the occurrence count when one file references the same id multiple times."
+    description =
+      "`pkspec graph --scan PATH` emits a green-filled `src:<path>` node per source file carrying a `pkspec:spec=<id>` marker, plus one edge per (file, id) pair to the matching Scenario node. The edge label carries the occurrence count when one file references the same id multiple times."
     tags { "spec"; "tooling" }
     severity = "minor"
     reviewStatus = "review"
     dependsOn { "tooling.source-scan"; "spec.graph-implementation-links" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:GraphWithSources" }
+      new CodeImpl { at = "internal/spec/spec.go:GraphWithSources" }
     }
   }
   new {
     id = "tooling.domain-lint"
     name = "lint_unknown_domain_prefix_is_opt_in"
-    description = "When a Spec.pkl module declares the optional module-level `domains` allow-list, `pkspec lint` reports any Scenario.id whose first dot-segment is not in the list as `lint.unknown-domain-prefix` at info level. Modules that leave `domains` empty (e.g. `examples/*`) get no new lint output, so the rule is opt-in."
+    description =
+      "When a Spec.pkl module declares the optional module-level `domains` allow-list, `pkspec lint` reports any Scenario.id whose first dot-segment is not in the list as `lint.unknown-domain-prefix` at info level. Modules that leave `domains` empty (e.g. `examples/*`) get no new lint output, so the rule is opt-in."
     tags { "spec"; "tooling"; "lint" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/lint.go:Lint" }
+      new CodeImpl { at = "internal/spec/lint.go:Lint" }
     }
   }
   new {
     id = "tooling.ci-concurrency"
     name = "workflows_cancel_in_progress_runs"
-    description = "Go / Action / Nix workflows declare `concurrency.cancel-in-progress = true` keyed by `(workflow, ref)` so rapid successive pushes to a branch leave only the latest commit's CI executing; older queued runs are auto-cancelled and the badge always reflects the latest commit."
+    description =
+      "Go / Action / Nix workflows declare `concurrency.cancel-in-progress = true` keyed by `(workflow, ref)` so rapid successive pushes to a branch leave only the latest commit's CI executing; older queued runs are auto-cancelled and the badge always reflects the latest commit."
     tags { "spec"; "ci"; "github-actions" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = ".github/workflows/go.yml:concurrency" }
+      new CodeImpl { at = ".github/workflows/go.yml:concurrency" }
     }
   }
 
@@ -347,7 +394,8 @@ scenarios {
   new {
     id = "kind.shell"
     name = "shell_kind_dispatches_subprocesses"
-    description = "Step.cmd runs in the configured shell with merged env / workdir / stdin and capture options."
+    description =
+      "Step.cmd runs in the configured shell with merged env / workdir / stdin and capture options."
     tags { "spec" }
     severity = "critical"
     reviewStatus = "approved"
@@ -356,69 +404,75 @@ scenarios {
   new {
     id = "runner.shell.stdout-patterns"
     name = "shell_stdout_stderr_contains_and_regex"
-    description = "Top-level Test.cmd and shell Step.cmd support stdout/stderr substring and Go-regexp assertions, so CLI contracts do not need ad-hoc grep pipelines."
+    description =
+      "Top-level Test.cmd and shell Step.cmd support stdout/stderr substring and Go-regexp assertions, so CLI contracts do not need ad-hoc grep pipelines."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.lang-independent"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:assertShellStream" }
+      new CodeImpl { at = "internal/executor/executor.go:assertShellStream" }
     }
   }
   new {
     id = "runner.shell.stdout-jsonpath"
     name = "shell_stdout_stderr_jsonpath"
-    description = "Top-level Test.cmd and shell Step.cmd support JSONPath assertions against stdout/stderr when the stream is valid JSON, matching the HTTP body JSONPath authoring model."
+    description =
+      "Top-level Test.cmd and shell Step.cmd support JSONPath assertions against stdout/stderr when the stream is valid JSON, matching the HTTP body JSONPath authoring model."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "runner.shell.stdout-patterns" }
     contributes { "goal.lang-independent"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:assertShellStream" }
+      new CodeImpl { at = "internal/executor/executor.go:assertShellStream" }
     }
   }
   new {
     id = "runner.shell.capture-stdout"
     name = "sequential_shell_steps_capture_stdout"
-    description = "Sequential shell steps can capture stdout into an env var and use it in later steps; one trailing newline is trimmed for shell captures."
+    description =
+      "Sequential shell steps can capture stdout into an env var and use it in later steps; one trailing newline is trimmed for shell captures."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "kind.shell" }
     contributes { "goal.lang-independent"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:runSteps" }
+      new CodeImpl { at = "internal/executor/executor.go:runSteps" }
     }
   }
   new {
     id = "runner.steps.sequential"
     name = "steps_run_in_authored_order"
-    description = "Test.steps runs each Step in authored order, carries captures forward through the per-test state map, and skips later non-always steps after the first failure."
+    description =
+      "Test.steps runs each Step in authored order, carries captures forward through the per-test state map, and skips later non-always steps after the first failure."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:runSteps" }
+      new CodeImpl { at = "internal/executor/executor.go:runSteps" }
     }
   }
   new {
     id = "runner.hooks.lifecycle"
     name = "before_after_hooks_with_scopes_and_capture"
-    description = "Plan-level before/after hooks run in deterministic key order; scope=all hooks run once per suite, scope=each hooks run per test, and hook stdout can be captured into the body env."
+    description =
+      "Plan-level before/after hooks run in deterministic key order; scope=all hooks run once per suite, scope=each hooks run per test, and hook stdout can be captured into the body env."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:Run" }
+      new CodeImpl { at = "internal/executor/executor.go:Run" }
     }
   }
   new {
     id = "kind.http"
     name = "http_kind_with_cassette_replay"
-    description = "Step.http issues an HTTP request with body/headers/method; the `cassette` option records or replays the response so the test is deterministic offline."
+    description =
+      "Step.http issues an HTTP request with body/headers/method; the `cassette` option records or replays the response so the test is deterministic offline."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -427,7 +481,8 @@ scenarios {
   new {
     id = "kind.playwright"
     name = "playwright_kind_lightweight_harness"
-    description = "Step.playwright drives a single page via the embedded Node harness; pixel-diff against ScreenshotSnapshot and expectConsole assertions land here."
+    description =
+      "Step.playwright drives a single page via the embedded Node harness; pixel-diff against ScreenshotSnapshot and expectConsole assertions land here."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -436,33 +491,36 @@ scenarios {
   new {
     id = "runner.playwright.pixel-diff"
     name = "playwright_screenshot_threshold_uses_pixel_diff"
-    description = "When `pixelmatch` and `pngjs` are available, ScreenshotSnapshot compares PNGs by diff percentage against `thresholdPct`, writing `.actual` and `.diff` artifacts on failure; otherwise it falls back to byte-exact comparison with an install hint."
+    description =
+      "When `pixelmatch` and `pngjs` are available, ScreenshotSnapshot compares PNGs by diff percentage against `thresholdPct`, writing `.actual` and `.diff` artifacts on failure; otherwise it falls back to byte-exact comparison with an install hint."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "kind.playwright" }
     contributes { "goal.lang-independent"; "goal.differential" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/playwright.go:checkScreenshot" }
+      new CodeImpl { at = "internal/executor/playwright.go:checkScreenshot" }
     }
   }
   new {
     id = "runner.playwright.console-assertions"
     name = "playwright_console_assertions"
-    description = "Playwright steps can assert required and forbidden console/pageerror substrings through ConsoleAssertion."
+    description =
+      "Playwright steps can assert required and forbidden console/pageerror substrings through ConsoleAssertion."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "kind.playwright" }
     contributes { "goal.lang-independent"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/playwright.go:checkConsole" }
+      new CodeImpl { at = "internal/executor/playwright.go:checkConsole" }
     }
   }
   new {
     id = "kind.playwright-test"
     name = "playwrightTest_kind_wraps_external_runner"
-    description = "Step.playwrightTest delegates to `@playwright/test` (fixtures, traces, retries) and round-trips the JUnit output back to pkspec's tally."
+    description =
+      "Step.playwrightTest delegates to `@playwright/test` (fixtures, traces, retries) and round-trips the JUnit output back to pkspec's tally."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -471,20 +529,22 @@ scenarios {
   new {
     id = "runner.playwright-test.grep-filter"
     name = "playwright_test_grep_filter_is_forwarded"
-    description = "PlaywrightTestSpec.grep is forwarded as `--grep` to @playwright/test so a pkspec step can run a focused subset of a suite."
+    description =
+      "PlaywrightTestSpec.grep is forwarded as `--grep` to @playwright/test so a pkspec step can run a focused subset of a suite."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "kind.playwright-test" }
     contributes { "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/playwrighttest.go:runPlaywrightTestStep" }
+      new CodeImpl { at = "internal/executor/playwrighttest.go:runPlaywrightTestStep" }
     }
   }
   new {
     id = "kind.sql"
     name = "sql_kind_with_embedded_sqlite"
-    description = "Step.sql runs against modernc.org/sqlite (pure Go, no cgo). DML and parameterised queries are first-class."
+    description =
+      "Step.sql runs against modernc.org/sqlite (pure Go, no cgo). DML and parameterised queries are first-class."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -493,13 +553,14 @@ scenarios {
   new {
     id = "kind.pluggable"
     name = "kind_is_pluggable_via_pkl_class_plus_go_executor"
-    description = "Adding a new kind = a Pkl Spec class on Step + a `Step.kind` value + a Go function under internal/executor/. No core changes."
+    description =
+      "Adding a new kind = a Pkl Spec class on Step + a `Step.kind` value + a Go function under internal/executor/. No core changes."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/notes/runner-design.md" }
+      new DocImpl { at = "docs/notes/runner-design.md" }
     }
   }
 
@@ -508,78 +569,84 @@ scenarios {
   new {
     id = "adapter.dsl"
     name = "adapter_protocol_is_pkl_data"
-    description = "`pkl/Adapter.pkl` defines AdapterSuite, Adapter, Discover, Plan, Run, CaseOverlay, and AdapterCase as Pkl values. The rendered output contains command argv, protocol, data formats, batch hints, overlays, and explicit generated cases; no runner-specific Go registry is needed for authoring."
+    description =
+      "`pkl/Adapter.pkl` defines AdapterSuite, Adapter, Discover, Plan, Run, CaseOverlay, and AdapterCase as Pkl values. The rendered output contains command argv, protocol, data formats, batch hints, overlays, and explicit generated cases; no runner-specific Go registry is needed for authoring."
     tags { "spec" }
     severity = "major"
     reviewStatus = "review"
     contributes { "goal.adapter-dsl"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "pkl/Adapter.pkl" }
+      new CodeImpl { at = "pkl/Adapter.pkl" }
     }
   }
   new {
     id = "adapter.extends-builtins"
     name = "built_in_adapters_are_selected_with_extends"
-    description = "Vitest, Playwright, node:test, go test, and moon test are exposed as Pkl adapter subclasses under `pkl/adapters/`. Projects specialize them with normal Pkl `extends` instead of selecting from a Go-side registry."
+    description =
+      "Vitest, Playwright, node:test, go test, and moon test are exposed as Pkl adapter subclasses under `pkl/adapters/`. Projects specialize them with normal Pkl `extends` instead of selecting from a Go-side registry."
     tags { "spec" }
     severity = "major"
     reviewStatus = "review"
     dependsOn { "adapter.dsl" }
     contributes { "goal.adapter-dsl"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "pkl/adapters/Vitest.pkl" }
+      new CodeImpl { at = "pkl/adapters/Vitest.pkl" }
     }
   }
   new {
     id = "adapter.overlays-and-cases"
     name = "adapter_suites_support_overlays_and_explicit_cases"
-    description = "`overlays` attach specRef/tags/pending/timeout to native runner-discovered cases, while `cases` lets pkspec own generated native test registration via sourceModule/exportName/params."
+    description =
+      "`overlays` attach specRef/tags/pending/timeout to native runner-discovered cases, while `cases` lets pkspec own generated native test registration via sourceModule/exportName/params."
     tags { "spec" }
     severity = "major"
     reviewStatus = "review"
     dependsOn { "adapter.dsl" }
     contributes { "goal.adapter-dsl"; "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "pkl/Adapter.test.pkl" }
+      new CodeImpl { at = "pkl/Adapter.test.pkl" }
     }
   }
   new {
     id = "adapter.examples"
     name = "adapter_examples_cover_builtin_and_external_runners"
-    description = "Examples cover Vitest, Playwright, node:test, go test, moon test, an arbitrary external protocol adapter, and a runnable protocol smoke adapter. Schema examples validate with `pkl eval`; the smoke example runs with `pkspec adapter`."
+    description =
+      "Examples cover Vitest, Playwright, node:test, go test, moon test, an arbitrary external protocol adapter, and a runnable protocol smoke adapter. Schema examples validate with `pkl eval`; the smoke example runs with `pkspec adapter`."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "review"
     dependsOn { "adapter.dsl"; "adapter.extends-builtins" }
     contributes { "goal.adapter-dsl" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/notes/adapters.md" }
+      new DocImpl { at = "docs/notes/adapters.md" }
     }
   }
   new {
     id = "adapter.protocol-runtime"
     name = "adapter_protocol_runtime_runs_discover_manifest_and_events"
-    description = "`pkspec adapter -f Adapter.pkl` loads the rendered adapter plan, runs `discover.command`, merges explicit `cases` and `overlays`, writes a JSON manifest for `run.command`, parses `pkspec-events-jsonl`, and exits non-zero on failed / errored / skipped adapter cases."
+    description =
+      "`pkspec adapter -f Adapter.pkl` loads the rendered adapter plan, runs `discover.command`, merges explicit `cases` and `overlays`, writes a JSON manifest for `run.command`, parses `pkspec-events-jsonl`, and exits non-zero on failed / errored / skipped adapter cases."
     tags { "spec" }
     severity = "major"
     reviewStatus = "review"
     dependsOn { "adapter.dsl"; "adapter.overlays-and-cases" }
     contributes { "goal.adapter-dsl"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/adapter/adapter.go" }
+      new CodeImpl { at = "internal/adapter/adapter.go" }
     }
   }
   new {
     id = "adapter.native-shims"
     name = "native_adapter_shims_emit_cases_and_events"
-    description = "The built-in Vitest, Playwright, node:test, go test, and moon test adapter commands implement `discover`, read `--manifest $PKSPEC_CASE_MANIFEST` for `run`, and emit pkspec case JSON / event JSONL without adding a Go-side adapter registry."
+    description =
+      "The built-in Vitest, Playwright, node:test, go test, and moon test adapter commands implement `discover`, read `--manifest $PKSPEC_CASE_MANIFEST` for `run`, and emit pkspec case JSON / event JSONL without adding a Go-side adapter registry."
     tags { "spec" }
     severity = "major"
     reviewStatus = "review"
     dependsOn { "adapter.protocol-runtime"; "adapter.extends-builtins" }
     contributes { "goal.adapter-dsl"; "goal.lang-independent"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/adaptershim/shim.go" }
+      new CodeImpl { at = "internal/adaptershim/shim.go" }
     }
     openQuestions {
       "native shim を core に promote する (= built-in command として ship する) 閾値の判断軸が定まっていない — どの runner が \"安定した\" と言えるかの基準が必要。"
@@ -588,14 +655,15 @@ scenarios {
   new {
     id = "adapter.coverage-collectors"
     name = "coverage_collectors_share_the_adapter_command_protocol"
-    description = "`ReportCollector` attaches post-run report commands to an AdapterSuite. The first runnable format is `PkspecCoverageJson` with metrics `{name, covered, total}`; the CLI prints normalized coverage summaries independent of the source runner. Lcov and Cobertura are declared as future parser targets."
+    description =
+      "`ReportCollector` attaches post-run report commands to an AdapterSuite. The first runnable format is `PkspecCoverageJson` with metrics `{name, covered, total}`; the CLI prints normalized coverage summaries independent of the source runner. Lcov and Cobertura are declared as future parser targets."
     tags { "spec" }
     severity = "major"
     reviewStatus = "review"
     dependsOn { "adapter.dsl"; "adapter.protocol-runtime"; "adapter.native-shims" }
     contributes { "goal.adapter-dsl"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "pkl/Adapter.pkl" }
+      new CodeImpl { at = "pkl/Adapter.pkl" }
     }
     openQuestions {
       "Lcov / Cobertura parser を pkspec 本体に取り込むか、 ecosystem-specific shim 側に置くかの線引きが未確定。"
@@ -605,14 +673,15 @@ scenarios {
   new {
     id = "adapter.init-embedded"
     name = "pkspec_init_writes_adapter_schema_modules"
-    description = "`pkspec init --dir` materializes `Adapter.pkl` and the built-in `adapters/*.pkl` modules alongside Test/Spec/QuickCheck so installed binaries can author adapter suites without a source checkout."
+    description =
+      "`pkspec init --dir` materializes `Adapter.pkl` and the built-in `adapters/*.pkl` modules alongside Test/Spec/QuickCheck so installed binaries can author adapter suites without a source checkout."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "review"
     dependsOn { "adapter.dsl"; "adapter.extends-builtins" }
     contributes { "goal.adapter-dsl" }
     implementations {
-      new Implementation { kind = "code"; at = "cmd/pkspec/init_cmd.go" }
+      new CodeImpl { at = "cmd/pkspec/init_cmd.go" }
     }
   }
 
@@ -621,7 +690,8 @@ scenarios {
   new {
     id = "spec.auto-pending"
     name = "spec_tag_with_empty_body_auto_pending"
-    description = "Test with `tags { \"spec\" }` and no cmd / steps / parallelSteps is reported as pending — written-down intent, no failure."
+    description =
+      "Test with `tags { \"spec\" }` and no cmd / steps / parallelSteps is reported as pending — written-down intent, no failure."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -630,259 +700,284 @@ scenarios {
   new {
     id = "spec.cross-reference"
     name = "scenario_id_cross_references_test_specRef"
-    description = "Scenario.id (in Spec.pkl) and Test.specRef (in Test.pkl) form the bidirectional cross-reference. The runner prints `(verifies <id>)` on each test line."
+    description =
+      "Scenario.id (in Spec.pkl) and Test.specRef (in Test.pkl) form the bidirectional cross-reference. The runner prints `(verifies <id>)` on each test line."
     tags { "spec" }
     severity = "critical"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:CheckUnimplemented" }
+      new CodeImpl { at = "internal/spec/spec.go:CheckUnimplemented" }
     }
   }
   new {
     id = "spec.implementation-index"
     name = "spec_id_backlinks_aggregate_implementations"
-    description = "`pkspec spec` renders a per-spec implementation index, and `pkspec implementations` prints just that view: each Scenario.id points back to active Test.specRef implementers, plus code/doc entries from `Scenario.implementations`."
+    description =
+      "`pkspec spec` renders a per-spec implementation index, and `pkspec implementations` prints just that view: each Scenario.id points back to active Test.specRef implementers, plus code/doc entries from `Scenario.implementations`."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference"; "spec.implemented-by" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:ImplementationIndex" }
+      new CodeImpl { at = "internal/spec/spec.go:ImplementationIndex" }
     }
   }
   new {
     id = "spec.lifecycle"
     name = "review_status_lifecycle"
-    description = "draft → review → approved; deprecated retires a spec; replacedBy is the forwarding pointer. `pkspec check` skips draft + deprecated."
+    description =
+      "draft → review → approved; deprecated retires a spec; replacedBy is the forwarding pointer. `pkspec check` skips draft + deprecated."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:checkFromScenarios" }
+      new CodeImpl { at = "internal/spec/spec.go:checkFromScenarios" }
     }
   }
   new {
     id = "spec.knowledge-graph"
     name = "knowledge_graph_edges"
-    description = "dependsOn (precondition), supersedes (replaces a retired spec), parent (sub-spec refinement). `pkspec graph` emits a graphviz `dot` document."
+    description =
+      "dependsOn (precondition), supersedes (replaces a retired spec), parent (sub-spec refinement). `pkspec graph` emits a graphviz `dot` document."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:Graph" }
+      new CodeImpl { at = "internal/spec/spec.go:Graph" }
     }
   }
   new {
     id = "spec.graph-implementation-links"
     name = "spec_graph_includes_implementation_backlinks"
-    description = "`pkspec graph` includes implementation nodes derived from active Test.specRef and from `Scenario.implementations` code/doc entries, with edges back to the Scenario.id they verify."
+    description =
+      "`pkspec graph` includes implementation nodes derived from active Test.specRef and from `Scenario.implementations` code/doc entries, with edges back to the Scenario.id they verify."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.knowledge-graph"; "spec.implementation-index" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:Graph" }
+      new CodeImpl { at = "internal/spec/spec.go:Graph" }
     }
   }
   new {
     id = "spec.decision-log"
     name = "decision_log_is_append_only"
-    description = "Each Scenario.decisions entry records date + author + summary + rationale. Append-only by convention; `pkspec decisions` flattens newest-first."
+    description =
+      "Each Scenario.decisions entry records date + author + summary + rationale. Append-only by convention; `pkspec decisions` flattens newest-first."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:DecisionLog" }
+      new CodeImpl { at = "internal/spec/spec.go:DecisionLog" }
     }
   }
   new {
     id = "spec.goals"
     name = "goal_concept_with_priority"
-    description = "Goals carry user-facing value statements with no test of their own. Scenarios point at Goals via `contributes`; `pkspec goals` calculates achievement via each Goal's progress method, and `pkspec next` ranks unimplemented specs by best Goal priority then severity."
+    description =
+      "Goals carry user-facing value statements with no test of their own. Scenarios point at Goals via `contributes`; `pkspec goals` calculates achievement via each Goal's progress method, and `pkspec next` ranks unimplemented specs by best Goal priority then severity."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:Goals" }
+      new CodeImpl { at = "internal/spec/spec.go:Goals" }
     }
   }
   new {
     id = "spec.goal-progress"
     name = "goal_progress_method_controls_achievement_rate"
-    description = "Goal.progress.method defines how achievement is calculated. `scenario-count` uses implemented contributing scenarios / all contributing scenarios; `severity-weighted` uses critical/major/minor weights of 5/3/1."
+    description =
+      "Goal.progress.method defines how achievement is calculated. `scenario-count` uses implemented contributing scenarios / all contributing scenarios; `severity-weighted` uses critical/major/minor weights of 5/3/1."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.goals" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:goalProgress" }
+      new CodeImpl { at = "internal/spec/spec.go:goalProgress" }
     }
   }
   new {
     id = "spec.milestones"
     name = "milestones_roll_up_goal_progress"
-    description = "Milestones group Goal ids into planning checkpoints. `pkspec milestones` renders each active Milestone with due/status metadata, referenced Goal progress, and missing Goal references surfaced by lint."
+    description =
+      "Milestones group Goal ids into planning checkpoints. `pkspec milestones` renders each active Milestone with due/status metadata, referenced Goal progress, and missing Goal references surfaced by lint."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.goals"; "spec.goal-progress" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:Milestones" }
+      new CodeImpl { at = "internal/spec/spec.go:Milestones" }
     }
   }
   new {
     id = "docs.advanced-launch-readiness-recipe"
     name = "advanced_launch_readiness_recipe_is_copyable"
-    description = "Advanced docs include a larger copyable recipe that combines multiple Goals, severity-weighted progress, Milestones, linked Tests, and the review commands used to interpret the output."
+    description =
+      "Advanced docs include a larger copyable recipe that combines multiple Goals, severity-weighted progress, Milestones, linked Tests, and the review commands used to interpret the output."
     tags { "spec"; "docs" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "spec.goal-progress"; "spec.milestones" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/advanced/recipes/launch-readiness.md" }
+      new DocImpl { at = "docs/advanced/recipes/launch-readiness.md" }
     }
   }
   new {
     id = "docs.advanced-open-questions-policy-recipe"
     name = "open_questions_policy_recipe_is_copyable"
-    description = "Advanced docs include a recipe for the openQuestions policy: authoring openQuestions, the critical-vs-major lint split, promoting answered questions into decisions, and CI integration."
+    description =
+      "Advanced docs include a recipe for the openQuestions policy: authoring openQuestions, the critical-vs-major lint split, promoting answered questions into decisions, and CI integration."
     tags { "spec"; "docs" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/advanced/recipes/open-questions-policy.md" }
+      new DocImpl { at = "docs/advanced/recipes/open-questions-policy.md" }
     }
   }
   new {
     id = "docs.advanced-doctor-recipe"
     name = "doctor_environment_check_recipe_is_copyable"
-    description = "Advanced docs include a recipe for `pkspec doctor`: required-vs-recommended tool tiers, CI integration, pre-commit usage, and JSON output for downstream tools."
+    description =
+      "Advanced docs include a recipe for `pkspec doctor`: required-vs-recommended tool tiers, CI integration, pre-commit usage, and JSON output for downstream tools."
     tags { "spec"; "docs" }
     severity = "minor"
     reviewStatus = "review"
     dependsOn { "tooling.doctor" }
     contributes { "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/advanced/recipes/doctor-environment-check.md" }
+      new DocImpl { at = "docs/advanced/recipes/doctor-environment-check.md" }
     }
   }
   new {
     id = "docs.advanced-source-marker-recipe"
     name = "source_marker_recipe_is_copyable"
-    description = "Advanced docs include a recipe for the `pkspec:spec=<id>` source-marker workflow: authoring conventions, audit-then-CI rollout, graph rendering, walk semantics, and the boundary between marker (code-side breadcrumb) and `Scenario.implementations` (spec-side canonical pointers)."
+    description =
+      "Advanced docs include a recipe for the `pkspec:spec=<id>` source-marker workflow: authoring conventions, audit-then-CI rollout, graph rendering, walk semantics, and the boundary between marker (code-side breadcrumb) and `Scenario.implementations` (spec-side canonical pointers)."
     tags { "spec"; "docs" }
     severity = "minor"
     reviewStatus = "review"
-    dependsOn { "tooling.source-scan"; "tooling.dead-source-ref-lint"; "spec.graph-source-backlinks" }
+    dependsOn {
+      "tooling.source-scan"
+      "tooling.dead-source-ref-lint"
+      "spec.graph-source-backlinks"
+    }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/advanced/recipes/source-marker-backlinks.md" }
+      new DocImpl { at = "docs/advanced/recipes/source-marker-backlinks.md" }
     }
   }
   new {
     id = "docs.example-spec-open-questions"
     name = "spec_open_questions_example_is_runnable"
-    description = "The repo ships a runnable two-scenario example under examples/spec-open-questions/ that demonstrates the openQuestions lint policy firing and the pkspec next tie-break, with a README walkthrough."
+    description =
+      "The repo ships a runnable two-scenario example under examples/spec-open-questions/ that demonstrates the openQuestions lint policy firing and the pkspec next tie-break, with a README walkthrough."
     tags { "spec"; "docs" }
     severity = "minor"
     reviewStatus = "review"
     dependsOn { "docs.advanced-open-questions-policy-recipe" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "examples/spec-open-questions/README.md" }
+      new DocImpl { at = "examples/spec-open-questions/README.md" }
     }
   }
   new {
     id = "docs.usability-findings"
     name = "dogfood_usability_findings_are_recorded"
-    description = "docs/notes/usability-findings.md lists the rough edges surfaced by dogfooding pkspec v0.1.10 from a blank project: severity breakdown missing in `pkspec check` summary, `pkspec init` has no follow-up hint, `pkspec/` directory shadows the binary name in amends paths, lint info-row padding, etc. Polish-cycle backlog, not v0.1.11 blockers."
+    description =
+      "docs/notes/usability-findings.md lists the rough edges surfaced by dogfooding pkspec v0.1.10 from a blank project: severity breakdown missing in `pkspec check` summary, `pkspec init` has no follow-up hint, `pkspec/` directory shadows the binary name in amends paths, lint info-row padding, etc. Polish-cycle backlog, not v0.1.11 blockers."
     tags { "spec"; "docs"; "usability" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/notes/usability-findings.md" }
+      new DocImpl { at = "docs/notes/usability-findings.md" }
     }
   }
   new {
     id = "docs.concept-map"
     name = "concept_map_index_exists"
-    description = "docs/notes/concepts.md is a cross-cutting index of every concept pkspec exposes (authoring DSL, knowledge-graph edges, lifecycle, verification, audience projection, kinds, adapter DSL, differential, PBT, history, AI), with Scenario id domain prefixes, CLI commands grouped by purpose, and a table pointing to per-topic detail docs."
+    description =
+      "docs/notes/concepts.md is a cross-cutting index of every concept pkspec exposes (authoring DSL, knowledge-graph edges, lifecycle, verification, audience projection, kinds, adapter DSL, differential, PBT, history, AI), with Scenario id domain prefixes, CLI commands grouped by purpose, and a table pointing to per-topic detail docs."
     tags { "spec"; "docs" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/notes/concepts.md" }
+      new DocImpl { at = "docs/notes/concepts.md" }
     }
   }
   new {
     id = "docs.proposal-scenario-domain-enforcement"
     name = "scenario_domain_enforcement_proposal_exists"
-    description = "docs/proposals/scenario-domain-enforcement.md captures four candidate designs (closed enum field, plan-scoped allow-list at info or warn, auto-detection) for enforcing the 14-prefix Scenario.id convention, recommends the opt-in plan-scoped allow-list, and sketches the implementation."
+    description =
+      "docs/proposals/scenario-domain-enforcement.md captures four candidate designs (closed enum field, plan-scoped allow-list at info or warn, auto-detection) for enforcing the 14-prefix Scenario.id convention, recommends the opt-in plan-scoped allow-list, and sketches the implementation."
     tags { "spec"; "docs"; "proposal" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/proposals/scenario-domain-enforcement.md" }
+      new DocImpl { at = "docs/proposals/scenario-domain-enforcement.md" }
     }
   }
   new {
     id = "docs.proposal-goal-driven-generation"
     name = "goal_driven_scenario_generation_proposal_exists"
-    description = "docs/proposals/goal-driven-scenario-generation.md records the speca-inspired property generation pipeline as a deferred proposal: CLI+LLM, template-based, and hybrid designs with the rationale for deferring all three until a concrete authoring goal is defined."
+    description =
+      "docs/proposals/goal-driven-scenario-generation.md records the speca-inspired property generation pipeline as a deferred proposal: CLI+LLM, template-based, and hybrid designs with the rationale for deferring all three until a concrete authoring goal is defined."
     tags { "spec"; "docs"; "proposal" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/proposals/goal-driven-scenario-generation.md" }
+      new DocImpl { at = "docs/proposals/goal-driven-scenario-generation.md" }
     }
   }
   new {
     id = "spec.prelude"
     name = "prelude_shares_given_across_scenarios"
-    description = "Spec.pkl's top-level `prelude: Listing<SpecStep>` is prepended to every scenario's executed steps. Empty `given/when/then/cleanup` still auto-pends — shared setup doesn't count as having a body."
+    description =
+      "Spec.pkl's top-level `prelude: Listing<SpecStep>` is prepended to every scenario's executed steps. Empty `given/when/then/cleanup` still auto-pends — shared setup doesn't count as having a body."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "pkl/Spec.pkl" }
+      new CodeImpl { at = "pkl/Spec.pkl" }
     }
   }
   new {
     id = "spec.cli-modes"
     name = "pkt_spec_modes_cover_review_and_ci"
-    description = "`pkspec spec` default renders developer SPEC.md; `pkspec docs --audience X` renders audience-specific docs; `pkspec check / coverage / graph / decisions / goals / milestones / next / implementations / orphans` cover the review + CI surface. Filters: `--goal` / `--severity` / `--discover`."
+    description =
+      "`pkspec spec` default renders developer SPEC.md; `pkspec docs --audience X` renders audience-specific docs; `pkspec check / coverage / graph / decisions / goals / milestones / next / implementations / orphans` cover the review + CI surface. Filters: `--goal` / `--severity` / `--discover`."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference"; "spec.goals" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "cmd/pkspec/main.go:cmdSpec" }
+      new CodeImpl { at = "cmd/pkspec/main.go:cmdSpec" }
     }
   }
   new {
     id = "docs.audience-projection"
     name = "audience_specific_docs_projection"
-    description = "`pkspec docs --audience <name>` filters scenarios by `audience { ... }` or `audience:<name>` tags and renders stable Markdown for a target reader. The projection hides runner implementation details by default while preserving scenario prose, Goals, open questions, and decisions for PM/developer profiles."
+    description =
+      "`pkspec docs --audience <name>` filters scenarios by `audience { ... }` or `audience:<name>` tags and renders stable Markdown for a target reader. The projection hides runner implementation details by default while preserving scenario prose, Goals, open questions, and decisions for PM/developer profiles."
     tags { "spec"; "audience:pm"; "audience:end-user"; "audience:developer" }
     audience { "pm"; "end-user"; "developer"; "api"; "operator"; "non-engineer" }
     severity = "major"
@@ -890,149 +985,168 @@ scenarios {
     dependsOn { "spec.cli-modes"; "spec.goals" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "cmd/pkspec/main.go:cmdDocs" }
+      new CodeImpl { at = "cmd/pkspec/main.go:cmdDocs" }
     }
     audienceNotes {
-      ["pm"] = "PM-facing docs can include product value, review status, open questions, and decisions without exposing shell commands or runner internals."
-      ["end-user"] = "A project can generate simpler documentation for different readers from the same written specs."
+      ["pm"] =
+        "PM-facing docs can include product value, review status, open questions, and decisions without exposing shell commands or runner internals."
+      ["end-user"] =
+        "A project can generate simpler documentation for different readers from the same written specs."
     }
   }
   new {
     id = "spec.implemented-by"
     name = "framework_internal_specs_carry_implementation_pointer"
-    description = "A `Scenario.implementations` entry of `new Implementation { kind = \"code\"; at = \"path:Symbol\" }` (or kind = \"doc\") lets a Scenario claim implementation without a Pkl Test. `pkspec check --strict` verifies the file part exists."
+    description =
+      "A `Scenario.implementations` entry of `new Implementation { kind = \"code\"; at = \"path:Symbol\" }` (or kind = \"doc\") lets a Scenario claim implementation without a Pkl Test. `pkspec check --strict` verifies the file part exists."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "spec.cross-reference" }
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/spec.go:scenarioIsImplemented" }
+      new CodeImpl { at = "internal/spec/spec.go:scenarioIsImplemented" }
     }
   }
   new {
     id = "tooling.doctor"
     name = "doctor_reports_missing_tools"
-    description = "`pkspec doctor` reports the presence and version of every external tool pkspec relies on, failing fast (exit 1) when a required tool (`pkl`) is missing and warning when an optional tool (git / node / go) is missing. `--quiet` hides ok rows; `--json` emits machine-readable output."
+    description =
+      "`pkspec doctor` reports the presence and version of every external tool pkspec relies on, failing fast (exit 1) when a required tool (`pkl`) is missing and warning when an optional tool (git / node / go) is missing. `--quiet` hides ok rows; `--json` emits machine-readable output."
     tags { "spec"; "tooling" }
     severity = "minor"
     reviewStatus = "review"
     contributes { "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "code"; at = "cmd/pkspec/doctor_cmd.go:cmdDoctor" }
+      new CodeImpl { at = "cmd/pkspec/doctor_cmd.go:cmdDoctor" }
     }
   }
   new {
     id = "tooling.lint"
     name = "lint_catches_structural_authoring_mistakes"
-    description = "`pkspec lint` reports broken cross-references (dependsOn / supersedes / parent / replacedBy / contributes / active Test.specRef), deprecated Test.specRef links, missing descriptions on approved entries, critical specs with no Goal anchor, deprecated specs without replacedBy, future-dated decisions, and similar invariants. Error-level issues fail the command; warn / info are informational."
+    description =
+      "`pkspec lint` reports broken cross-references (dependsOn / supersedes / parent / replacedBy / contributes / active Test.specRef), deprecated Test.specRef links, missing descriptions on approved entries, critical specs with no Goal anchor, deprecated specs without replacedBy, future-dated decisions, and similar invariants. Error-level issues fail the command; warn / info are informational."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/spec/lint.go:Lint" }
+      new CodeImpl { at = "internal/spec/lint.go:Lint" }
     }
   }
   new {
     id = "tooling.template"
     name = "template_skeleton_for_new_authoring"
-    description = "`pkspec spec --template scenario|goal|module` prints a heavily-commented Pkl skeleton so authors don't start from a blank file. The module template includes the canonical amends + feature + goals + scenarios layout with placeholder ids."
+    description =
+      "`pkspec spec --template scenario|goal|module` prints a heavily-commented Pkl skeleton so authors don't start from a blank file. The module template includes the canonical amends + feature + goals + scenarios layout with placeholder ids."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "code"; at = "cmd/pkspec/spec_templates.go" }
+      new CodeImpl { at = "cmd/pkspec/spec_templates.go" }
     }
   }
   new {
     id = "tooling.authoring-guide"
     name = "step_by_step_authoring_walkthrough_exists"
-    description = "A start-here doc walks new authors from empty directory to running `pkspec check --strict --discover` and `pkspec lint --discover` in roughly 15 minutes. Covers the Goal / Scenario / Test mental model, the dot-path id convention, lifecycle, graph edges, decision logs, framework-internal specs, and the CI invocation."
+    description =
+      "A start-here doc walks new authors from empty directory to running `pkspec check --strict --discover` and `pkspec lint --discover` in roughly 15 minutes. Covers the Goal / Scenario / Test mental model, the dot-path id convention, lifecycle, graph edges, decision logs, framework-internal specs, and the CI invocation."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/notes/authoring-guide.md" }
+      new DocImpl { at = "docs/notes/authoring-guide.md" }
     }
   }
   new {
     id = "docs.quick-start"
     name = "quick_start_introduces_pkspec"
-    description = "A quick-start document introduces what pkspec is, the author's intent (Pkl-backed robustness, language neutrality, structured flow-to-test mapping, and spec-driven documentation), installation, the first Test.pkl, the first Spec.pkl, where to go next, and pkfire as the sibling task runner for cached project tasks rather than presenting caching as a pkspec responsibility."
+    description =
+      "A quick-start document introduces what pkspec is, the author's intent (Pkl-backed robustness, language neutrality, structured flow-to-test mapping, and spec-driven documentation), installation, the first Test.pkl, the first Spec.pkl, where to go next, and pkfire as the sibling task runner for cached project tasks rather than presenting caching as a pkspec responsibility."
     tags { "spec"; "docs" }
     audience { "developer"; "pm"; "non-engineer" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/quick-start.md" }
+      new DocImpl { at = "docs/quick-start.md" }
     }
-    audienceNotes { ["end-user"] = "New readers can understand what pkspec is and run a minimal example before reading the full authoring guide." }
+    audienceNotes {
+      ["end-user"] =
+        "New readers can understand what pkspec is and run a minimal example before reading the full authoring guide."
+    }
   }
   new {
     id = "docs.quick-start-ja"
     name = "japanese_quick_start_introduces_pkspec"
-    description = "A Japanese quick-start document covers the same introductory path as the English quick-start: concept, author intent, installation, first Test.pkl, first Spec.pkl, common commands, next documents, and the pkfire boundary for cached project tasks."
+    description =
+      "A Japanese quick-start document covers the same introductory path as the English quick-start: concept, author intent, installation, first Test.pkl, first Spec.pkl, common commands, next documents, and the pkfire boundary for cached project tasks."
     tags { "spec"; "docs"; "lang:ja" }
     audience { "developer"; "pm"; "non-engineer" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/quick-start-ja.md" }
+      new DocImpl { at = "docs/quick-start-ja.md" }
     }
-    audienceNotes { ["end-user"] = "Japanese readers can understand what pkspec is and run a minimal example before reading detailed references." }
+    audienceNotes {
+      ["end-user"] =
+        "Japanese readers can understand what pkspec is and run a minimal example before reading detailed references."
+    }
   }
   new {
     id = "docs.pkfire-boundary"
     name = "pkfire_boundary_is_documented"
-    description = "Introductory docs make the responsibility boundary explicit: pkspec focuses on typed tests, spec links, and review/CI reporting; pkfire is the sibling task runner for cached project tasks and build-style workflows."
+    description =
+      "Introductory docs make the responsibility boundary explicit: pkspec focuses on typed tests, spec links, and review/CI reporting; pkfire is the sibling task runner for cached project tasks and build-style workflows."
     tags { "spec"; "docs" }
     audience { "developer" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/quick-start.md" }
+      new DocImpl { at = "docs/quick-start.md" }
     }
   }
   new {
     id = "docs.project-gates"
     name = "project_gate_authoring_note_exists"
-    description = "Docs describe a recommended layout for using pkspec as a local gate and task-runner contract layer in another repository, including specs/, rendered docs, and executable Test.pkl files."
+    description =
+      "Docs describe a recommended layout for using pkspec as a local gate and task-runner contract layer in another repository, including specs/, rendered docs, and executable Test.pkl files."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/notes/project-gates.md" }
+      new DocImpl { at = "docs/notes/project-gates.md" }
     }
   }
   new {
     id = "docs.contract-strength"
     name = "authoring_docs_distinguish_smoke_and_contract_checks"
-    description = "Docs explain when a shell check is only smoke-level and when it should graduate into a contract check over graph edges, JSON fields, stderr diagnostics, or ordered output."
+    description =
+      "Docs explain when a shell check is only smoke-level and when it should graduate into a contract check over graph edges, JSON fields, stderr diagnostics, or ordered output."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.spec-driven"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/notes/project-gates.md" }
+      new DocImpl { at = "docs/notes/project-gates.md" }
     }
   }
   new {
     id = "spec.strict-gate.recipe"
     name = "strict_spec_gate_recipe_is_copyable"
-    description = "Docs provide a copyable `pkspec check --strict` recipe for projects that adopt pkspec as their spec gate."
+    description =
+      "Docs provide a copyable `pkspec check --strict` recipe for projects that adopt pkspec as their spec gate."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.spec-driven"; "goal.ci-trustworthy" }
     implementations {
-      new Implementation { kind = "doc"; at = "docs/notes/project-gates.md" }
+      new DocImpl { at = "docs/notes/project-gates.md" }
     }
   }
 
@@ -1041,7 +1155,8 @@ scenarios {
   new {
     id = "parallel.parallel-steps"
     name = "parallelSteps_run_concurrently"
-    description = "Test.parallelSteps schedules every step concurrently (vs Steps' sequential order); first failure cancels in-flight peers."
+    description =
+      "Test.parallelSteps schedules every step concurrently (vs Steps' sequential order); first failure cancels in-flight peers."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -1050,7 +1165,8 @@ scenarios {
   new {
     id = "parallel.background"
     name = "background_with_readyProbe"
-    description = "Background processes start before the test body, poll readyProbe until pass, are killed at test exit (pass or fail)."
+    description =
+      "Background processes start before the test body, poll readyProbe until pass, are killed at test exit (pass or fail)."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -1059,26 +1175,28 @@ scenarios {
   new {
     id = "runner.eventually"
     name = "eventually_polls_until_assertions_pass"
-    description = "Step.eventually re-executes the step body on an interval until all assertions pass or the timeout expires, returning the passing attempt unchanged."
+    description =
+      "Step.eventually re-executes the step body on an interval until all assertions pass or the timeout expires, returning the passing attempt unchanged."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.ci-trustworthy"; "goal.parallel-execution" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:runStepEventually" }
+      new CodeImpl { at = "internal/executor/executor.go:runStepEventually" }
     }
   }
   new {
     id = "parallel.dynamic-port"
     name = "background_portEnv_for_dynamic_ports"
-    description = "Background.portEnv asks the OS for a free TCP port and injects it into the test env so cmd / readyProbe / steps all see the same port."
+    description =
+      "Background.portEnv asks the OS for a free TCP port and injects it into the test env so cmd / readyProbe / steps all see the same port."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "parallel.background" }
     contributes { "goal.parallel-execution" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:getFreePort" }
+      new CodeImpl { at = "internal/executor/executor.go:getFreePort" }
     }
   }
 
@@ -1087,7 +1205,8 @@ scenarios {
   new {
     id = "history.timings-jsonl"
     name = "timings_jsonl_records_per_test_durations"
-    description = ".pkspec/timings.jsonl records {ts, test, duration_ms, outcome, env, kind} per test, env-bucketed via PKSPEC_TIMING_ENV."
+    description =
+      ".pkspec/timings.jsonl records {ts, test, duration_ms, outcome, env, kind} per test, env-bucketed via PKSPEC_TIMING_ENV."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -1096,7 +1215,8 @@ scenarios {
   new {
     id = "history.shard-lpt"
     name = "shard_K_of_N_via_LPT"
-    description = "`pkspec exec --shard=K/N` splits the test set into N bins using Longest-Processing-Time bin-packing on the median of recent 5 history records. Tie-breaking is deterministic so the same input produces the same assignment across machines."
+    description =
+      "`pkspec exec --shard=K/N` splits the test set into N bins using Longest-Processing-Time bin-packing on the median of recent 5 history records. Tie-breaking is deterministic so the same input produces the same assignment across machines."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -1106,39 +1226,42 @@ scenarios {
   new {
     id = "history.total-timeout"
     name = "total_timeout_aborts_cleanly"
-    description = "`--total-timeout=DUR` wraps the run in context.WithTimeout; on expire, in-flight test errors with reason \"aborted by total-timeout\", remaining tests report Outcome=Skipped. Tally.IsGreen returns false."
+    description =
+      "`--total-timeout=DUR` wraps the run in context.WithTimeout; on expire, in-flight test errors with reason \"aborted by total-timeout\", remaining tests report Outcome=Skipped. Tally.IsGreen returns false."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.history-aware" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:Run" }
+      new CodeImpl { at = "internal/executor/executor.go:Run" }
     }
   }
   new {
     id = "history.rerun-failed"
     name = "rerun_failed_replays_history"
-    description = "`--rerun-failed` filters to tests whose most recent timings.jsonl record is fail / error / timeout / skip. Composes with --shard and --only/--tag."
+    description =
+      "`--rerun-failed` filters to tests whose most recent timings.jsonl record is fail / error / timeout / skip. Composes with --shard and --only/--tag."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "history.timings-jsonl" }
     contributes { "goal.history-aware" }
     implementations {
-      new Implementation { kind = "code"; at = "cmd/pkspec/rerun.go:pickRerunFailed" }
+      new CodeImpl { at = "cmd/pkspec/rerun.go:pickRerunFailed" }
     }
   }
   new {
     id = "history.timings-cli"
     name = "pkt_timings_inspection_subcommand"
-    description = "`pkspec timings -f Test.pkl [--failing|--shard=K/N|--env NAME]` reports per-test runs/median/p90/latest/kind without running anything. `--shard=K/N` previews the assignment byte-for-byte."
+    description =
+      "`pkspec timings -f Test.pkl [--failing|--shard=K/N|--env NAME]` reports per-test runs/median/p90/latest/kind without running anything. `--shard=K/N` previews the assignment byte-for-byte."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "history.timings-jsonl"; "history.shard-lpt" }
     contributes { "goal.history-aware" }
     implementations {
-      new Implementation { kind = "code"; at = "cmd/pkspec/timings_cmd.go" }
+      new CodeImpl { at = "cmd/pkspec/timings_cmd.go" }
     }
   }
 
@@ -1147,7 +1270,8 @@ scenarios {
   new {
     id = "pbt.iterations"
     name = "test_iterations_seed_based"
-    description = "Test.iterations = N runs the body N times with seed-deterministic generation; the same seed reproduces the same trace."
+    description =
+      "Test.iterations = N runs the body N times with seed-deterministic generation; the same seed reproduces the same trace."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -1156,20 +1280,22 @@ scenarios {
   new {
     id = "pbt.iteration-seed.uint32-range"
     name = "iteration_seed_is_explicit_uint32"
-    description = "Test.iterationSeed is constrained to the xorshift32 seed range [0, 4294967295] in the Pkl schema, and the Go executor rejects out-of-range values before converting to uint32."
+    description =
+      "Test.iterationSeed is constrained to the xorshift32 seed range [0, 4294967295] in the Pkl schema, and the Go executor rejects out-of-range values before converting to uint32."
     tags { "spec"; "security"; "pbt" }
     severity = "major"
     reviewStatus = "approved"
     dependsOn { "pbt.iterations" }
     contributes { "goal.property-based"; "goal.secure-release" }
     implementations {
-      new Implementation { kind = "code"; at = "pkl/Test.pkl:iterationSeed" }
+      new CodeImpl { at = "pkl/Test.pkl:iterationSeed" }
     }
   }
   new {
     id = "pbt.inputs"
     name = "polymorphic_input_schema"
-    description = "Test.inputs uses an abstract `Input` class with concrete subclasses (IntInput, ...). Each iteration projects fresh values via the seed stream."
+    description =
+      "Test.inputs uses an abstract `Input` class with concrete subclasses (IntInput, ...). Each iteration projects fresh values via the seed stream."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -1179,40 +1305,43 @@ scenarios {
   new {
     id = "pbt.shrinking"
     name = "input_space_shrinking_on_failure"
-    description = "On a failing iteration, the runner shrinks each input toward its lower bound / half / minus one, taking the smallest failing case as the report."
+    description =
+      "On a failing iteration, the runner shrinks each input toward its lower bound / half / minus one, taking the smallest failing case as the report."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "pbt.inputs" }
     contributes { "goal.property-based" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/inputs.go" }
+      new CodeImpl { at = "internal/executor/inputs.go" }
     }
   }
   new {
     id = "pbt.pkl-int-shrinking"
     name = "pkl_internal_integer_shrinking"
-    description = "`QuickCheck.checkAllInt` and `shrinkIntValue` shrink value-only integer properties inside Pkl, surfacing the original value, shrunk value, and adopted shrink steps."
+    description =
+      "`QuickCheck.checkAllInt` and `shrinkIntValue` shrink value-only integer properties inside Pkl, surfacing the original value, shrunk value, and adopted shrink steps."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "pbt.iterations" }
     contributes { "goal.property-based" }
     implementations {
-      new Implementation { kind = "code"; at = "pkl/QuickCheck.pkl" }
+      new CodeImpl { at = "pkl/QuickCheck.pkl" }
     }
   }
   new {
     id = "pbt.steps-mode"
     name = "property_iterations_support_steps_mode"
-    description = "Property iterations work with Test.steps as well as Test.cmd; each iteration runs the whole step sequence and `always` cleanup steps still fire after failures."
+    description =
+      "Property iterations work with Test.steps as well as Test.cmd; each iteration runs the whole step sequence and `always` cleanup steps still fire after failures."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "pbt.iterations" }
     contributes { "goal.property-based"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/inputs.go:runInputIterated" }
+      new CodeImpl { at = "internal/executor/inputs.go:runInputIterated" }
     }
   }
 
@@ -1221,122 +1350,132 @@ scenarios {
   new {
     id = "diff.reference-snapshot"
     name = "reference_snapshot_files_committed"
-    description = ".pkspec/snapshots/<name>.bytes is written on first run and committed; subsequent runs match against it. Mismatch writes a `.actual` sibling for diffing."
+    description =
+      ".pkspec/snapshots/<name>.bytes is written on first run and committed; subsequent runs match against it. Mismatch writes a `.actual` sibling for diffing."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
     contributes { "goal.differential" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:checkSnapshot" }
+      new CodeImpl { at = "internal/executor/executor.go:checkSnapshot" }
     }
   }
   new {
     id = "diff.inline-snapshot"
     name = "inline_snapshot_rewrite"
-    description = "inlineStdout / inlineStderr (Test + Step) and inlineHttpBody (Step on http kind) carry an in-source snapshot value. Mismatch on a regular run fails the step; `--update-inline-snapshots` rewrites the field in place with the captured value. The schema file itself is the snapshot artefact."
+    description =
+      "inlineStdout / inlineStderr (Test + Step) and inlineHttpBody (Step on http kind) carry an in-source snapshot value. Mismatch on a regular run fails the step; `--update-inline-snapshots` rewrites the field in place with the captured value. The schema file itself is the snapshot artefact."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.differential" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/inline/rewriter.go:ReplaceField" }
+      new CodeImpl { at = "internal/inline/rewriter.go:ReplaceField" }
     }
   }
   new {
     id = "diff.inline-http-body"
     name = "inline_snapshot_of_http_response_body"
-    description = "`Step.inlineHttpBody` is the http-kind sibling of `inlineStdout`. The captured response body is compared against the inline string; mismatch fails unless `--update-inline-snapshots` is set, in which case the field is rewritten in the Pkl source."
+    description =
+      "`Step.inlineHttpBody` is the http-kind sibling of `inlineStdout`. The captured response body is compared against the inline string; mismatch fails unless `--update-inline-snapshots` is set, in which case the field is rewritten in the Pkl source."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:runHttpStep" }
+      new CodeImpl { at = "internal/executor/executor.go:runHttpStep" }
     }
   }
   new {
     id = "diff.inline-jsonpath"
     name = "inline_snapshot_per_jsonpath_subtree"
-    description = "`Step.inlineJsonPath` is a `Mapping<String, String>` from JSONPath expression to the JSON-encoded captured subtree (gjson `.Raw` form). Each authored entry is compared against the live lookup; mismatch fails unless `--update-inline-snapshots` is set, in which case `inline.ReplaceMappingEntryValue` rewrites only the value of that entry. Authoring contract is opt-in per path: only keys the user has listed (with any placeholder value) are checked or updated, so a single `--update` run does not balloon every step's mapping."
+    description =
+      "`Step.inlineJsonPath` is a `Mapping<String, String>` from JSONPath expression to the JSON-encoded captured subtree (gjson `.Raw` form). Each authored entry is compared against the live lookup; mismatch fails unless `--update-inline-snapshots` is set, in which case `inline.ReplaceMappingEntryValue` rewrites only the value of that entry. Authoring contract is opt-in per path: only keys the user has listed (with any placeholder value) are checked or updated, so a single `--update` run does not balloon every step's mapping."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/inline/rewriter.go:ReplaceMappingEntryValue" }
+      new CodeImpl { at = "internal/inline/rewriter.go:ReplaceMappingEntryValue" }
     }
   }
   new {
     id = "diff.inline-headers"
     name = "inline_snapshot_per_response_header"
-    description = "`Step.inlineHeaders` is the same `Mapping<String, String>` shape as `inlineJsonPath` but keyed by HTTP header name. Header names use Go's case-insensitive lookup (`http.Header.Get`). Same per-key opt-in contract: only authored header names are checked or rewritten."
+    description =
+      "`Step.inlineHeaders` is the same `Mapping<String, String>` shape as `inlineJsonPath` but keyed by HTTP header name. Header names use Go's case-insensitive lookup (`http.Header.Get`). Same per-key opt-in contract: only authored header names are checked or rewritten."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "diff.inline-jsonpath" }
     contributes { "goal.differential"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:runHttpStep" }
+      new CodeImpl { at = "internal/executor/executor.go:runHttpStep" }
     }
   }
   new {
     id = "diff.inline-sql-rows"
     name = "inline_snapshot_per_jsonpath_against_sql_rows"
-    description = "`Step.inlineSqlRows` is the sql-kind counterpart of `inlineJsonPath`. JSONPath is evaluated against the row-array JSON produced by a SQL kind step. Same per-key opt-in contract. Lives at Step level (not on SqlSpec) to reuse the existing single-level Mapping rewriter — consistent with `inlineHttpBody` which is also Step-level despite being http-only."
+    description =
+      "`Step.inlineSqlRows` is the sql-kind counterpart of `inlineJsonPath`. JSONPath is evaluated against the row-array JSON produced by a SQL kind step. Same per-key opt-in contract. Lives at Step level (not on SqlSpec) to reuse the existing single-level Mapping rewriter — consistent with `inlineHttpBody` which is also Step-level despite being http-only."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "diff.inline-jsonpath" }
     contributes { "goal.differential"; "goal.lang-independent" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/sql.go:runSqlStep" }
+      new CodeImpl { at = "internal/executor/sql.go:runSqlStep" }
     }
   }
   new {
     id = "diff.inline-console-log"
     name = "inline_snapshot_of_playwright_console_stream"
-    description = "`Step.inlineConsoleLog: String?` captures the playwright page's full console output as a newline-joined string. Same single-string contract as `inlineStdout` and `inlineHttpBody`: opt in by setting any string, mismatch fails, `--update-inline-snapshots` rewrites. Multi-line bodies are emitted as Pkl triple-quoted literals when long. Only takes effect for kind = \"playwright\"; ignored on other kinds."
+    description =
+      "`Step.inlineConsoleLog: String?` captures the playwright page's full console output as a newline-joined string. Same single-string contract as `inlineStdout` and `inlineHttpBody`: opt in by setting any string, mismatch fails, `--update-inline-snapshots` rewrites. Multi-line bodies are emitted as Pkl triple-quoted literals when long. Only takes effect for kind = \"playwright\"; ignored on other kinds."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/playwright.go:runPlaywrightStep" }
+      new CodeImpl { at = "internal/executor/playwright.go:runPlaywrightStep" }
     }
   }
   new {
     id = "diff.inline-multiline"
     name = "inline_snapshot_uses_triple_quoted_for_multiline"
-    description = "When the captured value would need ≥ 2 embedded newlines (and is ≥ 80 chars), or has ≥ 4 newlines, or a single line ≥ 120 chars, the rewriter emits a Pkl triple-quoted (`\"\"\"...\"\"\"`) literal instead of a single-line `\\n`-escaped one. Diff-readable; round-trips byte-for-byte."
+    description =
+      "When the captured value would need ≥ 2 embedded newlines (and is ≥ 80 chars), or has ≥ 4 newlines, or a single line ≥ 120 chars, the rewriter emits a Pkl triple-quoted (`\"\"\"...\"\"\"`) literal instead of a single-line `\\n`-escaped one. Diff-readable; round-trips byte-for-byte."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/inline/rewriter.go:shouldUseTripleQuoted" }
+      new CodeImpl { at = "internal/inline/rewriter.go:shouldUseTripleQuoted" }
     }
   }
   new {
     id = "diff.inline-concurrent-safety"
     name = "inline_rewriter_safe_under_concurrent_processes"
-    description = "`inline.RewriteUnderLock` acquires a POSIX flock on `<module>.pkspec-lock` for the read-mutate-write triple, so two `pkspec exec --update-inline-snapshots` processes against the same module serialise instead of clobbering each other. The brace counter masks string interiors and `//` comments before scanning, so a literal `}` inside a Pkl string doesn't escape the enclosing object."
+    description =
+      "`inline.RewriteUnderLock` acquires a POSIX flock on `<module>.pkspec-lock` for the read-mutate-write triple, so two `pkspec exec --update-inline-snapshots` processes against the same module serialise instead of clobbering each other. The brace counter masks string interiors and `//` comments before scanning, so a literal `}` inside a Pkl string doesn't escape the enclosing object."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "diff.inline-snapshot" }
     contributes { "goal.differential" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/inline/rewriter.go:RewriteUnderLock" }
+      new CodeImpl { at = "internal/inline/rewriter.go:RewriteUnderLock" }
     }
   }
   new {
     id = "diff.cross-language"
     name = "differential_via_specRef_to_reference"
-    description = "ReferenceSnapshot.generator declares a Test that produces the canonical bytes; ports of the same spec assert byte-identical output."
+    description =
+      "ReferenceSnapshot.generator declares a Test that produces the canonical bytes; ports of the same spec assert byte-identical output."
     tags { "spec" }
     severity = "major"
     reviewStatus = "approved"
@@ -1348,33 +1487,36 @@ scenarios {
   new {
     id = "ai.expect-ai"
     name = "expectAi_natural_language_assertion"
-    description = "Step.expectAi { prompt, cmd, snapshotName } delegates a fuzzy claim to an external judge command; verdict is cached by sha256(prompt + body)."
+    description =
+      "Step.expectAi { prompt, cmd, snapshotName } delegates a fuzzy claim to an external judge command; verdict is cached by sha256(prompt + body)."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     contributes { "goal.ai-assertions" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go" }
+      new CodeImpl { at = "internal/executor/executor.go" }
     }
   }
   new {
     id = "ai.prefer-deterministic"
     name = "prefer_deterministic_over_ai"
-    description = "When a step has both deterministic assertions (expectStatus / expectBodyEquals / expectBodyContains / expectBodyJsonPath / expectHeaderEquals / expectStatusBetween / inlineStdout / expectStdout / expectStderr) and expectAi, the AI judge is skipped — the deterministic checks have already passed by the time the AI phase would run. Set `expectAi.preferDeterministic = false` to restore the legacy behaviour where the judge always runs alongside deterministic checks."
+    description =
+      "When a step has both deterministic assertions (expectStatus / expectBodyEquals / expectBodyContains / expectBodyJsonPath / expectHeaderEquals / expectStatusBetween / inlineStdout / expectStdout / expectStderr) and expectAi, the AI judge is skipped — the deterministic checks have already passed by the time the AI phase would run. Set `expectAi.preferDeterministic = false` to restore the legacy behaviour where the judge always runs alongside deterministic checks."
     tags { "spec" }
     severity = "minor"
     reviewStatus = "approved"
     dependsOn { "ai.expect-ai" }
     contributes { "goal.ai-assertions" }
     implementations {
-      new Implementation { kind = "code"; at = "internal/executor/executor.go:stepHasDeterministicAssertion" }
+      new CodeImpl { at = "internal/executor/executor.go:stepHasDeterministicAssertion" }
     }
     decisions {
       new Decision {
         date = "2026-05-12"
         author = "mizchi"
         summary = "default to skipping the judge when deterministic asserts cover the case"
-        rationale = "expectAi is a scaffold — write it while the spec is fuzzy, leave it in the source as living documentation, let deterministic expectations take over once the contract is concrete. The runner should make that graduation automatic, not require deleting the AI line."
+        rationale =
+          "expectAi is a scaffold — write it while the spec is fuzzy, leave it in the source as living documentation, let deterministic expectations take over once the contract is concrete. The runner should make that graduation automatic, not require deleting the AI line."
       }
     }
   }

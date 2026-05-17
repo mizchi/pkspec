@@ -211,6 +211,31 @@ func TestInlineNullStaysNull(t *testing.T) {
 	}
 }
 
+func TestPreAbstractImplementationFlatRewrite(t *testing.T) {
+	in := `  implementations {
+    new Implementation { kind = "code"; at = "internal/x.go:Foo" }
+    new Implementation { kind = "doc"; at = "docs/y.md#bar" }
+    new Implementation { kind = "test"; at = "Test.pkl#baz" }
+    new Implementation { kind = "task"; at = "Taskfile.pkl#release" }
+  }
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	got := string(out)
+	for _, want := range []string{
+		`new CodeImpl { at = "internal/x.go:Foo" }`,
+		`new DocImpl { at = "docs/y.md#bar" }`,
+		`new TestImpl { at = "Test.pkl#baz" }`,
+		`new TaskImpl { at = "Taskfile.pkl#release" }`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing rewrite %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "new Implementation {") {
+		t.Errorf("abstract base class still appears in:\n%s", got)
+	}
+}
+
 func TestInlineCoversAllFourScalarNames(t *testing.T) {
 	in := `  new {
     name = "any-shape"

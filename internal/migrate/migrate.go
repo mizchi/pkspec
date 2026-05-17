@@ -166,6 +166,18 @@ func MigrateV01ToV02(source []byte, path string) ([]byte, []Note, error) {
 			continue
 		}
 
+		// Rule 5: pre-abstract `new Implementation { kind = "X"; at = "Y" }` ->
+		// `new XImpl { at = "Y" }`. Bridge for SPEC.pkl-style modules
+		// authored against the brief 0.2.0-pre-abstract shape (between
+		// v0.1.x and the T2-1 abstract refactor), which the Pkl evaluator
+		// now rejects with "Cannot instantiate abstract class".
+		if m := implFlatInline.FindStringSubmatch(raw); m != nil {
+			indent, kind, at := m[1], m[2], m[3]
+			fmt.Fprintf(&out, "%snew %s { at = %s }\n", indent, implSubclass(kind), at)
+			i++
+			continue
+		}
+
 		// Rule 4: scalar inline-snapshot fields -> InlineSnapshot block.
 		if m := inlineScalarLine.FindStringSubmatch(raw); m != nil {
 			indent, name, rest := m[1], m[2], strings.TrimSpace(m[3])
@@ -338,6 +350,12 @@ var (
 	// keep their `String` element type and are left alone.
 	inlineScalarLine  = regexp.MustCompile(`^(\s*)(inlineStdout|inlineStderr|inlineHttpBody|inlineConsoleLog)\s*=\s*(.*?)\s*$`)
 	inlineStringValue = regexp.MustCompile(`^("(?:[^"\\]|\\.)*")$`)
+
+	// Pre-abstract `new Implementation { kind = "X"; at = "Y" }` single-
+	// line form (Rule 5). The kind values match those handled by
+	// `implSubclass`. Multi-line forms are not common in practice — when
+	// they do appear, the operator hand-edits.
+	implFlatInline = regexp.MustCompile(`^(\s*)new\s+Implementation\s*\{\s*kind\s*=\s*"(test|code|doc|task)"\s*;\s*at\s*=\s*("(?:[^"\\]|\\.)*")\s*\}\s*$`)
 )
 
 var audienceKey = map[string]string{
