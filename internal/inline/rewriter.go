@@ -21,22 +21,31 @@ import (
 	"syscall"
 )
 
-// ReplaceField returns a copy of `source` with the field named
-// `fieldName` inside the Pkl object literal whose `name = "<testName>"`
-// is `testName` set to a Pkl-encoded representation of `value`.
+// ReplaceInlineSnapshotField rewrites the RHS of a scalar inline-
+// snapshot field (`inlineStdout` / `inlineStderr` / `inlineHttpBody`
+// / `inlineConsoleLog`) inside a Pkl object literal whose `name =
+// "<blockName>"` is `blockName`. The RHS is expected to already be
+// an `InlineSnapshot` block (the v0.3.0 author shape: `new
+// InlineSnapshot { ... }`); after rewrite it becomes `new
+// InlineSnapshot { state = "match"; value = <encoded> }`.
 //
-// The function does not validate that the enclosing object is a Test
-// or a Step — any object literal that contains a `name = "..."`
-// matching `testName` is eligible. Callers are expected to ensure
-// names are unique across the module (the runner already enforces
-// uniqueness on `tests`).
-func ReplaceField(source []byte, testName, fieldName, value string) ([]byte, error) {
+// Unlike `ReplaceField`, this function supports multi-line right-
+// hand sides (the InlineSnapshot block can span lines, and the
+// `value = """..."""` triple-quoted form spans lines too).
+//
+// The function does NOT validate that the field's existing RHS is
+// well-formed; it locates `<fieldName>\s*=\s*` and then uses
+// `findPklValueEnd` to cover whatever expression follows. Calling
+// it on a v0.2.x-shape source (`inlineStdout = "..."`) overwrites
+// the string with the new block form — useful when the migrator
+// has not yet run.
+func ReplaceInlineSnapshotField(source []byte, blockName, fieldName, value string) ([]byte, error) {
 	masked := maskStringsAndComments(source)
 
-	nameRe := regexp.MustCompile(fmt.Sprintf(`(?m)^(\s*)name\s*=\s*"%s"\s*$`, regexp.QuoteMeta(testName)))
+	nameRe := regexp.MustCompile(fmt.Sprintf(`(?m)^(\s*)name\s*=\s*"%s"\s*$`, regexp.QuoteMeta(blockName)))
 	nameLoc := nameRe.FindIndex(source)
 	if nameLoc == nil {
-		return nil, fmt.Errorf("inline: could not find name=%q in source", testName)
+		return nil, fmt.Errorf("inline: could not find name=%q in source", blockName)
 	}
 
 	openIdx, err := findEnclosingOpenBrace(masked, nameLoc[0])
@@ -48,21 +57,38 @@ func ReplaceField(source []byte, testName, fieldName, value string) ([]byte, err
 		return nil, err
 	}
 
-	// Locate `<fieldName> = ...` line inside [openIdx+1, closeIdx).
-	fieldRe := regexp.MustCompile(fmt.Sprintf(`(?m)^([ \t]*)%s\s*=[^\n]*$`, regexp.QuoteMeta(fieldName)))
+	fieldRe := regexp.MustCompile(fmt.Sprintf(`(?m)^([ \t]*)%s\s*=\s*`, regexp.QuoteMeta(fieldName)))
 	rel := fieldRe.FindSubmatchIndex(source[openIdx+1 : closeIdx])
 	if rel == nil {
-		return nil, fmt.Errorf("inline: field %q not found inside test %q", fieldName, testName)
+		return nil, fmt.Errorf("inline: field %q not found inside block %q", fieldName, blockName)
 	}
 	startAbs := openIdx + 1 + rel[0]
-	endAbs := openIdx + 1 + rel[1]
+	rhsStart := openIdx + 1 + rel[1]
 	indent := string(source[openIdx+1+rel[2] : openIdx+1+rel[3]])
 
-	replacement := fmt.Sprintf("%s%s = %s", indent, fieldName, EncodeStringWithIndent(value, indent))
+	rhsEnd := findPklValueEnd(source, rhsStart)
+
+	encoded := EncodeStringWithIndent(value, indent+"  ")
+	var replacement string
+	if strings.HasPrefix(encoded, `"""`) {
+		// Multi-line triple-quoted value: spell out the InlineSnapshot
+		// block across lines so the value's triple-quoted prefix lands
+		// in column-aligned form.
+		replacement = fmt.Sprintf(
+			"%s%s = new InlineSnapshot {\n%s  state = \"match\"\n%s  value = %s\n%s}",
+			indent, fieldName, indent, indent, encoded, indent,
+		)
+	} else {
+		replacement = fmt.Sprintf(
+			"%s%s = new InlineSnapshot { state = \"match\"; value = %s }",
+			indent, fieldName, encoded,
+		)
+	}
+
 	out := make([]byte, 0, len(source)+len(replacement))
 	out = append(out, source[:startAbs]...)
 	out = append(out, replacement...)
-	out = append(out, source[endAbs:]...)
+	out = append(out, source[rhsEnd:]...)
 	return out, nil
 }
 

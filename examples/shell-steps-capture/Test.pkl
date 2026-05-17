@@ -19,7 +19,7 @@ tests {
       new {
         name = "use_id"
         cmd = "echo processed $EVENT_ID"
-        inlineStdout = ""
+        inlineStdout = new InlineSnapshot {}
       }
     }
   }

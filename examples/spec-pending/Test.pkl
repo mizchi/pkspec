@@ -21,6 +21,6 @@ tests {
     specRef { "spec.auto-pending" }
     // Body has been implemented; this one is no longer pending.
     cmd = "echo 201"
-    inlineStdout = "201\n"
+    inlineStdout = new InlineSnapshot { state = "match"; value = "201\n" }
   }
 }

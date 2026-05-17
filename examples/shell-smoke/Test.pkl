@@ -7,6 +7,6 @@ tests {
     tags { "unit" }
     specRef { "kind.shell"; "runner.exec.assert-streams"; "diff.inline-snapshot" }
     cmd = "echo pong"
-    inlineStdout = "pong\n"
+    inlineStdout = new InlineSnapshot { state = "match"; value = "pong\n" }
   }
 }

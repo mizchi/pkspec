@@ -147,6 +147,7 @@ func TestIdempotent(t *testing.T) {
     }
     audienceNotes { ["pm"] = "hi" }
     progressMethod = "scenario-count"
+    inlineStdout = new InlineSnapshot { state = "match"; value = "ok\n" }
   }
 `
 	out, notes, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
@@ -155,5 +156,80 @@ func TestIdempotent(t *testing.T) {
 	}
 	if len(notes) != 0 {
 		t.Errorf("idempotent run should not emit notes, got: %+v", notes)
+	}
+}
+
+func TestInlineEmptyStringBecomesCaptureSnapshot(t *testing.T) {
+	in := `  new {
+    name = "echo"
+    cmd = "echo hi"
+    inlineStdout = ""
+  }
+`
+	out, notes, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	got := string(out)
+	if !strings.Contains(got, `inlineStdout = new InlineSnapshot {}`) {
+		t.Fatalf("empty-string sentinel should rewrite to capture-state InlineSnapshot, got:\n%s", got)
+	}
+	if strings.Contains(got, `inlineStdout = ""`) {
+		t.Fatalf("old shape should be gone, got:\n%s", got)
+	}
+	if len(notes) != 0 {
+		t.Errorf("clean rewrite should not emit notes, got: %+v", notes)
+	}
+}
+
+func TestInlineLiteralBecomesMatchSnapshot(t *testing.T) {
+	in := `  new {
+    name = "echo"
+    cmd = "echo pong"
+    inlineStdout = "pong\n"
+  }
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	got := string(out)
+	want := `inlineStdout = new InlineSnapshot { state = "match"; value = "pong\n" }`
+	if !strings.Contains(got, want) {
+		t.Fatalf("literal value should rewrite to match-state InlineSnapshot, got:\n%s", got)
+	}
+}
+
+func TestInlineNullStaysNull(t *testing.T) {
+	in := `  new {
+    name = "echo"
+    cmd = "echo hi"
+    inlineStdout = null
+  }
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	got := string(out)
+	if !strings.Contains(got, `inlineStdout = null`) {
+		t.Fatalf("null sentinel should pass through unchanged, got:\n%s", got)
+	}
+	if strings.Contains(got, "InlineSnapshot") {
+		t.Fatalf("null should not generate an InlineSnapshot block, got:\n%s", got)
+	}
+}
+
+func TestInlineCoversAllFourScalarNames(t *testing.T) {
+	in := `  new {
+    name = "any-shape"
+    inlineStdout = ""
+    inlineStderr = "err\n"
+    inlineHttpBody = "{}"
+    inlineConsoleLog = ""
+  }
+`
+	out, _, _ := MigrateV01ToV02([]byte(in), "Spec.pkl")
+	got := string(out)
+	for _, want := range []string{
+		`inlineStdout = new InlineSnapshot {}`,
+		`inlineStderr = new InlineSnapshot { state = "match"; value = "err\n" }`,
+		`inlineHttpBody = new InlineSnapshot { state = "match"; value = "{}" }`,
+		`inlineConsoleLog = new InlineSnapshot {}`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing rewrite %q in:\n%s", want, got)
+		}
 	}
 }

@@ -28,12 +28,12 @@ tests {
     name = "alpha"
     specRef { "runner.hooks.lifecycle" }
     cmd = "echo SEED=$SEED PER_TEST=$PER_TEST"
-    inlineStdout = ""
+    inlineStdout = new InlineSnapshot {}
   }
   new {
     name = "beta"
     specRef { "runner.hooks.lifecycle" }
     cmd = "echo SEED=$SEED PER_TEST=$PER_TEST"
-    inlineStdout = ""
+    inlineStdout = new InlineSnapshot {}
   }
 }

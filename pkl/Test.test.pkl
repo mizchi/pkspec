@@ -48,6 +48,26 @@ facts {
       (new Schema.Test { name = "x"; cmd = "x"; iterationSeed = 4294967296 }).iterationSeed
     ) != null
   }
+  ["InlineSnapshot defaults to capture state with null value"] {
+    (new Schema.InlineSnapshot {}).state == "capture"
+    (new Schema.InlineSnapshot {}).value == null
+  }
+  ["InlineSnapshot.state only accepts capture or match"] {
+    (new Schema.InlineSnapshot { state = "match" }).state == "match"
+    module.catch(() -> (new Schema.InlineSnapshot { state = "skip" }).state) != null
+  }
+  ["inlineStdout accepts InlineSnapshot? on Test"] {
+    (
+      new Schema.Test {
+        name = "x"
+        cmd = "x"
+        inlineStdout = new Schema.InlineSnapshot { state = "match"; value = "hi\n" }
+      }
+    )
+      .inlineStdout
+      .value == "hi\n"
+    (new Schema.Test { name = "x"; cmd = "x" }).inlineStdout == null
+  }
 }
 
 examples {
