@@ -207,7 +207,7 @@ scenarios {
     `+"`when`"+` {
       new SpecStep {
         description = "the user uploads a valid media file"
-        impl = new Step { cmd = "curl -X POST https://example.test/upload" }
+        impl = new Step { body = new ShellBody { cmd = "curl -X POST https://example.test/upload" } }
       }
     }
   }

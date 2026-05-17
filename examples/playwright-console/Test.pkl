@@ -9,11 +9,13 @@ tests {
     steps {
       new {
         name = "load"
-        playwright = new PlaywrightSpec {
-          script = "scripts/clean.mjs"
-          expectConsole = new ConsoleAssertion {
-            containsAll { "init complete" }
-            containsNone { "[error]"; "[pageerror]"; "Uncaught" }
+        body = new PlaywrightBody {
+          playwright = new PlaywrightSpec {
+            script = "scripts/clean.mjs"
+            expectConsole = new ConsoleAssertion {
+              containsAll { "init complete" }
+              containsNone { "[error]"; "[pageerror]"; "Uncaught" }
+            }
           }
         }
         timeoutSec = 30

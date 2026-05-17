@@ -10,9 +10,11 @@ tests {
     steps {
       new {
         name = "run"
-        playwrightTest = new PlaywrightTestSpec {
-          specPath = "tests/auth.spec.ts"
-          configPath = "playwright.config.ts"
+        body = new PlaywrightTestBody {
+          playwrightTest = new PlaywrightTestSpec {
+            specPath = "tests/auth.spec.ts"
+            configPath = "playwright.config.ts"
+          }
         }
         timeoutSec = 120
       }
@@ -27,10 +29,12 @@ tests {
     steps {
       new {
         name = "run"
-        playwrightTest = new PlaywrightTestSpec {
-          specPath = "tests/auth.spec.ts"
-          configPath = "playwright.config.ts"
-          grep = "login form"
+        body = new PlaywrightTestBody {
+          playwrightTest = new PlaywrightTestSpec {
+            specPath = "tests/auth.spec.ts"
+            configPath = "playwright.config.ts"
+            grep = "login form"
+          }
         }
         timeoutSec = 120
       }

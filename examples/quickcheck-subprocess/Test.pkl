@@ -10,19 +10,20 @@ tests {
     specRef { "pbt.iterations" }
     iterations = 50
     iterationSeed = 20260512
-    cmd = """
-      set -e
-      # Derive three values from the seed; modulo keeps numbers small.
-      a=$(( PKSPEC_SEED % 1000 ))
-      b=$(( (PKSPEC_SEED / 1000) % 1000 ))
-      c=$(( (PKSPEC_SEED / 1000000) % 1000 ))
-      lhs=$(( (a + b) + c ))
-      rhs=$(( a + (b + c) ))
-      if [ "$lhs" != "$rhs" ]; then
-        echo "iter=$PKSPEC_ITERATION seed=$PKSPEC_SEED a=$a b=$b c=$c lhs=$lhs rhs=$rhs"
-        exit 1
-      fi
-    """
+    cmd =
+      """
+        set -e
+        # Derive three values from the seed; modulo keeps numbers small.
+        a=$(( PKSPEC_SEED % 1000 ))
+        b=$(( (PKSPEC_SEED / 1000) % 1000 ))
+        c=$(( (PKSPEC_SEED / 1000000) % 1000 ))
+        lhs=$(( (a + b) + c ))
+        rhs=$(( a + (b + c) ))
+        if [ "$lhs" != "$rhs" ]; then
+          echo "iter=$PKSPEC_ITERATION seed=$PKSPEC_SEED a=$a b=$b c=$c lhs=$lhs rhs=$rhs"
+          exit 1
+        fi
+      """
   }
 
   // FAILING property (deliberate): "this number is even" is false
@@ -33,15 +34,16 @@ tests {
     name = "property_that_does_not_hold"
     description = "deliberate failure: seed%2 == 0 is not a property of xorshift32"
     tags { "spec" }
-    pending = true   // disabled by default; flip to false to see the report
+    pending = true // disabled by default; flip to false to see the report
     iterations = 50
     iterationSeed = 20260512
-    cmd = """
-      if [ $(( PKSPEC_SEED % 2 )) -ne 0 ]; then
-        echo "iter=$PKSPEC_ITERATION seed=$PKSPEC_SEED is odd"
-        exit 1
-      fi
-    """
+    cmd =
+      """
+        if [ $(( PKSPEC_SEED % 2 )) -ne 0 ]; then
+          echo "iter=$PKSPEC_ITERATION seed=$PKSPEC_SEED is odd"
+          exit 1
+        fi
+      """
   }
 
   // SHRINK demo: large seed → "fail when val ≥ 50". Shrinking
@@ -50,17 +52,18 @@ tests {
     name = "shrinkable_modulo_property"
     description = "PKSPEC_SEED % 100 < 50 — fails for large seeds; shrink narrows"
     tags { "spec" }
-    pending = true   // enable to see shrink in action
+    pending = true // enable to see shrink in action
     iterations = 5
     iterationSeed = 999999
     shrink = true
     shrinkAttempts = 32
-    cmd = """
-      val=$(( PKSPEC_SEED % 100 ))
-      if [ $val -ge 50 ]; then
-        echo "PKSPEC_SEED=$PKSPEC_SEED → val=$val (>= 50)"
-        exit 1
-      fi
-    """
+    cmd =
+      """
+        val=$(( PKSPEC_SEED % 100 ))
+        if [ $val -ge 50 ]; then
+          echo "PKSPEC_SEED=$PKSPEC_SEED → val=$val (>= 50)"
+          exit 1
+        fi
+      """
   }
 }

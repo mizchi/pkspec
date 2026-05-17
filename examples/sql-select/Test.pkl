@@ -11,13 +11,16 @@ tests {
     steps {
       new {
         name = "seed_and_select"
-        sql = new SqlSpec {
-          dsn = "sqlite::memory:"
-          query = "WITH seed(id, email) AS (VALUES (1, 'alice@x.test'), (2, 'bob@x.test')) SELECT * FROM seed ORDER BY id"
-          expectRowCount = 2
-          expectRowsJsonPath {
-            ["0.email"] = "alice@x.test"
-            ["1.id"] = 2
+        body = new SqlBody {
+          sql = new SqlSpec {
+            dsn = "sqlite::memory:"
+            query =
+              "WITH seed(id, email) AS (VALUES (1, 'alice@x.test'), (2, 'bob@x.test')) SELECT * FROM seed ORDER BY id"
+            expectRowCount = 2
+            expectRowsJsonPath {
+              ["0.email"] = "alice@x.test"
+              ["1.id"] = 2
+            }
           }
         }
         timeoutSec = 10

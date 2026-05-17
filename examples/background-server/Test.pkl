@@ -22,12 +22,14 @@ tests {
     steps {
       new {
         name = "hit"
-        http = new HttpRequest {
-          method = "GET"
-          url = "http://127.0.0.1:19020/"
+        body = new HttpBody {
+          http = new HttpRequest {
+            method = "GET"
+            url = "http://127.0.0.1:19020/"
+          }
+          expectStatus = 200
+          expectBodyEquals = "OK"
         }
-        expectStatus = 200
-        expectBodyEquals = "OK"
       }
     }
   }

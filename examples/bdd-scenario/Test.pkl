@@ -11,20 +11,24 @@ scenarios {
       new {
         description = "users table exists"
         impl = new Step {
-          sql = new SqlSpec {
-            dsn = "sqlite:work.db"
-            query = "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, role TEXT)"
+          body = new SqlBody {
+            sql = new SqlSpec {
+              dsn = "sqlite:work.db"
+              query = "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, role TEXT)"
+            }
           }
         }
       }
       new {
         description = "an admin user is seeded"
         impl = new Step {
-          sql = new SqlSpec {
-            dsn = "sqlite:work.db"
-            query = "INSERT INTO users (email, role) VALUES (?, ?)"
-            args { "admin@x.test"; "admin" }
-            expectRowCount = 1
+          body = new SqlBody {
+            sql = new SqlSpec {
+              dsn = "sqlite:work.db"
+              query = "INSERT INTO users (email, role) VALUES (?, ?)"
+              args { "admin@x.test"; "admin" }
+              expectRowCount = 1
+            }
           }
         }
       }
@@ -35,9 +39,11 @@ scenarios {
         description = "we render the dashboard via playwright"
         impl = new Step {
           env { ["LABEL"] = "Admin Dashboard" }
-          playwright = new PlaywrightSpec {
-            script = "scripts/render.mjs"
-            browser = "chromium"
+          body = new PlaywrightBody {
+            playwright = new PlaywrightSpec {
+              script = "scripts/render.mjs"
+              browser = "chromium"
+            }
           }
           timeoutSec = 30
         }
@@ -48,11 +54,13 @@ scenarios {
       new {
         description = "users table still has the admin row"
         impl = new Step {
-          sql = new SqlSpec {
-            dsn = "sqlite:work.db"
-            query = "SELECT email FROM users WHERE role = 'admin'"
-            expectRowCount = 1
-            expectRowsJsonPath { ["0.email"] = "admin@x.test" }
+          body = new SqlBody {
+            sql = new SqlSpec {
+              dsn = "sqlite:work.db"
+              query = "SELECT email FROM users WHERE role = 'admin'"
+              expectRowCount = 1
+              expectRowsJsonPath { ["0.email"] = "admin@x.test" }
+            }
           }
         }
       }
@@ -61,7 +69,7 @@ scenarios {
     cleanup {
       new {
         description = "remove sqlite file"
-        impl = new Step { cmd = "rm -f work.db" }
+        impl = new Step { body = new ShellBody { cmd = "rm -f work.db" } }
       }
     }
   }

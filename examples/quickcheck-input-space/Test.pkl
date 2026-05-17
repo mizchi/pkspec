@@ -13,10 +13,11 @@ tests {
       ["A"] = new IntInput { lo = 0; hi = 100 }
       ["B"] = new IntInput { lo = 0; hi = 100 }
     }
-    cmd = """
-      sum=$(( A + B ))
-      [ $sum -ge 0 ] && [ $sum -le 200 ]
-    """
+    cmd =
+      """
+        sum=$(( A + B ))
+        [ $sum -ge 0 ] && [ $sum -le 200 ]
+      """
   }
 
   // STEPS-MODE property: per-iteration setup + assertion + cleanup
@@ -34,15 +35,15 @@ tests {
     steps {
       new {
         name = "setup"
-        cmd = "echo running iter=$PKSPEC_ITERATION X=$X > probe.txt"
+        body = new ShellBody { cmd = "echo running iter=$PKSPEC_ITERATION X=$X > probe.txt" }
       }
       new {
         name = "assert"
-        cmd = "grep -q \"X=$X\" probe.txt"
+        body = new ShellBody { cmd = "grep -q \"X=$X\" probe.txt" }
       }
       new {
         name = "cleanup"
-        cmd = "rm -f probe.txt"
+        body = new ShellBody { cmd = "rm -f probe.txt" }
         always = true
       }
     }
@@ -55,7 +56,7 @@ tests {
     name = "multiplication_bounded"
     description = "a * b < 100 (false in general; deliberately failing)"
     tags { "spec" }
-    pending = true  // enable to see input-space shrink in action
+    pending = true // enable to see input-space shrink in action
     iterations = 30
     iterationSeed = 1234567
     shrink = true
@@ -64,12 +65,13 @@ tests {
       ["A"] = new IntInput { lo = 0; hi = 50 }
       ["B"] = new IntInput { lo = 0; hi = 50 }
     }
-    cmd = """
-      product=$(( A * B ))
-      if [ $product -ge 100 ]; then
-        echo "A=$A B=$B product=$product"
-        exit 1
-      fi
-    """
+    cmd =
+      """
+        product=$(( A * B ))
+        if [ $product -ge 100 ]; then
+          echo "A=$A B=$B product=$product"
+          exit 1
+        fi
+      """
   }
 }

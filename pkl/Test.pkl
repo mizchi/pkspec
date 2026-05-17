@@ -154,170 +154,157 @@ class HttpRequest {
   timeoutSec: Int(this > 0) = 30
 }
 
-/// One step inside a `steps` (sequential) or `parallelSteps` (concurrent)
-/// list. Choose exactly one of `cmd` (shell), `http` (HTTP request),
-/// or `playwright` (browser script). The runner validates that the
-/// kind-specific expectations on a Step match the chosen body — an
-/// `expectStatus` on a `cmd` step is reported as an authoring error,
-/// not silently ignored.
-class Step {
-  /// Optional name for reporting. Defaults to the cmd / URL preview.
-  name: String? = null
+/// Abstract body slot of a `Step`. Authored as exactly one of the
+/// five concrete subclasses below; the runner dispatches on the
+/// subclass via `renderStep`, which writes the matching tag into
+/// `RenderedStep.kind` (`"shell"` / `"http"` / `"playwright"` /
+/// `"playwright-test"` / `"sql"`).
+///
+/// T2-2 / T3-1 in TODO.md: the v0.2.x flat `Step { cmd | http |
+/// playwright | playwrightTest | sql = ... }` shape is gone — the
+/// "exactly one of N body slots" invariant is now a type-system
+/// guarantee instead of a runtime check (`validateStepKind`
+/// becomes a defensive double-check, not the primary gate). The
+/// synthesized `Step.kind` field disappears with it.
+abstract class StepBody {}
 
-  /// Shell command — pick exactly one of `cmd` / `http` / `playwright`.
-  cmd: (String(length > 0))? = null
+/// Shell-command body. Carries shell-only assertions, snapshots, and
+/// captures — moving them off `Step` so an `expectStatus` on a shell
+/// step is a type error, not a lint.
+class ShellBody extends StepBody {
+  /// The command to run via `bash -c` (or `shell` if overridden).
+  cmd: String(length > 0)
+
+  /// Shell interpreter. Empty string defers to the surrounding
+  /// `Test.shell` / `Defaults.shell` chain; the runner falls back to
+  /// `"bash"` if every level leaves it unset.
   shell: String = "bash"
+
+  /// Optional stdin payload piped to the subprocess.
   stdin: String? = null
 
-  /// HTTP request — pick exactly one of `cmd` / `http` / `playwright`.
-  http: HttpRequest? = null
-
-  /// Playwright script — pick exactly one of `cmd` / `http` /
-  /// `playwright` / `playwrightTest`. The runner spawns a Node
-  /// process that drives a browser via the playwright library
-  /// directly; per-script expectations (screenshot match, console
-  /// assertions) live on the spec. Use this for **lightweight**
-  /// browser smoke / spec — one page, one script, one screenshot.
-  /// Use `playwrightTest` (below) when you want trace, retry,
-  /// pixel-diff, or other features of the @playwright/test runner.
-  playwright: PlaywrightSpec? = null
-
-  /// @playwright/test invocation — pick exactly one of `cmd` /
-  /// `http` / `playwright` / `playwrightTest` / `sql`. The runner
-  /// shells out to `npx playwright test`, forces `--reporter=junit`,
-  /// parses the XML, and aggregates the inner test results into
-  /// this Step's outcome (all-pass → Passed, any-fail → Failed,
-  /// only-skip → Pending). Use this for visual-regression suites,
-  /// retry / trace / video flows, and anything that wants the
-  /// @playwright/test feature set rather than a one-shot browser
-  /// driver.
-  playwrightTest: PlaywrightTestSpec? = null
-
-  /// SQL query — pick exactly one of `cmd` / `http` / `playwright` /
-  /// `playwrightTest` / `sql`. The runner opens a database
-  /// connection (SQLite today; the DSN scheme `sqlite:` is the
-  /// only supported one for the initial ship), runs the query, and
-  /// applies the spec's assertions (`expectRowCount`,
-  /// `expectRowsJsonPath`). Use this for "did the row land?" /
-  /// "is the migration shape correct?" / "did the trigger fire?"
-  /// assertions in end-to-end DB tests.
-  sql: SqlSpec? = null
-
-  /// Computed discriminator. Set by the schema based on which body
-  /// slot is non-null. The runner reads it for dispatch and
-  /// validation; users never write to it.
-  ///
-  /// Pre-positioned for a future task-interface refactor — if the
-  /// flat `Step` becomes `abstract class Task` with subclasses, this
-  /// field is the discriminator that survives the migration without
-  /// touching the executor or the reporter.
-  kind: String =
-    if (cmd != null)
-      "shell"
-    else if (http != null)
-      "http"
-    else if (playwright != null)
-      "playwright"
-    else if (playwrightTest != null)
-      "playwright-test"
-    else if (sql != null)
-      "sql"
-    else
-      "invalid"
-
-  env: Mapping<String, String> = new {}
-  workdir: String? = null
-  timeoutSec: Int(this > 0) = 60
-
-  /// Shell-stream assertions (exit code, stdout/stderr exact /
-  /// contains / regex / JSONPath). Empty by default — only the
-  /// `expectExitCode = 0` default fires. Only meaningful when the
-  /// step is `kind = "shell"`; on other kinds the runner rejects
-  /// any non-default field (see `validateStepKind`).
+  /// Shell-stream assertions (exit code, stdout/stderr exact / contains
+  /// / regex / JSONPath). Empty by default — only `expectExitCode = 0`
+  /// fires.
   shellExpectations: ShellExpectations = new {}
 
   /// Inline snapshot of step stdout. Opt in with `inlineStdout = new
-  /// InlineSnapshot {}` (state defaults to `"capture"`); the rewriter
-  /// flips it to `state = "match"` with the live value on the next
-  /// `--update-inline-snapshots` run. `null` (default) means "skip."
-  /// Only meaningful for shell steps; HTTP steps should use
-  /// `expectBodyEquals` / `expectBodyJsonPath` instead.
+  /// InlineSnapshot {}`; the rewriter flips it to `state = "match"` with
+  /// the live value on the next `--update-inline-snapshots` run.
   inlineStdout: InlineSnapshot? = null
 
-  /// Inline snapshot of HTTP response body (http kind only). Same
-  /// authoring contract as `inlineStdout`: opt in via `new
-  /// InlineSnapshot {}`, the rewriter populates `value` and switches
-  /// `state` to `"match"` on capture. Requires `step.name` so the
-  /// rewriter can locate the source line. Multi-line bodies are
-  /// emitted as Pkl triple-quoted (`"""..."""`) literals when long.
-  inlineHttpBody: InlineSnapshot? = null
+  /// When set, store the step's stdout into the named environment
+  /// variable so subsequent steps can `$VAR` it. The captured value
+  /// loses a single trailing newline.
+  captureStdout: String? = null
 
-  /// Per-jsonpath inline snapshot. The key is a JSONPath
-  /// expression (same syntax as `expectBodyJsonPath`), the
-  /// value is the captured JSON-encoded subtree. On mismatch
-  /// the step fails unless `--update-inline-snapshots` is set,
-  /// in which case each authored entry's value is rewritten to
-  /// the live capture. Only entries the user has authored are
-  /// updated — `--update-inline-snapshots` does not add new
-  /// keys, the user opts in by listing the path with any
-  /// placeholder value (commonly `""`). Requires `step.name`.
-  inlineJsonPath: Mapping<String, String> = new {}
+  /// Same as `captureStdout` but for the exit code (rendered as a
+  /// decimal string).
+  captureExitCode: String? = null
+}
 
-  /// Per-header inline snapshot. The key is a header name,
-  /// the value is the snapshotted header value. Same
-  /// per-key opt-in contract as `inlineJsonPath`: only
-  /// authored headers are checked or rewritten. Header names
-  /// are case-insensitive on lookup (Go's http.Header.Get).
-  inlineHeaders: Mapping<String, String> = new {}
+/// HTTP-request body. Carries the request spec plus every HTTP-only
+/// expectation, snapshot, capture, and cassette field. Splitting them
+/// off `Step` makes the schema reject e.g. `inlineHttpBody` on a
+/// non-HTTP step at parse time.
+class HttpBody extends StepBody {
+  http: HttpRequest
 
-  /// Per-jsonpath inline snapshot against SQL row output.
-  /// Same shape as `inlineJsonPath` but the path is evaluated
-  /// against the row-array JSON produced by a `sql` kind step
-  /// (`sql.expectRowsJsonPath`'s jsonpath syntax). Only takes
-  /// effect when `kind == "sql"`; ignored on other kinds.
-  inlineSqlRows: Mapping<String, String> = new {}
-
-  /// Inline snapshot of the playwright console stream as a
-  /// single newline-joined string. Opt in via `new InlineSnapshot
-  /// {}`; the rewriter flips state to `"match"` with the joined
-  /// console entries on `--update-inline-snapshots`. Only takes
-  /// effect when `kind == "playwright"`; ignored on other kinds.
-  inlineConsoleLog: InlineSnapshot? = null
-
-  // ── HTTP expectations ──────────────────────────────────────────
+  /// Required response status code. `null` (default) means no status
+  /// assertion; combine with `expectStatusBetween` for a range gate.
   expectStatus: Int? = null
 
-  /// Inclusive [low, high] status range. Combined (AND) with
+  /// Inclusive `[low, high]` status range. Combined (AND) with
   /// `expectStatus` when both are set. Use a 2-element Listing:
-  /// `expectStatusBetween { 200; 299 }`. Empty (the default) means
-  /// "no range check"; any length other than 0 or 2 is rejected by
-  /// the runner.
+  /// `expectStatusBetween { 200; 299 }`. Any length other than 0 or 2
+  /// is rejected by the runner.
   expectStatusBetween: Listing<Int> = new {}
 
   expectBodyEquals: String? = null
   expectBodyContains: String? = null
   expectHeaderEquals: Mapping<String, String> = new {}
 
-  /// Map of JSON path → expected value. Each path is evaluated
-  /// against the response body parsed as JSON; every entry must
-  /// match. Path syntax is gjson dot-style: `user.name`,
-  /// `items.0.id`, `users.#(active==true).name`. Leading `$.` or
-  /// `.` is accepted but optional.
+  /// Map of JSON path → expected value. Each path is evaluated against
+  /// the response body parsed as JSON; every entry must match.
   expectBodyJsonPath: Mapping<String, Any> = new {}
 
-  /// When set on a sequential step, store the step's stdout (shell)
-  /// or body (http) into the named environment variable so subsequent
-  /// steps can `$VAR` it. The captured value loses a single trailing
-  /// newline for shell stdout; HTTP bodies are stored verbatim.
-  captureStdout: String? = null
-  captureExitCode: String? = null
+  /// Inline snapshot of the HTTP response body. Same authoring contract
+  /// as `ShellBody.inlineStdout`.
+  inlineHttpBody: InlineSnapshot? = null
+
+  /// Per-jsonpath inline snapshot. The key is a JSONPath expression;
+  /// the value is the captured JSON-encoded subtree. Per-key opt-in:
+  /// authoring a key with any placeholder value enrols it.
+  inlineJsonPath: Mapping<String, String> = new {}
+
+  /// Per-header inline snapshot. Same per-key opt-in contract as
+  /// `inlineJsonPath`. Header names are case-insensitive on lookup.
+  inlineHeaders: Mapping<String, String> = new {}
+
+  /// When set on a sequential step, store the response body into the
+  /// named environment variable for later `$VAR` substitution.
   captureBody: String? = null
+
+  /// Same as `captureBody` but for the status code (decimal string).
   captureStatus: String? = null
 
-  /// Map of JSON path → env-var name. The string value at that path
-  /// in the response body is stored, available as `$VAR` in
-  /// subsequent steps. Same path syntax as `expectBodyJsonPath`.
+  /// Map of JSON path → env-var name. The string value at that path is
+  /// stored for later `$VAR` use.
   captureBodyJsonPath: Mapping<String, String> = new {}
+
+  /// HTTP record-and-replay cassette name. Hermetic by default after
+  /// recording. Refresh with `--refresh-http`; force replay-only with
+  /// `--http-replay-only`.
+  cassette: String(matches(Regex(#"^[a-zA-Z0-9_-]+$"#)))? = null
+}
+
+/// Lightweight Playwright-script body. The runner spawns a Node
+/// process that drives a browser via the playwright library directly;
+/// per-script expectations (screenshot match, console assertions) live
+/// on the spec.
+class PlaywrightBody extends StepBody {
+  playwright: PlaywrightSpec
+
+  /// Inline snapshot of the playwright console stream as a single
+  /// newline-joined string. Opt in via `new InlineSnapshot {}`.
+  inlineConsoleLog: InlineSnapshot? = null
+}
+
+/// @playwright/test invocation body. The runner shells out to `npx
+/// playwright test`, forces `--reporter=junit`, parses the XML, and
+/// aggregates inner-test results into this Step's outcome.
+class PlaywrightTestBody extends StepBody {
+  playwrightTest: PlaywrightTestSpec
+}
+
+/// SQL-query body. The runner opens a DB connection via DSN, executes
+/// the query, and applies the spec's assertions.
+class SqlBody extends StepBody {
+  sql: SqlSpec
+
+  /// Per-jsonpath inline snapshot against the row-array JSON produced
+  /// by the query. Same per-key opt-in contract as
+  /// `HttpBody.inlineJsonPath`.
+  inlineSqlRows: Mapping<String, String> = new {}
+}
+
+/// One step inside a `steps` (sequential) or `parallelSteps`
+/// (concurrent) list. The body slot picks the runner — `new ShellBody
+/// { ... }` for a shell command, `new HttpBody { ... }` for an HTTP
+/// request, and so on. Body-kind-specific expectations live on the
+/// chosen body subclass; only cross-kind concerns (timing,
+/// polling, AI judge, scheduling) stay on `Step`.
+class Step {
+  /// Optional name for reporting. Defaults to the cmd / URL preview.
+  name: String? = null
+
+  /// Required body — one of `ShellBody` / `HttpBody` / `PlaywrightBody`
+  /// / `PlaywrightTestBody` / `SqlBody`.
+  body: StepBody
+
+  env: Mapping<String, String> = new {}
+  workdir: String? = null
+  timeoutSec: Int(this > 0) = 60
 
   /// Polling: when set, the runner re-executes this step (request +
   /// assertions) until every assertion passes, or until `timeoutSec`
@@ -333,42 +320,18 @@ class Step {
   /// (typically a wrapper around an LLM). The runner caches the
   /// verdict on disk keyed by `sha256(prompt + body)`, so the judge
   /// is only invoked when the prompt or the response body actually
-  /// changes — same body, same verdict, no API call.
+  /// changes.
   expectAi: AiAssertion? = null
-
-  /// HTTP record-and-replay cassette name. When set on an HTTP step,
-  /// the response (status / headers / body) is cached on first run
-  /// to `<workdir>/.pkspec/http/<cassette>.json` keyed by
-  /// `sha256(method + url + body)` and replayed on subsequent runs
-  /// with the same key. Hermetic by default after recording.
-  ///
-  /// Refresh with `--refresh-http`. Force replay-only (cassette
-  /// miss = error, never dispatch real requests) with
-  /// `--http-replay-only` — the CI-side hardening.
-  ///
-  /// Ignored for shell steps; only meaningful when `http` is set.
-  cassette: String(matches(Regex(#"^[a-zA-Z0-9_-]+$"#)))? = null
 
   /// When true, run this step even if a previous sequential step
   /// failed. Use for cleanup. Ignored inside `parallelSteps`.
   always: Boolean = false
 
   /// Repeat the step N times in sequence, each repetition seeing
-  /// `$PKSPEC_REPEAT` (0-based index) in its env. Useful for "POST
-  /// the same endpoint 5 times" / "warm up the cache 10 times"
-  /// patterns the Pkl-static schema can't express directly.
-  ///
-  /// Each repetition is fully re-executed (re-derives http body,
-  /// re-evaluates `$VAR`, etc.). Captures (`captureStdout` /
-  /// `captureBody` / ...) reflect the LAST repetition only —
-  /// intermediate repetitions are not surfaced. All repetitions
-  /// must pass for the step to be Passed; the first failing
-  /// repetition aborts and reports `repeat 3/5: <reason>` in the
-  /// step's Reasons.
-  ///
-  /// Ignored inside `parallelSteps` (repetition + parallel would
-  /// be confusing — fan out via separate parallel steps if both
-  /// are wanted).
+  /// `$PKSPEC_REPEAT` (0-based index) in its env. Captures reflect
+  /// the LAST repetition only; the first failing repetition aborts
+  /// and reports `repeat 3/5: <reason>` in the step's Reasons.
+  /// Ignored inside `parallelSteps`.
   repeat: Int(this > 0) = 1
 }
 
@@ -1301,67 +1264,122 @@ local function renderSql(s: SqlSpec): RenderedSqlSpec = new {
   expectRowsJsonPath = s.expectRowsJsonPath
 }
 
-local function renderStep(s: Step): RenderedStep = new {
-  name = s.name
-  kind = s.kind
-  cmd = s.cmd
-  shell = s.shell
-  stdin = s.stdin
-  http = if (s.http == null) null else renderHttp(s.http)
-  playwright = if (s.playwright == null) null else renderPlaywright(s.playwright)
-  playwrightTest = if (s.playwrightTest == null) null else renderPlaywrightTest(s.playwrightTest)
-  sql = if (s.sql == null) null else renderSql(s.sql)
-  env = s.env
-  workdir = s.workdir
-  timeoutSec = s.timeoutSec
-  expectExitCode = s.shellExpectations.expectExitCode
-  expectStdout = s.shellExpectations.expectStdout
-  expectStderr = s.shellExpectations.expectStderr
-  expectStdoutContains = s.shellExpectations.expectStdoutContains
-  expectStderrContains = s.shellExpectations.expectStderrContains
-  expectStdoutMatches = s.shellExpectations.expectStdoutMatches
-  expectStderrMatches = s.shellExpectations.expectStderrMatches
-  expectStdoutJsonPath = s.shellExpectations.expectStdoutJsonPath
-  expectStderrJsonPath = s.shellExpectations.expectStderrJsonPath
-  inlineStdout = flattenInlineSnapshot(s.inlineStdout)
-  inlineHttpBody = flattenInlineSnapshot(s.inlineHttpBody)
-  inlineJsonPath = s.inlineJsonPath
-  inlineHeaders = s.inlineHeaders
-  inlineSqlRows = s.inlineSqlRows
-  inlineConsoleLog = flattenInlineSnapshot(s.inlineConsoleLog)
-  expectStatus = s.expectStatus
-  expectStatusBetween = s.expectStatusBetween
-  expectBodyEquals = s.expectBodyEquals
-  expectBodyContains = s.expectBodyContains
-  expectHeaderEquals = s.expectHeaderEquals
-  expectBodyJsonPath = s.expectBodyJsonPath
-  captureStdout = s.captureStdout
-  captureExitCode = s.captureExitCode
-  captureBody = s.captureBody
-  captureStatus = s.captureStatus
-  captureBodyJsonPath = s.captureBodyJsonPath
-  eventually =
-    if (s.eventually == null)
-      null
-    else
-      new RenderedEventually {
-        intervalMs = s.eventually.intervalMs
-        timeoutSec = s.eventually.timeoutSec
-      }
-  expectAi =
-    if (s.expectAi == null)
-      null
-    else
-      new RenderedAiAssertion {
-        prompt = s.expectAi.prompt
-        cmd = s.expectAi.cmd
-        snapshotName = s.expectAi.snapshotName
-        preferDeterministic = s.expectAi.preferDeterministic
-      }
-  cassette = s.cassette
-  always = s.always
-  repeat = s.repeat
-}
+local function renderStep(s: Step): RenderedStep =
+  let (body = s.body)
+    new {
+      name = s.name
+      kind =
+        if (body is ShellBody)
+          "shell"
+        else if (body is HttpBody)
+          "http"
+        else if (body is PlaywrightBody)
+          "playwright"
+        else if (body is PlaywrightTestBody)
+          "playwright-test"
+        else if (body is SqlBody)
+          "sql"
+        else
+          "invalid"
+
+      // ── Shell body ─────────────────────────────────────────────
+      cmd = if (body is ShellBody) body.cmd else null
+      shell = if (body is ShellBody) body.shell else "bash"
+      stdin = if (body is ShellBody) body.stdin else null
+      expectExitCode = if (body is ShellBody) body.shellExpectations.expectExitCode else 0
+      expectStdout = if (body is ShellBody) body.shellExpectations.expectStdout else null
+      expectStderr = if (body is ShellBody) body.shellExpectations.expectStderr else null
+      expectStdoutContains =
+        if (body is ShellBody)
+          body.shellExpectations.expectStdoutContains
+        else
+          new Listing<String> {}
+      expectStderrContains =
+        if (body is ShellBody)
+          body.shellExpectations.expectStderrContains
+        else
+          new Listing<String> {}
+      expectStdoutMatches =
+        if (body is ShellBody)
+          body.shellExpectations.expectStdoutMatches
+        else
+          new Listing<String> {}
+      expectStderrMatches =
+        if (body is ShellBody)
+          body.shellExpectations.expectStderrMatches
+        else
+          new Listing<String> {}
+      expectStdoutJsonPath =
+        if (body is ShellBody)
+          body.shellExpectations.expectStdoutJsonPath
+        else
+          new Mapping<String, Any> {}
+      expectStderrJsonPath =
+        if (body is ShellBody)
+          body.shellExpectations.expectStderrJsonPath
+        else
+          new Mapping<String, Any> {}
+      inlineStdout = if (body is ShellBody) flattenInlineSnapshot(body.inlineStdout) else null
+      captureStdout = if (body is ShellBody) body.captureStdout else null
+      captureExitCode = if (body is ShellBody) body.captureExitCode else null
+
+      // ── HTTP body ──────────────────────────────────────────────
+      http = if (body is HttpBody) renderHttp(body.http) else null
+      expectStatus = if (body is HttpBody) body.expectStatus else null
+      expectStatusBetween = if (body is HttpBody) body.expectStatusBetween else new Listing<Int> {}
+      expectBodyEquals = if (body is HttpBody) body.expectBodyEquals else null
+      expectBodyContains = if (body is HttpBody) body.expectBodyContains else null
+      expectHeaderEquals =
+        if (body is HttpBody) body.expectHeaderEquals else new Mapping<String, String> {}
+      expectBodyJsonPath =
+        if (body is HttpBody) body.expectBodyJsonPath else new Mapping<String, Any> {}
+      inlineHttpBody = if (body is HttpBody) flattenInlineSnapshot(body.inlineHttpBody) else null
+      inlineJsonPath = if (body is HttpBody) body.inlineJsonPath else new Mapping<String, String> {}
+      inlineHeaders = if (body is HttpBody) body.inlineHeaders else new Mapping<String, String> {}
+      captureBody = if (body is HttpBody) body.captureBody else null
+      captureStatus = if (body is HttpBody) body.captureStatus else null
+      captureBodyJsonPath =
+        if (body is HttpBody) body.captureBodyJsonPath else new Mapping<String, String> {}
+      cassette = if (body is HttpBody) body.cassette else null
+
+      // ── Playwright body ────────────────────────────────────────
+      playwright = if (body is PlaywrightBody) renderPlaywright(body.playwright) else null
+      inlineConsoleLog =
+        if (body is PlaywrightBody) flattenInlineSnapshot(body.inlineConsoleLog) else null
+
+      // ── Playwright-test body ───────────────────────────────────
+      playwrightTest =
+        if (body is PlaywrightTestBody) renderPlaywrightTest(body.playwrightTest) else null
+
+      // ── SQL body ───────────────────────────────────────────────
+      sql = if (body is SqlBody) renderSql(body.sql) else null
+      inlineSqlRows = if (body is SqlBody) body.inlineSqlRows else new Mapping<String, String> {}
+
+      // ── Cross-kind ─────────────────────────────────────────────
+      env = s.env
+      workdir = s.workdir
+      timeoutSec = s.timeoutSec
+      eventually =
+        if (s.eventually == null)
+          null
+        else
+          new RenderedEventually {
+            intervalMs = s.eventually.intervalMs
+            timeoutSec = s.eventually.timeoutSec
+          }
+      expectAi =
+        if (s.expectAi == null)
+          null
+        else
+          new RenderedAiAssertion {
+            prompt = s.expectAi.prompt
+            cmd = s.expectAi.cmd
+            snapshotName = s.expectAi.snapshotName
+            preferDeterministic = s.expectAi.preferDeterministic
+          }
+      always = s.always
+      repeat = s.repeat
+    }
 
 local function renderBackground(b: Background): RenderedBackground = new {
   name = b.name

@@ -10,9 +10,11 @@ tests {
     steps {
       new {
         name = "render"
-        playwright = new PlaywrightSpec {
-          script = "scripts/render.mjs"
-          browser = "chromium"
+        body = new PlaywrightBody {
+          playwright = new PlaywrightSpec {
+            script = "scripts/render.mjs"
+            browser = "chromium"
+          }
         }
         timeoutSec = 30
       }
