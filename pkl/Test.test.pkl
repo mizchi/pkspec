@@ -6,8 +6,9 @@ import "Test.pkl" as Schema
 local tcp: Schema.Test = new {
   name = "tcp"
   cmd = "curl -fsS http://localhost:8080/health"
-  expectExitCode = 0
-  expectStdout = "ok\n"
+  shellExpectations {
+    expectStdout = "ok\n"
+  }
 }
 
 facts {
@@ -17,8 +18,13 @@ facts {
   }
   ["defaults: shell is bash, exit code is 0, timeout is 60s"] {
     tcp.shell == "bash"
-    tcp.expectExitCode == 0
+    tcp.shellExpectations.expectExitCode == 0
     tcp.timeoutSec == 60
+  }
+  ["shellExpectations defaults to all-empty"] {
+    (new Schema.Test { name = "x"; cmd = "x" }).shellExpectations.expectExitCode == 0
+    (new Schema.Test { name = "x"; cmd = "x" }).shellExpectations.expectStdout == null
+    (new Schema.Test { name = "x"; cmd = "x" }).shellExpectations.expectStdoutContains.isEmpty
   }
   ["empty cmd is rejected"] {
     module.catch(() -> (new Schema.Test { name = "x"; cmd = "" }).cmd) != null

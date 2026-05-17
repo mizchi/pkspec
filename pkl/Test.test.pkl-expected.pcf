@@ -20,18 +20,20 @@ examples {
       inputs {}
       cmd = "curl -fsS http://localhost:8080/health"
       stdin = null
-      expectExitCode = 0
-      expectStdout = """
-        ok
-        
-        """
-      expectStderr = null
-      expectStdoutContains {}
-      expectStderrContains {}
-      expectStdoutMatches {}
-      expectStderrMatches {}
-      expectStdoutJsonPath {}
-      expectStderrJsonPath {}
+      shellExpectations {
+        expectExitCode = 0
+        expectStdout = """
+          ok
+
+          """
+        expectStderr = null
+        expectStdoutContains {}
+        expectStderrContains {}
+        expectStdoutMatches {}
+        expectStderrMatches {}
+        expectStdoutJsonPath {}
+        expectStderrJsonPath {}
+      }
       expectStdoutSnapshot = null
       expectStderrSnapshot = null
       inlineStdout = null

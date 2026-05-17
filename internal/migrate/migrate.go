@@ -51,6 +51,34 @@
 //     in the new shape (`new InlineSnapshot { ... }`) are recognised
 //     and left alone, keeping the transform idempotent.
 //
+//  6. The nine shell-stream expectation fields (`expectExitCode`,
+//     `expectStdout`, `expectStderr`, `expect{Stdout,Stderr}Contains`,
+//     `expect{Stdout,Stderr}Matches`, `expect{Stdout,Stderr}JsonPath`)
+//     move out of `Test` / `Step` into a shared `ShellExpectations`
+//     class. The migrator consolidates sibling assignments inside a
+//     block into a single `shellExpectations { ... }` block:
+//
+//        new Step {
+//          cmd = "echo hi"
+//          expectExitCode = 0           ──┐
+//          expectStdoutContains { "hi" }  ├── consolidate
+//        }                              ──┘
+//
+//        → new Step {
+//             cmd = "echo hi"
+//             shellExpectations {
+//               expectExitCode = 0
+//               expectStdoutContains { "hi" }
+//             }
+//           }
+//
+//     Single-line scalar (`expectExitCode = 0`) and single-line block
+//     (`expectStdoutContains { "x" }`) forms rewrite cleanly. Multi-
+//     line block forms (`expectStdoutMatches {\n  #"..."#\n}`) get a
+//     Note — the operator wraps them by hand. Already-consolidated
+//     `shellExpectations {}` blocks are skipped (the rule is
+//     idempotent).
+//
 // Multi-line triple-quoted values are NOT rewritten — the source
 // keeps the field unchanged and a Note is appended so the operator
 // can hand-fix the few remaining cases.
@@ -105,6 +133,20 @@ func MigrateV01ToV02(source []byte, path string) ([]byte, []Note, error) {
 	accBlocks := [][]accEntry{nil}
 	depth := 0
 
+	// Rule 6 state: accumulate sibling shell-expectation lines and
+	// flush them as a single `shellExpectations { ... }` block when
+	// the enclosing scope closes. Lines already inside a
+	// `shellExpectations {` block (idempotency) are detected via
+	// `shellWrapDepth >= 0` and passed through unchanged.
+	type shellEntry struct {
+		indent string
+		// rendered line excluding the leading indent; emitted verbatim
+		// inside the new shellExpectations block at indent+"  ".
+		body string
+	}
+	shellAcc := [][]shellEntry{nil}
+	shellWrapDepth := -1
+
 	flushAudienceNotes := func(entries []accEntry) {
 		if len(entries) == 0 {
 			return
@@ -118,6 +160,18 @@ func MigrateV01ToV02(source []byte, path string) ([]byte, []Note, error) {
 		fmt.Fprintln(&out)
 		for _, e := range entries {
 			fmt.Fprintf(&out, "%s  [%q] = %s\n", indent, e.key, e.value)
+		}
+		fmt.Fprintf(&out, "%s}\n", indent)
+	}
+
+	flushShellExpectations := func(entries []shellEntry) {
+		if len(entries) == 0 {
+			return
+		}
+		indent := entries[0].indent
+		fmt.Fprintf(&out, "%sshellExpectations {\n", indent)
+		for _, e := range entries {
+			fmt.Fprintf(&out, "%s  %s\n", indent, e.body)
 		}
 		fmt.Fprintf(&out, "%s}\n", indent)
 	}
@@ -164,6 +218,82 @@ func MigrateV01ToV02(source []byte, path string) ([]byte, []Note, error) {
 			}
 			i++
 			continue
+		}
+
+		// Rule 6: detect entry into an existing `shellExpectations {`
+		// block so its contents pass through unchanged (idempotency).
+		// The block-open line is emitted verbatim and shellWrapDepth
+		// records the depth AT which we just entered the block — every
+		// line whose depth is ≥ shellWrapDepth is inside the wrap.
+		if shellWrapDepth < 0 && shellExpectationsOpenLine.MatchString(raw) && opens > closes {
+			shellWrapDepth = depth + (opens - closes)
+			out.WriteString(line)
+			depth += opens - closes
+			if depth < 0 {
+				depth = 0
+			}
+			i++
+			continue
+		}
+		if shellWrapDepth >= 0 && depth >= shellWrapDepth {
+			out.WriteString(line)
+			depth += opens - closes
+			if depth < shellWrapDepth {
+				shellWrapDepth = -1
+			}
+			if depth < 0 {
+				depth = 0
+			}
+			i++
+			continue
+		}
+
+		// Rule 6: consolidate sibling shell-expectation lines into a
+		// single `shellExpectations { ... }` block. Single-line scalar
+		// and single-line `field { ... }` forms accumulate here;
+		// multi-line `field {\n...\n}` forms get a Note and are passed
+		// through unchanged.
+		if m := shellExpectScalarLine.FindStringSubmatch(raw); m != nil {
+			indent, name, rest := m[1], m[2], m[3]
+			for len(shellAcc) <= depth {
+				shellAcc = append(shellAcc, nil)
+			}
+			shellAcc[depth] = append(shellAcc[depth], shellEntry{
+				indent: indent,
+				body:   fmt.Sprintf("%s = %s", name, rest),
+			})
+			depth += opens - closes
+			if depth < 0 {
+				depth = 0
+			}
+			i++
+			continue
+		}
+		if m := shellExpectBlockLine.FindStringSubmatch(raw); m != nil {
+			indent, name, body := m[1], m[2], m[3]
+			// Defensive: a single-line `field { ... }` has matched
+			// opens == closes count. If they differ, this line is a
+			// multi-line block opener; fall through to the multi-line
+			// detector below.
+			if opens == closes {
+				for len(shellAcc) <= depth {
+					shellAcc = append(shellAcc, nil)
+				}
+				shellAcc[depth] = append(shellAcc[depth], shellEntry{
+					indent: indent,
+					body:   fmt.Sprintf("%s {%s}", name, body),
+				})
+				i++
+				continue
+			}
+		}
+		if m := shellExpectMultiLineOpen.FindStringSubmatch(raw); m != nil {
+			notes = append(notes, Note{
+				Path: path, Line: i + 1,
+				Message: fmt.Sprintf("%s opens a multi-line block; wrap the surrounding sibling expect* fields inside a `shellExpectations { ... }` block by hand.", m[2]),
+			})
+			// Pass the line through; depth update happens at the
+			// generic emitter below.
 		}
 
 		// Rule 5: pre-abstract `new Implementation { kind = "X"; at = "Y" }` ->
@@ -303,14 +433,18 @@ func MigrateV01ToV02(source []byte, path string) ([]byte, []Note, error) {
 		}
 
 		// Before emitting a block-closing `}` line, flush any
-		// pending audience-notes accumulated inside the block we
-		// are leaving. Detect by closes > opens with a bare `}`
-		// (so we don't accidentally flush on a complex closing
-		// line that also opens something).
+		// pending audience-notes / shell-expectations accumulated
+		// inside the block we are leaving. Detect by closes > opens
+		// with a bare `}` (so we don't accidentally flush on a
+		// complex closing line that also opens something).
 		if closes > opens && trimmed == "}" {
 			if depth >= 0 && depth < len(accBlocks) && len(accBlocks[depth]) > 0 {
 				flushAudienceNotes(accBlocks[depth])
 				accBlocks[depth] = nil
+			}
+			if depth >= 0 && depth < len(shellAcc) && len(shellAcc[depth]) > 0 {
+				flushShellExpectations(shellAcc[depth])
+				shellAcc[depth] = nil
 			}
 		}
 
@@ -325,6 +459,9 @@ func MigrateV01ToV02(source []byte, path string) ([]byte, []Note, error) {
 	// module level have no enclosing block to wait for).
 	if len(accBlocks) > 0 && len(accBlocks[0]) > 0 {
 		flushAudienceNotes(accBlocks[0])
+	}
+	if len(shellAcc) > 0 && len(shellAcc[0]) > 0 {
+		flushShellExpectations(shellAcc[0])
 	}
 	return out.Bytes(), notes, nil
 }
@@ -356,6 +493,15 @@ var (
 	// `implSubclass`. Multi-line forms are not common in practice — when
 	// they do appear, the operator hand-edits.
 	implFlatInline = regexp.MustCompile(`^(\s*)new\s+Implementation\s*\{\s*kind\s*=\s*"(test|code|doc|task)"\s*;\s*at\s*=\s*("(?:[^"\\]|\\.)*")\s*\}\s*$`)
+
+	// Rule 6 patterns. shellExpectFieldNames captures every field that
+	// migrates out of Test / Step into the shared ShellExpectations
+	// class.
+	shellExpectFieldNames    = `expectExitCode|expectStdout|expectStderr|expectStdoutContains|expectStderrContains|expectStdoutMatches|expectStderrMatches|expectStdoutJsonPath|expectStderrJsonPath`
+	shellExpectScalarLine    = regexp.MustCompile(`^(\s*)(` + shellExpectFieldNames + `)\s*=\s*(.+?)\s*$`)
+	shellExpectBlockLine     = regexp.MustCompile(`^(\s*)(` + shellExpectFieldNames + `)\s*\{(.*)\}\s*$`)
+	shellExpectMultiLineOpen = regexp.MustCompile(`^(\s*)(` + shellExpectFieldNames + `)\s*\{\s*$`)
+	shellExpectationsOpenLine = regexp.MustCompile(`^\s*shellExpectations\s*\{`)
 )
 
 var audienceKey = map[string]string{

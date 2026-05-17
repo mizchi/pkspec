@@ -78,6 +78,58 @@ class InlineSnapshot {
   value: String? = null
 }
 
+/// Shell-stream assertions shared by every author site that runs a
+/// subprocess: `Test.cmd` at the top level, and `Step.cmd` inside a
+/// `steps` / `parallelSteps` list. Pre-0.3.0, the same nine fields
+/// were duplicated on both `Test` and `Step`; T2-3 in TODO.md
+/// extracts them so a new shell assertion lands in one class instead
+/// of two.
+///
+/// Author usage:
+///
+///     new Test {
+///       name = "x"
+///       cmd = "echo hi"
+///       shellExpectations {
+///         expectStdoutContains { "hi" }
+///         expectExitCode = 0
+///       }
+///     }
+///
+/// The class carries no behaviour of its own — the executor still
+/// reads the flattened fields off `RenderedStep` / `RenderedTest`,
+/// which `pkl/Test.pkl#renderStep` / `renderTest` populate by
+/// reaching into `shellExpectations` on the rendering side.
+class ShellExpectations {
+  /// Required exit code for the subprocess. Default `0` (success);
+  /// set to a specific non-zero value to assert on an expected
+  /// failure code, or leave at `0` for the common pass-through case.
+  expectExitCode: Int = 0
+
+  /// Exact-match stdout assertion. `null` (default) means no exact
+  /// check; pair with `expectStdoutContains` / `expectStdoutMatches`
+  /// or `inlineStdout` for partial / regex / inline snapshot cases.
+  expectStdout: String? = null
+  expectStderr: String? = null
+
+  /// Every listed substring must appear in the shell stdout/stderr.
+  /// Use this for CLI contracts where exact output would be brittle
+  /// but a task name, graph edge, or warning token is load-bearing.
+  expectStdoutContains: Listing<String> = new {}
+  expectStderrContains: Listing<String> = new {}
+
+  /// Every listed regular expression must match the shell stream.
+  /// Patterns are Go regexp strings evaluated by the runner.
+  expectStdoutMatches: Listing<String> = new {}
+  expectStderrMatches: Listing<String> = new {}
+
+  /// Map of JSON path → expected value, evaluated against the stream
+  /// parsed as JSON. Same gjson path syntax as `expectBodyJsonPath`.
+  /// The stream must be valid JSON when this map is non-empty.
+  expectStdoutJsonPath: Mapping<String, Any> = new {}
+  expectStderrJsonPath: Mapping<String, Any> = new {}
+}
+
 /// HTTP request authored on a Step. When `Step.http` is non-null, the
 /// runner takes the HTTP path: it dispatches the request via Go's
 /// `net/http`, applies the `expectStatus` / `expectBody*` /
@@ -177,27 +229,12 @@ class Step {
   workdir: String? = null
   timeoutSec: Int(this > 0) = 60
 
-  // ── Shell expectations ─────────────────────────────────────────
-  expectExitCode: Int = 0
-  expectStdout: String? = null
-  expectStderr: String? = null
-
-  /// Every listed substring must appear in the shell stdout/stderr.
-  /// Use this for CLI contracts where exact output would be brittle
-  /// but a task name, graph edge, or warning token is load-bearing.
-  expectStdoutContains: Listing<String> = new {}
-  expectStderrContains: Listing<String> = new {}
-
-  /// Every listed regular expression must match the shell stream.
-  /// Patterns are Go regexp strings evaluated by the runner.
-  expectStdoutMatches: Listing<String> = new {}
-  expectStderrMatches: Listing<String> = new {}
-
-  /// Map of JSON path → expected value, evaluated against the stream
-  /// parsed as JSON. Same gjson path syntax as `expectBodyJsonPath`.
-  /// The stream must be valid JSON when this map is non-empty.
-  expectStdoutJsonPath: Mapping<String, Any> = new {}
-  expectStderrJsonPath: Mapping<String, Any> = new {}
+  /// Shell-stream assertions (exit code, stdout/stderr exact /
+  /// contains / regex / JSONPath). Empty by default — only the
+  /// `expectExitCode = 0` default fires. Only meaningful when the
+  /// step is `kind = "shell"`; on other kinds the runner rejects
+  /// any non-default field (see `validateStepKind`).
+  shellExpectations: ShellExpectations = new {}
 
   /// Inline snapshot of step stdout. Opt in with `inlineStdout = new
   /// InlineSnapshot {}` (state defaults to `"capture"`); the rewriter
@@ -799,25 +836,17 @@ class Test {
   // ── Body: pick exactly one ─────────────────────────────────────
   cmd: (String(length > 0))? = null
   stdin: String? = null
-  expectExitCode: Int = 0
-  expectStdout: String? = null
-  expectStderr: String? = null
-  /// Every listed substring must appear in stdout/stderr.
-  expectStdoutContains: Listing<String> = new {}
-  expectStderrContains: Listing<String> = new {}
 
-  /// Every listed Go regexp pattern must match stdout/stderr.
-  expectStdoutMatches: Listing<String> = new {}
-  expectStderrMatches: Listing<String> = new {}
-
-  /// JSONPath assertions against stdout/stderr when the stream is
-  /// valid JSON. Same path syntax and value comparison semantics as
-  /// `expectBodyJsonPath`.
-  expectStdoutJsonPath: Mapping<String, Any> = new {}
-  expectStderrJsonPath: Mapping<String, Any> = new {}
+  /// Shell-stream assertions shared with `Step.shellExpectations` —
+  /// see the `ShellExpectations` class for the field list. Only
+  /// meaningful for tests with a top-level `cmd`; tests built from
+  /// `steps` / `parallelSteps` push the assertions onto each step's
+  /// own `shellExpectations`.
+  shellExpectations: ShellExpectations = new {}
 
   /// Match captured stdout against a committed snapshot file.
-  /// Composes with `expectStdout`; both checks must pass when both set.
+  /// Composes with `shellExpectations.expectStdout`; both checks must
+  /// pass when both set.
   expectStdoutSnapshot: ReferenceSnapshot? = null
   expectStderrSnapshot: ReferenceSnapshot? = null
 
@@ -1285,15 +1314,15 @@ local function renderStep(s: Step): RenderedStep = new {
   env = s.env
   workdir = s.workdir
   timeoutSec = s.timeoutSec
-  expectExitCode = s.expectExitCode
-  expectStdout = s.expectStdout
-  expectStderr = s.expectStderr
-  expectStdoutContains = s.expectStdoutContains
-  expectStderrContains = s.expectStderrContains
-  expectStdoutMatches = s.expectStdoutMatches
-  expectStderrMatches = s.expectStderrMatches
-  expectStdoutJsonPath = s.expectStdoutJsonPath
-  expectStderrJsonPath = s.expectStderrJsonPath
+  expectExitCode = s.shellExpectations.expectExitCode
+  expectStdout = s.shellExpectations.expectStdout
+  expectStderr = s.shellExpectations.expectStderr
+  expectStdoutContains = s.shellExpectations.expectStdoutContains
+  expectStderrContains = s.shellExpectations.expectStderrContains
+  expectStdoutMatches = s.shellExpectations.expectStdoutMatches
+  expectStderrMatches = s.shellExpectations.expectStderrMatches
+  expectStdoutJsonPath = s.shellExpectations.expectStdoutJsonPath
+  expectStderrJsonPath = s.shellExpectations.expectStderrJsonPath
   inlineStdout = flattenInlineSnapshot(s.inlineStdout)
   inlineHttpBody = flattenInlineSnapshot(s.inlineHttpBody)
   inlineJsonPath = s.inlineJsonPath
@@ -1377,15 +1406,15 @@ local function renderTest(t: Test): RenderedTest = new {
   }
   cmd = t.cmd
   stdin = t.stdin
-  expectExitCode = t.expectExitCode
-  expectStdout = t.expectStdout
-  expectStderr = t.expectStderr
-  expectStdoutContains = t.expectStdoutContains
-  expectStderrContains = t.expectStderrContains
-  expectStdoutMatches = t.expectStdoutMatches
-  expectStderrMatches = t.expectStderrMatches
-  expectStdoutJsonPath = t.expectStdoutJsonPath
-  expectStderrJsonPath = t.expectStderrJsonPath
+  expectExitCode = t.shellExpectations.expectExitCode
+  expectStdout = t.shellExpectations.expectStdout
+  expectStderr = t.shellExpectations.expectStderr
+  expectStdoutContains = t.shellExpectations.expectStdoutContains
+  expectStderrContains = t.shellExpectations.expectStderrContains
+  expectStdoutMatches = t.shellExpectations.expectStdoutMatches
+  expectStderrMatches = t.shellExpectations.expectStderrMatches
+  expectStdoutJsonPath = t.shellExpectations.expectStdoutJsonPath
+  expectStderrJsonPath = t.shellExpectations.expectStderrJsonPath
   expectStdoutSnapshot =
     if (t.expectStdoutSnapshot == null)
       null
