@@ -350,8 +350,18 @@ schema change.
 
 ### T2-3. Extract `ShellExpectations` from Test and Step
 
-**Status (deferred to 0.3.0):** Bundled with T2-2 / T3-2 / T3-3
-in the 0.3.0 author-surface batch (see T2-2 for rationale).
+**Status (resolved in 0.3.0):** Done — the nine fields
+(`expectExitCode`, `expectStdout`, `expectStderr`,
+`expect{Stdout,Stderr}Contains`, `expect{Stdout,Stderr}Matches`,
+`expect{Stdout,Stderr}JsonPath`) moved into `class ShellExpectations`;
+both `Test` and `Step` now carry a single
+`shellExpectations: ShellExpectations = new {}` embed. `pkl/Test.pkl
+#renderStep` / `renderTest` flatten the embed back to the original
+`Rendered{Step,Test}.expectStdout` etc. fields, so the Go runner is
+unchanged. `pkspec migrate` Rule 6 consolidates sibling expect*
+lines into a `shellExpectations { ... }` block when their enclosing
+Test / Step block closes; multi-line block forms emit a Note for
+hand wrapping. Rule is idempotent.
 
 **Problem.** `Test` and `Step` each declare the same nine
 expect/inline field names (`expectStdout`, `expectStdoutContains`,
@@ -669,8 +679,9 @@ This is a runner change (Go-side), not a schema change.
 
 After Tier 1 + T2-1 + T3-4 + T3-5 landed, the remaining four
 tickets (**T2-2 / T2-3 / T3-2 / T3-3**) were bundled and deferred
-to a dedicated **0.3.0** release. T3-3 has since shipped as the
-first 0.3.0 batch commit; T2-2 / T2-3 / T3-2 are still pending. They all touch the **author
+to a dedicated **0.3.0** release. T3-3 + T2-3 have since shipped
+as separate 0.3.0 batch commits; T2-2 / T3-2 (the two abstract-
+class hierarchies for body slots) are still pending. They all touch the **author
 surface** of every Test.pkl / Spec.pkl in existence:
 
 - T2-2  every `Step { cmd | http | playwright | playwrightTest | sql = ... }`
