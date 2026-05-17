@@ -48,6 +48,36 @@ typealias MilestoneProgressMethod = (GoalProgressMethod | "goal-average")
 /// instant.
 typealias IsoDate = String(matches(Regex(#"^\d{4}-\d{2}-\d{2}$"#)))
 
+/// Inline snapshot field for `Test.inlineStdout` / `Test.inlineStderr`
+/// and the analogous `Step.inline*` scalar fields.
+///
+/// Replaces the v0.2.x sentinel encoding `inlineStdout: String?` where
+/// `null` meant skip / `""` meant capture / any other string meant
+/// match. The two-state class is what the user actually wanted to
+/// say:
+///
+///   * **`state = "capture"`** — opt in to capture on the next
+///     `pkspec exec --update-inline-snapshots` run. `value` is
+///     populated by the rewriter on first capture.
+///   * **`state = "match"`** — exact-match the captured stream
+///     against `value`; mismatch fails the test unless
+///     `--update-inline-snapshots` is set, in which case the rewriter
+///     replaces `value` with the live capture.
+///
+/// `null` on the field (the schema default) still means "no inline
+/// assertion here." Initial opt-in shorthand: `inlineStdout = new
+/// InlineSnapshot {}` (state defaults to `"capture"`).
+class InlineSnapshot {
+  /// Phase of the inline-snapshot lifecycle. Default `"capture"` so
+  /// the opt-in form `new InlineSnapshot {}` is concise.
+  state: ("capture" | "match") = "capture"
+
+  /// Captured / expected payload. Only consulted when `state ==
+  /// "match"`; the rewriter populates this on the first
+  /// `--update-inline-snapshots` run after `state` flips.
+  value: String? = null
+}
+
 /// HTTP request authored on a Step. When `Step.http` is non-null, the
 /// runner takes the HTTP path: it dispatches the request via Go's
 /// `net/http`, applies the `expectStatus` / `expectBody*` /
@@ -169,22 +199,21 @@ class Step {
   expectStdoutJsonPath: Mapping<String, Any> = new {}
   expectStderrJsonPath: Mapping<String, Any> = new {}
 
-  /// Inline snapshot of step stdout. Same semantics as
-  /// `Test.inlineStdout`: opt in by setting to `""` (or any string),
-  /// run with `--update-inline-snapshots` to populate, subsequent
-  /// runs do an exact compare. `null` (default) means "skip". Only
-  /// meaningful for shell steps; HTTP steps should use
+  /// Inline snapshot of step stdout. Opt in with `inlineStdout = new
+  /// InlineSnapshot {}` (state defaults to `"capture"`); the rewriter
+  /// flips it to `state = "match"` with the live value on the next
+  /// `--update-inline-snapshots` run. `null` (default) means "skip."
+  /// Only meaningful for shell steps; HTTP steps should use
   /// `expectBodyEquals` / `expectBodyJsonPath` instead.
-  inlineStdout: String? = null
+  inlineStdout: InlineSnapshot? = null
 
   /// Inline snapshot of HTTP response body (http kind only). Same
-  /// semantics as `inlineStdout`: opt in by setting to any string,
-  /// mismatch fails the step unless `--update-inline-snapshots` is
-  /// set, in which case the captured body is written back into
-  /// this Pkl field. Requires `step.name` so the rewriter can
-  /// locate the source line. Multi-line bodies are emitted as Pkl
-  /// triple-quoted (`"""..."""`) literals when long.
-  inlineHttpBody: String? = null
+  /// authoring contract as `inlineStdout`: opt in via `new
+  /// InlineSnapshot {}`, the rewriter populates `value` and switches
+  /// `state` to `"match"` on capture. Requires `step.name` so the
+  /// rewriter can locate the source line. Multi-line bodies are
+  /// emitted as Pkl triple-quoted (`"""..."""`) literals when long.
+  inlineHttpBody: InlineSnapshot? = null
 
   /// Per-jsonpath inline snapshot. The key is a JSONPath
   /// expression (same syntax as `expectBodyJsonPath`), the
@@ -212,12 +241,11 @@ class Step {
   inlineSqlRows: Mapping<String, String> = new {}
 
   /// Inline snapshot of the playwright console stream as a
-  /// single newline-joined string. Same opt-in semantics as
-  /// `inlineStdout`: set to any string to opt in, the captured
-  /// console entries are written here on `--update-inline-
-  /// snapshots`. Only takes effect when `kind == "playwright"`;
-  /// ignored on other kinds.
-  inlineConsoleLog: String? = null
+  /// single newline-joined string. Opt in via `new InlineSnapshot
+  /// {}`; the rewriter flips state to `"match"` with the joined
+  /// console entries on `--update-inline-snapshots`. Only takes
+  /// effect when `kind == "playwright"`; ignored on other kinds.
+  inlineConsoleLog: InlineSnapshot? = null
 
   // ── HTTP expectations ──────────────────────────────────────────
   expectStatus: Int? = null
@@ -793,23 +821,21 @@ class Test {
   expectStdoutSnapshot: ReferenceSnapshot? = null
   expectStderrSnapshot: ReferenceSnapshot? = null
 
-  /// Inline snapshot of stdout. Opt in by setting this to any string
-  /// (typically `""` on first authoring); the runner then rewrites
-  /// the field in-place inside the Test.pkl source on a mismatch when
-  /// invoked with `--update-inline-snapshots`. On subsequent runs the
-  /// captured stdout must match exactly.
+  /// Inline snapshot of stdout. Opt in by writing `inlineStdout = new
+  /// InlineSnapshot {}` (state defaults to `"capture"`); the rewriter
+  /// captures the live stdout and flips the field to `state = "match";
+  /// value = "..."` on the next `--update-inline-snapshots` run.
+  /// Subsequent runs do exact-match comparison against `value`.
   ///
   /// `null` (the default) means "no inline assertion here" — the
-  /// runner skips this field entirely. We can't distinguish a missing
-  /// field from one explicitly written as `null` via pkl-go decoding,
-  /// so `""` is the opt-in sentinel.
+  /// runner skips this field entirely.
   ///
   /// Composes with `expectStdout` — both checks run if both are set.
   /// Distinct from `expectStdoutSnapshot`, which stores bytes in a
   /// separate file (.bytes); inline snapshots live in the Pkl source
   /// itself and show up in code review diffs.
-  inlineStdout: String? = null
-  inlineStderr: String? = null
+  inlineStdout: InlineSnapshot? = null
+  inlineStderr: InlineSnapshot? = null
 
   steps: Listing<Step> = new {}
   parallelSteps: Listing<Step> = new {}
@@ -1179,6 +1205,26 @@ local testNames: List<String> = tests.toList().map((t) -> t.name)
 local duplicateNames: List<String> =
   testNames.filter((n) -> testNames.count((m) -> m == n) > 1).distinct
 
+/// Flatten an authored `InlineSnapshot?` back to the runner-facing
+/// `String?` sentinel used by `RenderedStep` / `RenderedTest`:
+///
+///   * `null`                                  → `null` (skip)
+///   * `new InlineSnapshot {}`                 → `""`   (capture)
+///   * `new InlineSnapshot { state = "match"; value = "X" }` → `"X"` (match)
+///
+/// Keeping the rendered shape flat means the Go-side
+/// `Step.InlineStdout *string` and the executor's sentinel checks
+/// continue to work without any decoder changes; only the inline
+/// rewriter learns the new author surface on the way back into the
+/// source file.
+local function flattenInlineSnapshot(s: InlineSnapshot?): String? =
+  if (s == null)
+    null
+  else if (s.state == "capture")
+    ""
+  else
+    s.value
+
 local function renderHttp(h: HttpRequest): RenderedHttpRequest = new {
   method = h.method
   url = h.url
@@ -1248,12 +1294,12 @@ local function renderStep(s: Step): RenderedStep = new {
   expectStderrMatches = s.expectStderrMatches
   expectStdoutJsonPath = s.expectStdoutJsonPath
   expectStderrJsonPath = s.expectStderrJsonPath
-  inlineStdout = s.inlineStdout
-  inlineHttpBody = s.inlineHttpBody
+  inlineStdout = flattenInlineSnapshot(s.inlineStdout)
+  inlineHttpBody = flattenInlineSnapshot(s.inlineHttpBody)
   inlineJsonPath = s.inlineJsonPath
   inlineHeaders = s.inlineHeaders
   inlineSqlRows = s.inlineSqlRows
-  inlineConsoleLog = s.inlineConsoleLog
+  inlineConsoleLog = flattenInlineSnapshot(s.inlineConsoleLog)
   expectStatus = s.expectStatus
   expectStatusBetween = s.expectStatusBetween
   expectBodyEquals = s.expectBodyEquals
@@ -1350,8 +1396,8 @@ local function renderTest(t: Test): RenderedTest = new {
       null
     else
       renderSnapshot(t.expectStderrSnapshot)
-  inlineStdout = t.inlineStdout
-  inlineStderr = t.inlineStderr
+  inlineStdout = flattenInlineSnapshot(t.inlineStdout)
+  inlineStderr = flattenInlineSnapshot(t.inlineStderr)
   steps = new Listing<RenderedStep> {
     for (s in t.steps) { renderStep(s) }
   }

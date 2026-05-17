@@ -10,25 +10,25 @@ const sample = `amends "Test.pkl"
 local greeting = new Test {
   name = "greeting"
   cmd = "echo hello"
-  inlineStdout = null
+  inlineStdout = new InlineSnapshot {}
   inlineStderr = null
 }
 
 local farewell = new Test {
   name = "farewell"
   cmd = "echo bye"
-  inlineStdout = "bye\n"
+  inlineStdout = new InlineSnapshot { state = "match"; value = "bye\n" }
 }
 
 tests { greeting; farewell }
 `
 
-func TestReplaceField_NullToValue(t *testing.T) {
-	out, err := ReplaceField([]byte(sample), "greeting", "inlineStdout", "hello\n")
+func TestReplaceInlineSnapshotField_CaptureToMatch(t *testing.T) {
+	out, err := ReplaceInlineSnapshotField([]byte(sample), "greeting", "inlineStdout", "hello\n")
 	if err != nil {
-		t.Fatalf("ReplaceField: %v", err)
+		t.Fatalf("ReplaceInlineSnapshotField: %v", err)
 	}
-	want := `inlineStdout = "hello\n"`
+	want := `inlineStdout = new InlineSnapshot { state = "match"; value = "hello\n" }`
 	if !strings.Contains(string(out), want) {
 		t.Fatalf("expected %q in output, got:\n%s", want, out)
 	}
@@ -36,17 +36,18 @@ func TestReplaceField_NullToValue(t *testing.T) {
 	if !strings.Contains(string(out), `inlineStderr = null`) {
 		t.Fatal("inlineStderr line was inadvertently rewritten")
 	}
-	if !strings.Contains(string(out), `inlineStdout = "bye\n"`) {
+	if !strings.Contains(string(out), `inlineStdout = new InlineSnapshot { state = "match"; value = "bye\n" }`) {
 		t.Fatal("farewell.inlineStdout was inadvertently rewritten")
 	}
 }
 
-func TestReplaceField_ExistingValue(t *testing.T) {
-	out, err := ReplaceField([]byte(sample), "farewell", "inlineStdout", "see you\n")
+func TestReplaceInlineSnapshotField_ExistingMatch(t *testing.T) {
+	out, err := ReplaceInlineSnapshotField([]byte(sample), "farewell", "inlineStdout", "see you\n")
 	if err != nil {
-		t.Fatalf("ReplaceField: %v", err)
+		t.Fatalf("ReplaceInlineSnapshotField: %v", err)
 	}
-	if !strings.Contains(string(out), `inlineStdout = "see you\n"`) {
+	want := `inlineStdout = new InlineSnapshot { state = "match"; value = "see you\n" }`
+	if !strings.Contains(string(out), want) {
 		t.Fatalf("missing rewritten line in:\n%s", out)
 	}
 	// greeting block intact
@@ -55,15 +56,36 @@ func TestReplaceField_ExistingValue(t *testing.T) {
 	}
 }
 
-func TestReplaceField_FieldMissing(t *testing.T) {
-	_, err := ReplaceField([]byte(sample), "greeting", "missing", "x")
+func TestReplaceInlineSnapshotField_MultiLineValue(t *testing.T) {
+	body := "line1\nline2\nline3\nline4\nline5\n"
+	out, err := ReplaceInlineSnapshotField([]byte(sample), "greeting", "inlineStdout", body)
+	if err != nil {
+		t.Fatalf("ReplaceInlineSnapshotField: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, `inlineStdout = new InlineSnapshot {`) {
+		t.Fatalf("expected multi-line InlineSnapshot opener, got:\n%s", s)
+	}
+	if !strings.Contains(s, `state = "match"`) {
+		t.Fatalf("expected state assignment in:\n%s", s)
+	}
+	if !strings.Contains(s, `value = """`) {
+		t.Fatalf("expected triple-quoted value start in:\n%s", s)
+	}
+	if !strings.Contains(s, "    line1\n    line2") {
+		t.Fatalf("multiline indent wrong, got:\n%s", s)
+	}
+}
+
+func TestReplaceInlineSnapshotField_FieldMissing(t *testing.T) {
+	_, err := ReplaceInlineSnapshotField([]byte(sample), "greeting", "missing", "x")
 	if err == nil {
 		t.Fatal("expected error when field is absent")
 	}
 }
 
-func TestReplaceField_NameMissing(t *testing.T) {
-	_, err := ReplaceField([]byte(sample), "nope", "inlineStdout", "x")
+func TestReplaceInlineSnapshotField_NameMissing(t *testing.T) {
+	_, err := ReplaceInlineSnapshotField([]byte(sample), "nope", "inlineStdout", "x")
 	if err == nil {
 		t.Fatal("expected error when name is absent")
 	}

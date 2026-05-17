@@ -3,7 +3,7 @@
 // never invoked — so this package can convert sources that no
 // longer parse under the current schema.
 //
-// Migration rules (v0.1.x → v0.2.0):
+// Migration rules (v0.1.x → v0.2.0 → v0.3.0):
 //
 //  1. `implementedBy = "X"` (+ optional sibling `implementedAt = Y`)
 //     folds into a single `implementations` Listing entry, using
@@ -35,6 +35,21 @@
 //     `Goal.progress = new { method = "X" }` (one-liner) flatten to
 //     `progressMethod = "X"`. An empty `progress { }` (i.e. default)
 //     is removed.
+//
+//  4. Scalar inline-snapshot fields (`inlineStdout`, `inlineStderr`,
+//     `inlineHttpBody`, `inlineConsoleLog`) lose the v0.2.x sentinel
+//     encoding `String?` ("" = capture, anything else = match, null
+//     = skip) in favour of the typed `InlineSnapshot` class:
+//
+//        inlineStdout = ""        → inlineStdout = new InlineSnapshot {}
+//        inlineStdout = "pong\n"  → inlineStdout = new InlineSnapshot { state = "match"; value = "pong\n" }
+//        inlineStdout = null      → (left unchanged — null still means skip)
+//
+//     Single-line string values rewrite cleanly; multi-line triple-
+//     quoted values get a Note (the rewriter passes them through
+//     unchanged so the operator can wrap them by hand). Lines already
+//     in the new shape (`new InlineSnapshot { ... }`) are recognised
+//     and left alone, keeping the transform idempotent.
 //
 // Multi-line triple-quoted values are NOT rewritten — the source
 // keeps the field unchanged and a Note is appended so the operator
@@ -143,6 +158,60 @@ func MigrateV01ToV02(source []byte, path string) ([]byte, []Note, error) {
 				}
 			}
 			accBlocks[depth] = append(accBlocks[depth], accEntry{indent: indent, key: key, value: value})
+			depth += opens - closes
+			if depth < 0 {
+				depth = 0
+			}
+			i++
+			continue
+		}
+
+		// Rule 4: scalar inline-snapshot fields -> InlineSnapshot block.
+		if m := inlineScalarLine.FindStringSubmatch(raw); m != nil {
+			indent, name, rest := m[1], m[2], strings.TrimSpace(m[3])
+			// Already-migrated shape (`new InlineSnapshot { ... }`) —
+			// pass through unchanged to keep the transform idempotent.
+			if strings.HasPrefix(rest, "new InlineSnapshot") {
+				out.WriteString(line)
+				depth += opens - closes
+				if depth < 0 {
+					depth = 0
+				}
+				i++
+				continue
+			}
+			// `inlineStdout = null` stays as-is — null is still the
+			// "skip" value under the new schema.
+			if rest == "null" {
+				out.WriteString(line)
+				depth += opens - closes
+				if depth < 0 {
+					depth = 0
+				}
+				i++
+				continue
+			}
+			// Single-line string literal: " ... " possibly with escapes.
+			if sm := inlineStringValue.FindStringSubmatch(rest); sm != nil {
+				literal := sm[1]
+				// Empty string ("") was the v0.2.x "capture" sentinel.
+				if literal == `""` {
+					fmt.Fprintf(&out, "%s%s = new InlineSnapshot {}\n", indent, name)
+				} else {
+					fmt.Fprintf(&out, "%s%s = new InlineSnapshot { state = \"match\"; value = %s }\n",
+						indent, name, literal)
+				}
+				i++
+				continue
+			}
+			// Triple-quoted or otherwise non-string-literal value:
+			// leave alone and warn — the multi-line wrap needs human
+			// review.
+			notes = append(notes, Note{
+				Path: path, Line: i + 1,
+				Message: fmt.Sprintf("%s has a non-string-literal value; wrap it as `new InlineSnapshot { state = \"match\"; value = ... }` by hand.", name),
+			})
+			out.WriteString(line)
 			depth += opens - closes
 			if depth < 0 {
 				depth = 0
@@ -263,6 +332,12 @@ var (
 	progressBlockClose = regexp.MustCompile(`^\s*\}\s*$`)
 	progressOneLine    = regexp.MustCompile(`^(\s*)progress\s*(?:=\s*new\s*)?\{\s*method\s*=\s*"([^"]*)"\s*\}\s*$`)
 	progressEmpty      = regexp.MustCompile(`^\s*progress\s*(?:=\s*new\s*)?\{\s*\}\s*$`)
+
+	// Scalar inline-snapshot fields targeted by Rule 4. Mapping-valued
+	// inline fields (`inlineJsonPath` / `inlineHeaders` / `inlineSqlRows`)
+	// keep their `String` element type and are left alone.
+	inlineScalarLine  = regexp.MustCompile(`^(\s*)(inlineStdout|inlineStderr|inlineHttpBody|inlineConsoleLog)\s*=\s*(.*?)\s*$`)
+	inlineStringValue = regexp.MustCompile(`^("(?:[^"\\]|\\.)*")$`)
 )
 
 var audienceKey = map[string]string{

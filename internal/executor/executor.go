@@ -2218,7 +2218,7 @@ func (e *Executor) rewriteInline(blockName, fieldName, value string) error {
 	if err != nil {
 		return err
 	}
-	rewritten, err := inline.ReplaceField(src, blockName, fieldName, value)
+	rewritten, err := inline.ReplaceInlineSnapshotField(src, blockName, fieldName, value)
 	if err != nil {
 		return err
 	}
