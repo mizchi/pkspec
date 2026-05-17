@@ -59,7 +59,7 @@ jobs:
           tests {
             new {
               name = "nix_release_smoke"
-              cmd = "true"
+              body = new CmdTest { cmd = "true" }
             }
           }
           PKL
