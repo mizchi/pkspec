@@ -701,12 +701,14 @@ Migrator status:
   subclass — DONE.
 - Rule 6 (T2-3): scalar / single-line block expect* lines →
   shellExpectations consolidation — DONE.
-- **Rule 7 (T2-2 + T3-2): Step / Test body consolidation — TODO**.
-  Block-aware multi-line text transform; harder to write
-  correctly than Rules 4-6. The in-repo migration was done by
-  hand; downstream upgraders presently hand-wrap from the
-  example diff. Pick up as a focused follow-up before cutting
-  the 0.3.0 tag. They all touch the **author
+- Rule 7 (T2-2 + T3-2): Step / Test body consolidation —
+  DONE. Two-pass walker (Step first, Test second) with scope
+  stack, brace-counter for nested classes, separate triple-
+  quote tracker for `cmd = """ ... """` literals, and regex
+  pre-pass for one-liner shapes. Round-trip-verified on 24/25
+  v0.2.x example snapshots; the one residual case is a Rule 6
+  multi-line block limitation in the same file (not a Rule 7
+  regression). They all touch the **author
 surface** of every Test.pkl / Spec.pkl in existence:
 
 - T2-2  every `Step { cmd | http | playwright | playwrightTest | sql = ... }`
