@@ -282,15 +282,17 @@ type error.
 
 ### T2-2. Reshape `Step` body via `abstract class StepBody`
 
-**Status (deferred to 0.3.0):** Punted to a dedicated breaking
-release. Rationale: T2-2, T2-3, T3-2, and T3-3 all touch the
-**author surface** of every Test.pkl / Spec.pkl (every `cmd =`,
-every `expect*`, every `inlineStdout`, every `steps` block). Landing
-them one at a time forces every downstream project to run `pkspec
-migrate` four separate times. They should land together in a single
-0.3.0 release with one migrate pass, one changelog entry, and one
-review window. See **Migration sequencing note** at the end of this
-file for the planned 0.3.0 batch.
+**Status (resolved in 0.3.0):** Done — `Step.body: StepBody`
+replaces the v0.2.x flat `Step { cmd | http | playwright |
+playwrightTest | sql = ... }` shape. Each subclass (`ShellBody` /
+`HttpBody` / `PlaywrightBody` / `PlaywrightTestBody` / `SqlBody`)
+carries its kind-specific assertions, snapshots, captures, and
+(where relevant) cassette field. Only cross-kind concerns (name /
+env / workdir / timeoutSec / eventually / expectAi / always /
+repeat) stay on `Step`. The synthesized `Step.kind` field is gone
+(resolves T3-1 as a side effect); `renderStep` derives the
+discriminator from the body subclass via `is`-checks and writes
+`RenderedStep.kind` for Go-side dispatch. Runtime ABI is unchanged.
 
 **Problem.** A `Step` carries five mutually-exclusive body slots
 (`cmd`, `http`, `playwright`, `playwrightTest`, `sql`) all
@@ -451,8 +453,16 @@ abstract-class hierarchy and is no longer synthesized.)
 
 ### T3-2. Apply `abstract TestBody` to `Test.cmd` / `steps` / `parallelSteps`
 
-**Status (deferred to 0.3.0):** Bundled with T2-2 / T2-3 / T3-3
-in the 0.3.0 author-surface batch.
+**Status (resolved in 0.3.0):** Done — `Test.body: TestBody?`
+replaces the v0.2.x flat `Test { cmd | steps | parallelSteps = ...
+}` shape. Three subclasses: `CmdTest` (cmd + stdin +
+shellExpectations + inline snapshots + ReferenceSnapshot pointers),
+`SequentialTest` (steps), `ParallelTest` (parallelSteps). `body ==
+null` is the pending / spec-only marker; the auto-pending rule
+(`tags { "spec" }` + null body) is unchanged. `pkl/Spec.pkl#scenarioToTest`
+builds a `SequentialTest` body from the Given/When/Then/Cleanup
+composition or leaves `body = null` for empty scenarios. Runtime
+ABI is unchanged via `renderTest`'s `is`-cascade.
 
 **Problem.** Same as T2-2 but for `Test`. A `Test` is supposed to
 pick exactly one of `cmd`, `steps`, or `parallelSteps`; the
@@ -679,9 +689,24 @@ This is a runner change (Go-side), not a schema change.
 
 After Tier 1 + T2-1 + T3-4 + T3-5 landed, the remaining four
 tickets (**T2-2 / T2-3 / T3-2 / T3-3**) were bundled and deferred
-to a dedicated **0.3.0** release. T3-3 + T2-3 have since shipped
-as separate 0.3.0 batch commits; T2-2 / T3-2 (the two abstract-
-class hierarchies for body slots) are still pending. They all touch the **author
+to a dedicated **0.3.0** release. All four have since shipped as
+sequential 0.3.0 batch commits (T3-3 → T2-3 → T2-2 → T3-2), each
+with example migration and Pkl + Go test updates in the same
+commit. T3-1 (hidden `Step.kind`) became moot under T2-2 and was
+removed as a side effect.
+
+Migrator status:
+- Rule 4 (T3-3): scalar inline → InlineSnapshot — DONE.
+- Rule 5: pre-abstract `new Implementation { ... }` → typed
+  subclass — DONE.
+- Rule 6 (T2-3): scalar / single-line block expect* lines →
+  shellExpectations consolidation — DONE.
+- **Rule 7 (T2-2 + T3-2): Step / Test body consolidation — TODO**.
+  Block-aware multi-line text transform; harder to write
+  correctly than Rules 4-6. The in-repo migration was done by
+  hand; downstream upgraders presently hand-wrap from the
+  example diff. Pick up as a focused follow-up before cutting
+  the 0.3.0 tag. They all touch the **author
 surface** of every Test.pkl / Spec.pkl in existence:
 
 - T2-2  every `Step { cmd | http | playwright | playwrightTest | sql = ... }`
