@@ -7,16 +7,18 @@ tests {
     description = "delegate to @playwright/test; aggregate JUnit XML into one Step"
     tags { "unit" }
     specRef { "kind.playwright-test"; "runner.junit-report" }
-    steps {
-      new {
-        name = "run"
-        body = new PlaywrightTestBody {
-          playwrightTest = new PlaywrightTestSpec {
-            specPath = "tests/auth.spec.ts"
-            configPath = "playwright.config.ts"
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "run"
+          body = new PlaywrightTestBody {
+            playwrightTest = new PlaywrightTestSpec {
+              specPath = "tests/auth.spec.ts"
+              configPath = "playwright.config.ts"
+            }
           }
+          timeoutSec = 120
         }
-        timeoutSec = 120
       }
     }
   }
@@ -26,17 +28,19 @@ tests {
     description = "--grep filter forwarded to playwright-test"
     tags { "unit" }
     specRef { "kind.playwright-test"; "runner.playwright-test.grep-filter" }
-    steps {
-      new {
-        name = "run"
-        body = new PlaywrightTestBody {
-          playwrightTest = new PlaywrightTestSpec {
-            specPath = "tests/auth.spec.ts"
-            configPath = "playwright.config.ts"
-            grep = "login form"
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "run"
+          body = new PlaywrightTestBody {
+            playwrightTest = new PlaywrightTestSpec {
+              specPath = "tests/auth.spec.ts"
+              configPath = "playwright.config.ts"
+              grep = "login form"
+            }
           }
+          timeoutSec = 120
         }
-        timeoutSec = 120
       }
     }
   }

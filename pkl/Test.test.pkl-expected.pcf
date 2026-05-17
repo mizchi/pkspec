@@ -18,28 +18,28 @@ examples {
       shrink = false
       shrinkAttempts = 32
       inputs {}
-      cmd = "curl -fsS http://localhost:8080/health"
-      stdin = null
-      shellExpectations {
-        expectExitCode = 0
-        expectStdout = """
-          ok
+      body {
+        cmd = "curl -fsS http://localhost:8080/health"
+        stdin = null
+        shellExpectations {
+          expectExitCode = 0
+          expectStdout = """
+            ok
 
-          """
-        expectStderr = null
-        expectStdoutContains {}
-        expectStderrContains {}
-        expectStdoutMatches {}
-        expectStderrMatches {}
-        expectStdoutJsonPath {}
-        expectStderrJsonPath {}
+            """
+          expectStderr = null
+          expectStdoutContains {}
+          expectStderrContains {}
+          expectStdoutMatches {}
+          expectStderrMatches {}
+          expectStdoutJsonPath {}
+          expectStderrJsonPath {}
+        }
+        expectStdoutSnapshot = null
+        expectStderrSnapshot = null
+        inlineStdout = null
+        inlineStderr = null
       }
-      expectStdoutSnapshot = null
-      expectStderrSnapshot = null
-      inlineStdout = null
-      inlineStderr = null
-      steps {}
-      parallelSteps {}
       background {}
     }
   }

@@ -27,13 +27,17 @@ tests {
   new {
     name = "alpha"
     specRef { "runner.hooks.lifecycle" }
-    cmd = "echo SEED=$SEED PER_TEST=$PER_TEST"
-    inlineStdout = new InlineSnapshot {}
+    body = new CmdTest {
+      cmd = "echo SEED=$SEED PER_TEST=$PER_TEST"
+      inlineStdout = new InlineSnapshot {}
+    }
   }
   new {
     name = "beta"
     specRef { "runner.hooks.lifecycle" }
-    cmd = "echo SEED=$SEED PER_TEST=$PER_TEST"
-    inlineStdout = new InlineSnapshot {}
+    body = new CmdTest {
+      cmd = "echo SEED=$SEED PER_TEST=$PER_TEST"
+      inlineStdout = new InlineSnapshot {}
+    }
   }
 }

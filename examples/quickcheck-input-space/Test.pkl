@@ -13,11 +13,13 @@ tests {
       ["A"] = new IntInput { lo = 0; hi = 100 }
       ["B"] = new IntInput { lo = 0; hi = 100 }
     }
-    cmd =
-      """
+    body = new CmdTest {
+      cmd =
+        """
         sum=$(( A + B ))
         [ $sum -ge 0 ] && [ $sum -le 200 ]
-      """
+        """
+    }
   }
 
   // STEPS-MODE property: per-iteration setup + assertion + cleanup
@@ -32,19 +34,21 @@ tests {
     inputs {
       ["X"] = new IntInput { lo = 0; hi = 10 }
     }
-    steps {
-      new {
-        name = "setup"
-        body = new ShellBody { cmd = "echo running iter=$PKSPEC_ITERATION X=$X > probe.txt" }
-      }
-      new {
-        name = "assert"
-        body = new ShellBody { cmd = "grep -q \"X=$X\" probe.txt" }
-      }
-      new {
-        name = "cleanup"
-        body = new ShellBody { cmd = "rm -f probe.txt" }
-        always = true
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "setup"
+          body = new ShellBody { cmd = "echo running iter=$PKSPEC_ITERATION X=$X > probe.txt" }
+        }
+        new {
+          name = "assert"
+          body = new ShellBody { cmd = "grep -q \"X=$X\" probe.txt" }
+        }
+        new {
+          name = "cleanup"
+          body = new ShellBody { cmd = "rm -f probe.txt" }
+          always = true
+        }
       }
     }
   }
@@ -65,13 +69,15 @@ tests {
       ["A"] = new IntInput { lo = 0; hi = 50 }
       ["B"] = new IntInput { lo = 0; hi = 50 }
     }
-    cmd =
-      """
+    body = new CmdTest {
+      cmd =
+        """
         product=$(( A * B ))
         if [ $product -ge 100 ]; then
           echo "A=$A B=$B product=$product"
           exit 1
         fi
-      """
+        """
+    }
   }
 }

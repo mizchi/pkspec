@@ -6,13 +6,15 @@ tests {
     description = "top-level shell command with contains, regex, and JSONPath assertions"
     tags { "unit" }
     specRef { "runner.shell.stdout-patterns"; "runner.shell.stdout-jsonpath" }
-    cmd = "printf '%s\n' '{\"tasks\":[{\"name\":\"check\"},{\"name\":\"test\"}],\"ok\":true}'"
-    shellExpectations {
-      expectStdoutContains { "\"tasks\""; "\"check\"" }
-      expectStdoutMatches { #""name"\s*:\s*"test""# }
-      expectStdoutJsonPath {
-        ["tasks.0.name"] = "check"
-        ["ok"] = true
+    body = new CmdTest {
+      cmd = "printf '%s\n' '{\"tasks\":[{\"name\":\"check\"},{\"name\":\"test\"}],\"ok\":true}'"
+      shellExpectations {
+        expectStdoutContains { "\"tasks\""; "\"check\"" }
+        expectStdoutMatches { #""name"\s*:\s*"test""# }
+        expectStdoutJsonPath {
+          ["tasks.0.name"] = "check"
+          ["ok"] = true
+        }
       }
     }
   }
@@ -22,14 +24,16 @@ tests {
     description = "shell step contract for graph-shaped CLI output"
     tags { "unit" }
     specRef { "runner.shell.stdout-patterns" }
-    steps {
-      new {
-        name = "graph_edge"
-        body = new ShellBody {
-          cmd = "printf '%s\n' 'spec_check --> check'"
-          shellExpectations {
-            expectStdoutContains { "spec_check --> check" }
-            expectStdoutMatches { #"(?m)^spec_check\s+-->\s+check$"# }
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "graph_edge"
+          body = new ShellBody {
+            cmd = "printf '%s\n' 'spec_check --> check'"
+            shellExpectations {
+              expectStdoutContains { "spec_check --> check" }
+              expectStdoutMatches { #"(?m)^spec_check\s+-->\s+check$"# }
+            }
           }
         }
       }

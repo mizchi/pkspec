@@ -14,20 +14,22 @@ tests {
         readyTimeoutSec = 5
       }
     }
-    steps {
-      new {
-        name = "fetch_items"
-        body = new HttpBody {
-          http = new HttpRequest {
-            method = "GET"
-            url = "http://127.0.0.1:19010/items"
-          }
-          expectStatus = 200
-          expectBodyJsonPath {
-            ["ok"] = true
-            ["items.0.name"] = "first"
-            ["items.1.id"] = 2
-            ["items.#"] = 2
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "fetch_items"
+          body = new HttpBody {
+            http = new HttpRequest {
+              method = "GET"
+              url = "http://127.0.0.1:19010/items"
+            }
+            expectStatus = 200
+            expectBodyJsonPath {
+              ["ok"] = true
+              ["items.0.name"] = "first"
+              ["items.1.id"] = 2
+              ["items.#"] = 2
+            }
           }
         }
       }

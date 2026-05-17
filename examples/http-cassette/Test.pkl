@@ -13,18 +13,20 @@ tests {
         readyProbe = "curl -fs http://127.0.0.1:19011/ > /dev/null"
       }
     }
-    steps {
-      new {
-        name = "call"
-        body = new HttpBody {
-          http = new HttpRequest {
-            method = "GET"
-            url = "http://127.0.0.1:19011/counter"
-          }
-          cassette = "counter_first"
-          expectStatus = 200
-          expectBodyJsonPath {
-            ["call"] = 1
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "call"
+          body = new HttpBody {
+            http = new HttpRequest {
+              method = "GET"
+              url = "http://127.0.0.1:19011/counter"
+            }
+            cassette = "counter_first"
+            expectStatus = 200
+            expectBodyJsonPath {
+              ["call"] = 1
+            }
           }
         }
       }

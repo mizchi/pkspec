@@ -5,52 +5,52 @@ amends "../../pkl/Test.pkl"
 tests {
   new {
     name = "fast_a"
-    cmd = "sleep 0.05"
+    body = new CmdTest { cmd = "sleep 0.05" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
   new {
     name = "fast_b"
-    cmd = "sleep 0.05"
+    body = new CmdTest { cmd = "sleep 0.05" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
   new {
     name = "fast_c"
-    cmd = "sleep 0.05"
+    body = new CmdTest { cmd = "sleep 0.05" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
   new {
     name = "fast_d"
-    cmd = "sleep 0.05"
+    body = new CmdTest { cmd = "sleep 0.05" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
   new {
     name = "mid_a"
-    cmd = "sleep 0.15"
+    body = new CmdTest { cmd = "sleep 0.15" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
   new {
     name = "mid_b"
-    cmd = "sleep 0.15"
+    body = new CmdTest { cmd = "sleep 0.15" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
   new {
     name = "mid_c"
-    cmd = "sleep 0.15"
+    body = new CmdTest { cmd = "sleep 0.15" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
   new {
     name = "slow_a"
-    cmd = "sleep 0.4"
+    body = new CmdTest { cmd = "sleep 0.4" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
   new {
     name = "slow_b"
-    cmd = "sleep 0.4"
+    body = new CmdTest { cmd = "sleep 0.4" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
   new {
     name = "slow_c"
-    cmd = "sleep 0.4"
+    body = new CmdTest { cmd = "sleep 0.4" }
     specRef { "history.timings-jsonl"; "history.shard-lpt" }
   }
 }
