@@ -15,6 +15,7 @@ fn default_contract() -> Contract {
     must_contain_stderr: [],
     stdout_empty: false,
     stdout_non_empty: false,
+    exact_stdout: false,
   }
 }
 

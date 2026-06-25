@@ -387,6 +387,13 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
       return "json: " + d
     }
   }
+  if s.contract.exact_stdout {
+    let w = normalize_text(want.stdout)
+    let g = normalize_text(got.stdout)
+    if w != g {
+      return "exactStdout: normalized stdout differs\n  want: \"\{w}\"\n  got:  \"\{g}\""
+    }
+  }
   for sub in s.contract.must_contain {
     if not(contains_normalized(got.stdout, sub)) {
       return "mustContain: \"\{sub}\" not found in normalized stdout"

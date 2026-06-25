@@ -16,6 +16,7 @@ class Contract {
   mustContainStderr: Listing<String> = new {}
   stdoutEmpty: Boolean = false
   stdoutNonEmpty: Boolean = false
+  exactStdout: Boolean = false
 }
 
 class Scenario {
