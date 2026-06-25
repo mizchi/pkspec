@@ -16,6 +16,8 @@ pub struct Contract {
   stdout_empty : Bool
   stdout_non_empty : Bool
   exact_stdout : Bool
+  exact_stderr : Bool
+  normalize_durations : Bool
 }
 
 ///|
@@ -104,6 +106,8 @@ fn parse_scenario(j : Json) -> Scenario raise {
       stdout_empty: get_bool(cj, "stdoutEmpty"),
       stdout_non_empty: get_bool(cj, "stdoutNonEmpty"),
       exact_stdout: get_bool(cj, "exactStdout"),
+      exact_stderr: get_bool(cj, "exactStderr"),
+      normalize_durations: get_bool(cj, "normalizeDurations"),
     },
   }
 }

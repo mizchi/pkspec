@@ -17,6 +17,13 @@ class Contract {
   stdoutEmpty: Boolean = false
   stdoutNonEmpty: Boolean = false
   exactStdout: Boolean = false
+  // exactStderr gates the normalized STDERR stream at byte parity. Used by the
+  // `exec` executor scenarios, whose progress + summary lines go to stderr.
+  exactStderr: Boolean = false
+  // normalizeDurations replaces every `(<num><unit>)` duration token with
+  // `(DUR)` on BOTH sides before the exact compare, so the otherwise-volatile
+  // wall-clock in `exec`'s progress / summary output does not break parity.
+  normalizeDurations: Boolean = false
 }
 
 class Scenario {
@@ -510,6 +517,62 @@ scenarios: Listing<Scenario> = new {
       exit = true
       stdoutEmpty = true
       mustContainStderr { "unknown command" }
+    }
+  }
+  // ── P3a: exec (shell `cmd` executor) ────────────────────────────────
+  //
+  // exec is oracle CLASS 2 (dynamic execution): the progress + summary go to
+  // STDERR and embed the per-test wall-clock DURATION. These scenarios gate the
+  // normalized stderr stream at byte parity (`exactStderr` + `normalizeDurations`
+  // replaces every `(<num><unit>)` with `(DUR)` on both sides), with stdout
+  // asserted empty (cmd output is captured + asserted, not echoed). Only pure-
+  // `cmd` deterministic fixtures are used so no deferred feature (steps /
+  // parallel / background / http / retries / property) affects the result.
+  //
+  // exec-shell-smoke: one `echo pong` CmdTest with an inline-snapshot assert →
+  // passes, exit 0. Vendored copy of examples/shell-smoke.
+  new {
+    id = "exec-shell-smoke"
+    fixture = "conformance/fixtures/exec-shell-smoke"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-shell-smoke" }
+    argv { "exec"; "-f"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-stdout-contract: a cmd-only subset of examples/shell-output-contract —
+  // the top-level CmdTest exercising contains / regex / JSONPath stream asserts
+  // on a fixed JSON line → passes, exit 0. (The fixture's steps test is dropped;
+  // steps are a P3b body.)
+  new {
+    id = "exec-stdout-contract"
+    fixture = "conformance/fixtures/exec-stdout-contract"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-stdout-contract" }
+    argv { "exec"; "-f"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-fail: `false` against expectExitCode 0 → the test fails with
+  // `expected exit code 0, got 1`, the tally is red, and exec exits 1 plus the
+  // trailing `pkspec: N test(s) failed ...` line. Regression for the failure-
+  // reason wording + the non-green exit semantics (Go Tally.IsGreen false).
+  new {
+    id = "exec-fail"
+    fixture = "conformance/fixtures/exec-fail"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-fail" }
+    argv { "exec"; "-f"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
     }
   }
   // spec --output PATH: write the rendered SPEC.md to a file (atomic tmp+rename)

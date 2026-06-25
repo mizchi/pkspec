@@ -1,0 +1,20 @@
+amends "../../pkl/Test.pkl"
+
+// Tiny deterministic FAIL case: `false` exits 1 but the test expects exit 0,
+// so the test reports `failed` with `expected exit code 0, got 1`, the tally
+// is red, and `exec` exits 1. Locks in the exit-code-failure reason wording +
+// the non-green exit semantics (Go's Tally.IsGreen false -> exit 1 + the
+// trailing `pkspec: N test(s) failed ...` line).
+tests {
+  new {
+    name = "false_exits_nonzero"
+    description = "false exits 1 against expectExitCode 0"
+    tags { "unit" }
+    body = new CmdTest {
+      cmd = "false"
+      shellExpectations {
+        expectExitCode = 0
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+amends "../../pkl/Test.pkl"
+
+// Vendored copy of examples/shell-smoke: one pure-`cmd` test with an inline-
+// snapshot assertion. Deterministic (echo + fixed value), so `exec`'s progress
+// + summary are byte-stable modulo the wall-clock duration.
+tests {
+  new {
+    name = "echo_pong"
+    description = "one-line shell with inline-snapshot assertion"
+    tags { "unit" }
+    specRef { "kind.shell"; "runner.exec.assert-streams"; "diff.inline-snapshot" }
+    body = new CmdTest {
+      cmd = "echo pong"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "pong\n" }
+    }
+  }
+}

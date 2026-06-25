@@ -1,0 +1,25 @@
+amends "../../pkl/Test.pkl"
+
+// Vendored cmd-only subset of examples/shell-output-contract: the top-level
+// CmdTest that exercises the contains / regex / JSONPath stream assertions on
+// a fixed JSON line. The fixture's `step_stdout_contract` (a SequentialTest)
+// is intentionally DROPPED here — steps are a P3b body and out of P3a scope.
+tests {
+  new {
+    name = "top_level_stdout_contract"
+    description = "top-level shell command with contains, regex, and JSONPath assertions"
+    tags { "unit" }
+    specRef { "runner.shell.stdout-patterns"; "runner.shell.stdout-jsonpath" }
+    body = new CmdTest {
+      cmd = "printf '%s\n' '{\"tasks\":[{\"name\":\"check\"},{\"name\":\"test\"}],\"ok\":true}'"
+      shellExpectations {
+        expectStdoutContains { "\"tasks\""; "\"check\"" }
+        expectStdoutMatches { #""name"\s*:\s*"test""# }
+        expectStdoutJsonPath {
+          ["tasks.0.name"] = "check"
+          ["ok"] = true
+        }
+      }
+    }
+  }
+}

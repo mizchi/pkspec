@@ -1,0 +1,18 @@
+{
+  "import": [
+    { "path": "mizchi/pkspec-mbt/src/model", "alias": "model" },
+    { "path": "mizchi/x/process", "alias": "process" },
+    { "path": "moonbitlang/async", "alias": "async" },
+    { "path": "moonbitlang/x/sys", "alias": "sys" },
+    { "path": "moonbitlang/core/json", "alias": "json" },
+    { "path": "moonbitlang/core/encoding/utf8", "alias": "utf8" },
+    { "path": "moonbitlang/regexp", "alias": "regexp" }
+  ],
+  "warn-list": "-29-20-6-1",
+  "targets": {
+    "result.mbt": ["native"],
+    "assert.mbt": ["native"],
+    "executor.mbt": ["native"],
+    "executor_wbtest.mbt": ["native"]
+  }
+}

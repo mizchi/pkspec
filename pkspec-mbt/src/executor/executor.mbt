@@ -1,0 +1,216 @@
+// The P3a executor core: run one `ModeCmd` test via a subprocess and apply
+// the shell-stream assertions. Mirrors Go `executor.runCmd` + `runShell` +
+// `mergeEnv` + `resolveDir` (internal/executor/executor.go).
+//
+// DEFERRED vs Go (noted, not built in P3a): steps / parallelSteps / background
+// bodies (P3b), retries / flaky / iterations / inputs (P3b/P3c), reference &
+// inline-rewrite snapshots and the `--update-inline-snapshots` path (P3c),
+// hooks (before/after). The inline ASSERT path (a populated `inlineStdout` /
+// `inlineStderr` compared against the capture) IS handled here, because the
+// deterministic fixtures rely on it; the SOURCE-REWRITE side is deferred.
+
+///|
+/// Defaults applied to every test, mirroring the Go `config.Defaults`
+/// (`shell` / `env`). The executor layers `defaults.env` under the test's env.
+pub struct Defaults {
+  shell : String
+  env : Map[String, String]
+}
+
+///|
+pub fn Defaults::new(
+  shell~ : String = "",
+  env? : Map[String, String] = Map::new(),
+) -> Defaults {
+  Defaults::{ shell, env }
+}
+
+///|
+/// Inherited environment keys, copied from the process env so user commands
+/// can find tools. Mirrors Go's `inheritedEnvKeys` whitelist exactly — every
+/// other host env var stays out unless a test opts in.
+let inherited_env_keys : Array[String] = [
+  "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "TMPDIR", "LANG", "LC_ALL",
+  "LC_CTYPE", "TZ",
+]
+
+///|
+/// Compose the subprocess env, mirroring Go `mergeEnv`: start from the
+/// inherited whitelist read off the host env, then overlay each layer in
+/// order (later layers win). Returned as a `Map` for `@process`'s
+/// `extra_env` (with `inherit_env=false`, this is the COMPLETE env, matching
+/// Go's `cmd.Env = mergeEnv(...)`).
+fn merge_env(layers : Array[Map[String, String]]) -> Map[String, String] {
+  let merged : Map[String, String] = Map::new()
+  for k in inherited_env_keys {
+    match @sys.get_env_var(k) {
+      Some(v) => merged[k] = v
+      None => ()
+    }
+  }
+  for layer in layers {
+    for k, v in layer {
+      merged[k] = v
+    }
+  }
+  merged
+}
+
+///|
+/// Resolve the working directory the way Go `resolveDir(base, components...)`
+/// does: start from `base`, and for each non-empty component either replace
+/// (absolute) or join (relative). P3a passes `base` + the test's `workdir`.
+fn resolve_dir(base : String, workdir : String?) -> String {
+  let mut dir = base
+  match workdir {
+    Some(c) =>
+      if c != "" {
+        if c.has_prefix("/") {
+          dir = c
+        } else {
+          dir = join_dir(dir, c)
+        }
+      }
+    None => ()
+  }
+  dir
+}
+
+///|
+fn join_dir(base : String, rel : String) -> String {
+  if base.has_suffix("/") {
+    base + rel
+  } else {
+    base + "/" + rel
+  }
+}
+
+///|
+/// Run one `ModeCmd` test, mirroring Go `runCmd` (+ the `runAttempt` single-
+/// attempt path — P3a does not loop on retries). `workdir` is the base dir
+/// `Test.workdir` resolves against (Go's `Executor.opts.Workdir`, the dir
+/// containing the Pkl module). Returns a fully-populated `Result`.
+pub async fn run_cmd(
+  name : String,
+  t : @model.Test,
+  defaults : Defaults,
+  workdir : String,
+  spec_ref : Array[String],
+) -> Result {
+  let res = Result::{
+    name,
+    outcome: Passed,
+    reasons: [],
+    exit_code: 0,
+    stdout: "",
+    stderr: "",
+    duration_ms: 0,
+    attempts: 1,
+    passed_attempts: 0,
+    spec_ref,
+  }
+  let cmd = match t.cmd {
+    Some(c) => c
+    None => ""
+  }
+  // Shell selection: Test.shell -> defaults.shell -> "bash" (Go's runShell).
+  let mut shell = t.shell
+  if shell == "" {
+    shell = defaults.shell
+  }
+  if shell == "" {
+    shell = "bash"
+  }
+  let env = merge_env([defaults.env, t.env])
+  let dir = resolve_dir(workdir, t.workdir)
+  let start = @async.now()
+  // Spawn `<shell> -c <cmd>` and capture exit/stdout/stderr, mirroring Go's
+  // exec.CommandContext(ctx, shell, "-c", cmd). inherit_env=false because
+  // `env` already carries the merged whitelist + layers (Go sets cmd.Env to
+  // the full merged slice). A spawn failure (e.g. shell not found) maps to
+  // Errored "could not start", like Go's StartErr branch.
+  let spawn = try? @process.collect_output(
+    shell,
+    ["-c", cmd],
+    extra_env=env,
+    inherit_env=false,
+    cwd=dir,
+  )
+  res.duration_ms = @async.now() - start
+  match spawn {
+    Err(e) => {
+      res.outcome = Errored
+      res.reasons.push("could not start: \{e}")
+      return res
+    }
+    Ok((exit, out_data, err_data)) => {
+      let stdout = bytes_to_string(out_data.binary())
+      let stderr = bytes_to_string(err_data.binary())
+      res.exit_code = exit
+      res.stdout = stdout
+      res.stderr = stderr
+      // Assertion order mirrors Go runCmd: exit code, then stdout stream,
+      // then stderr stream, then the inline-snapshot asserts (stdout/stderr).
+      if exit != t.expect_exit_code {
+        res.reasons.push(
+          "expected exit code \{t.expect_exit_code}, got \{exit}",
+        )
+      }
+      for r in assert_shell_stream("stdout", stdout, StreamAssertions::{
+        exact: t.expect_stdout,
+        contains: t.expect_stdout_contains,
+        matches: t.expect_stdout_matches,
+        json_path: t.expect_stdout_json_path,
+      }) {
+        res.reasons.push(r)
+      }
+      for r in assert_shell_stream("stderr", stderr, StreamAssertions::{
+        exact: t.expect_stderr,
+        contains: t.expect_stderr_contains,
+        matches: t.expect_stderr_matches,
+        json_path: t.expect_stderr_json_path,
+      }) {
+        res.reasons.push(r)
+      }
+      match check_inline("inlineStdout", t.inline_stdout, stdout) {
+        Some(r) => res.reasons.push(r)
+        None => ()
+      }
+      match check_inline("inlineStderr", t.inline_stderr, stderr) {
+        Some(r) => res.reasons.push(r)
+        None => ()
+      }
+      res.passed_attempts = if res.reasons.length() == 0 { 1 } else { 0 }
+      res.outcome = if res.reasons.length() > 0 { Failed } else { Passed }
+      res
+    }
+  }
+}
+
+///|
+/// The ASSERT side of an inline snapshot (Go `checkInline` minus the
+/// `--update-inline-snapshots` rewrite, which is deferred to P3c). A `None`
+/// field means "no inline assertion"; a populated field that matches yields
+/// no reason; a mismatch yields Go's `"<field> mismatch:\n<diff>"`.
+fn check_inline(
+  field_name : String,
+  expected : String?,
+  actual : String,
+) -> String? {
+  match expected {
+    None => None
+    Some(want) =>
+      if want == actual {
+        None
+      } else {
+        Some("\{field_name} mismatch:\n\{diff(want, actual)}")
+      }
+  }
+}
+
+///|
+/// Decode UTF-8 bytes lossily (binary stream output should not crash the
+/// runner). Mirrors the conformance harness's `bytes_to_string`.
+fn bytes_to_string(b : Bytes) -> String {
+  @utf8.decode_lossy(b[:])
+}

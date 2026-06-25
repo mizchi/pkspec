@@ -7,6 +7,7 @@
     "mizchi/x": "0.3.3",
     "mizchi/zlib": "0.4.5",
     "moonbitlang/async": "0.19.0",
+    "moonbitlang/regexp": "0.3.5",
     "moonbitlang/x": "0.4.43"
   },
   "preferred-target": "native"
