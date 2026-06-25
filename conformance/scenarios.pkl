@@ -306,5 +306,30 @@ scenarios: Listing<Scenario> = new {
   // section, per-scenario H3, meta bullets, the Behavior subsection (named
   // steps), and Open questions / Decisions (developer profile). Implementation
   // is hidden (the default). Deterministic; gated at byte parity.
+  new {
+    id = "docs-developer-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "docs"; "--audience"; "developer"; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // docs --audience end-user on spec-docs: the minimal profile (no Goals
+  // lifecycle detail, no meta/questions/decisions) plus the audienceNotes
+  // override on DOC-SIGNUP-001's description.
+  new {
+    id = "docs-end-user-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "docs"; "--audience"; "end-user"; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // check on spec-docs: every declared spec has a test backlink, so check
+  // PASSES — stdout success line, exit 0.
 
 }

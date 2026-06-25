@@ -1,0 +1,52 @@
+# Developer docs
+
+4 scenario(s) for `audience:developer`
+
+## Goals
+
+- **signup behaviour is documented for every audience** (`goal.signup-clarity`) — priority 80, approved
+  Each signup scenario reads cleanly for PMs, developers, and end users without leaking runner internals.
+
+## Scenarios
+
+### creates_user (`DOC-SIGNUP-001`)
+
+POST /users with a fresh email returns 201 and a user id.
+
+- contributes to: goal.signup-clarity
+- status: review, severity: major
+- tags: spec, audience:pm, audience:end-user, audience:developer
+
+#### Open questions
+
+- Should the 201 body include the verification-email status inline?
+
+#### Decisions
+
+- 2026-02-01 — Return the created user id in the 201 body.
+
+
+### rejects_duplicate_email (`DOC-SIGNUP-002`)
+
+POST /users with an existing email returns 409.
+
+- contributes to: goal.signup-clarity
+- status: approved, severity: major
+- tags: spec, audience:pm, audience:developer
+
+
+### creates_user
+
+POST /users with a fresh email returns 201.
+
+#### Behavior
+
+- post fresh email
+- assert created id present
+
+
+### rejects_duplicate_email
+
+POST /users with an existing email returns 409.
+
+
