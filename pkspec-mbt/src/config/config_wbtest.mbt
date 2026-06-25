@@ -31,16 +31,31 @@ async fn assert_evals_to_object(rel : String) -> Unit raise {
 }
 
 ///|
+/// Spec layer.
 async test "eval gate: a Spec.pkl evaluates to a non-empty object" {
   assert_evals_to_object("examples/spec-id/Spec.pkl")
 }
 
 ///|
-async test "eval gate: a Test.pkl evaluates to a non-empty object" {
-  assert_evals_to_object("examples/bdd-scenario/Test.pkl")
+/// Simple Test.
+async test "eval gate: a shell Test.pkl evaluates to a non-empty object" {
+  assert_evals_to_object("examples/shell-smoke/Test.pkl")
 }
 
 ///|
-async test "eval gate: an Adapter.pkl evaluates to a non-empty object" {
-  assert_evals_to_object("examples/adapter-external/Adapter.pkl")
+/// Extends-based adapter — works via late-binding (mizchi/pkl 0.2.6).
+async test "eval gate: an extends-based Adapter.pkl evaluates to a non-empty object" {
+  assert_evals_to_object("examples/adapter-vitest/Adapter.pkl")
+}
+
+///|
+/// http kind.
+async test "eval gate: an http Test.pkl evaluates to a non-empty object" {
+  assert_evals_to_object("examples/http-basic/Test.pkl")
+}
+
+///|
+/// Background processes.
+async test "eval gate: a background-server Test.pkl evaluates to a non-empty object" {
+  assert_evals_to_object("examples/background-server/Test.pkl")
 }
