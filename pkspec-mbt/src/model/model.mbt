@@ -94,7 +94,7 @@ pub struct Milestone {
 /// omitted; spec commands never read them). The `tests` / `scenarios` /
 /// `goals` / `milestones` maps are keyed by their Pkl map id (which for
 /// scenarios is the scenario *name*, not its `id` field).
-pub struct Plan {
+pub(all) struct Plan {
   tests : Map[String, Test]
   scenarios : Map[String, Scenario]
   goals : Map[String, Goal]
