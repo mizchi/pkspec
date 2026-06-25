@@ -15,10 +15,10 @@ fn mode_is_valid(t : @model.Test) -> Bool {
     Some(c) => if c != "" { count = count + 1 }
     None => ()
   }
-  if t.steps_count > 0 {
+  if t.steps_count() > 0 {
     count = count + 1
   }
-  if t.parallel_steps_count > 0 {
+  if t.parallel_steps_count() > 0 {
     count = count + 1
   }
   count == 1
@@ -527,6 +527,623 @@ pub fn render_implementations(
   root : String,
 ) -> String {
   format_implementation_index(implementation_index(plans), root, "#")
+}
+
+// ---- spec ----
+
+///|
+priv struct Entry {
+  source_path : String
+  name : String
+  tst : @model.Test
+  scenario : @model.Scenario?
+}
+
+///|
+/// True iff `tags` matches the OR-filter `patterns` (Go `matchesAnyTag`):
+/// empty patterns => always true.
+fn matches_any_tag(tags : Array[String], patterns : Array[String]) -> Bool {
+  if patterns.length() == 0 {
+    return true
+  }
+  for p in patterns {
+    for t in tags {
+      if t == p {
+        return true
+      }
+    }
+  }
+  false
+}
+
+///|
+/// Flatten plans into entries (Go `spec.Collect`): one entry per test,
+/// scenario attached when the plan declares a scenario under the same name.
+/// Applies the OR-style `--tag` filter, then sorts by (source-path, name).
+fn collect_entries(
+  plans : Array[@model.Plan],
+  tags : Array[String],
+) -> Array[Entry] {
+  let out : Array[Entry] = []
+  for p in plans {
+    for name, t in p.tests {
+      if not(matches_any_tag(t.tags, tags)) {
+        continue
+      }
+      out.push(Entry::{
+        source_path: p.source_path,
+        name,
+        tst: t,
+        scenario: p.scenarios.get(name),
+      })
+    }
+  }
+  stable_sort(out, (a, c) => {
+    if a.source_path != c.source_path {
+      lex_cmp(a.source_path, c.source_path)
+    } else {
+      lex_cmp(a.name, c.name)
+    }
+  })
+  out
+}
+
+///|
+/// Directory portion of a path (Go `filepath.Dir`) for the absolute paths
+/// this CLI produces. Returns "/" for a root-level file, the path unchanged
+/// when it has no separator.
+fn dir_name(path : String) -> String {
+  let chars = path.to_array()
+  let mut last = -1
+  for i in 0..<chars.length() {
+    if chars[i] == '/' {
+      last = i
+    }
+  }
+  if last < 0 {
+    "."
+  } else if last == 0 {
+    "/"
+  } else {
+    path.substring(start=0, end=last)
+  }
+}
+
+///|
+/// Quote a captured inline value as a single-line markdown inline-code span
+/// (Go `quoteInline`): empty => "_(unpopulated)_", else backtick-quoted with
+/// '\n' -> "\\n" and truncation past 80 runes.
+fn quote_inline(v : String) -> String {
+  if v == "" {
+    return "_(unpopulated)_"
+  }
+  let single = replace_all(v, "\n", "\\n")
+  let truncated = truncate_runes(single, 80)
+  "`" + truncated + "`"
+}
+
+///|
+/// Replace every occurrence of `from` with `to` in `s`.
+fn replace_all(s : String, from : String, to : String) -> String {
+  if from == "" {
+    return s
+  }
+  let b = StringBuilder::new()
+  let sc = s.to_array()
+  let fc = from.to_array()
+  let mut i = 0
+  while i < sc.length() {
+    let mut matched = true
+    if i + fc.length() <= sc.length() {
+      for k in 0..<fc.length() {
+        if sc[i + k] != fc[k] {
+          matched = false
+          break
+        }
+      }
+    } else {
+      matched = false
+    }
+    if matched {
+      b.write_string(to)
+      i = i + fc.length()
+    } else {
+      b.write_char(sc[i])
+      i = i + 1
+    }
+  }
+  b.to_string()
+}
+
+///|
+/// Truncate `s` to at most `n` runes, appending "…" when truncated. Mirrors
+/// Go's `s[:n] + "…"` on the rune slices these helpers operate on (Go indexes
+/// bytes, but every call site here operates on ASCII-ish content where rune
+/// and byte length coincide for the truncation boundary used by the oracle).
+fn truncate_runes(s : String, n : Int) -> String {
+  let chars = s.to_array()
+  if chars.length() <= n {
+    return s
+  }
+  let b = StringBuilder::new()
+  for i in 0..<n {
+    b.write_char(chars[i])
+  }
+  b.write_string("…")
+  b.to_string()
+}
+
+///|
+/// Per-step expectations (Go `stepExpectations`), in the same order.
+fn step_expectations(s : @model.Step) -> Array[String] {
+  let out : Array[String] = []
+  match s.expect_status {
+    Some(v) => out.push("status=\{v}")
+    None => ()
+  }
+  if s.expect_status_between.length() == 2 {
+    out.push("status∈[\{s.expect_status_between[0]},\{s.expect_status_between[1]}]")
+  }
+  match s.expect_body_equals {
+    Some(_) => out.push("body=literal")
+    None => ()
+  }
+  match s.expect_body_contains {
+    Some(_) => out.push("body~contains")
+    None => ()
+  }
+  if s.expect_body_json_path_count > 0 {
+    out.push("jsonpath(\{s.expect_body_json_path_count})")
+  }
+  match s.inline_stdout {
+    Some(v) => out.push("inline: stdout = \{quote_inline(v)}")
+    None => ()
+  }
+  match s.expect_ai {
+    Some(ai) => out.push("ai: `\{ai.snapshot_name}`")
+    None => ()
+  }
+  match s.cassette {
+    Some(c) => out.push("cassette: `\{c}`")
+    None => ()
+  }
+  match s.eventually {
+    Some(e) => out.push("eventually(every \{e.interval_ms}ms ≤ \{e.timeout_sec}s)")
+    None => ()
+  }
+  out
+}
+
+///|
+/// One-line summary of a Step (Go `stepLabel`).
+fn step_label(i : Int, s : @model.Step) -> String {
+  let mut kind = "shell"
+  let mut target = ""
+  match s.http {
+    Some(h) => {
+      kind = "http"
+      target = " `\{h.http_method} \{h.url}`"
+    }
+    None =>
+      match s.cmd {
+        Some(c) => {
+          let preview = truncate_runes(c, 60)
+          target = " `\{preview}`"
+        }
+        None => ()
+      }
+  }
+  let name = match s.name {
+    Some(n) => if n != "" { " " + n } else { "" }
+    None => ""
+  }
+  let expects = step_expectations(s)
+  let suffix = if expects.length() > 0 {
+    " — " + join(expects, ", ")
+  } else {
+    ""
+  }
+  "step \{i + 1} (\{kind})\{name}\{target}\{suffix}"
+}
+
+///|
+/// Short, human-readable labels for a test's assertions / snapshots (Go
+/// `expectations`). Order matches the Go switch on `Test.Mode()`.
+fn expectations(t : @model.Test) -> Array[String] {
+  let out : Array[String] = []
+  // Mode() dispatch: exactly one of cmd / steps / parallelSteps is the body.
+  let mode = test_mode(t)
+  match mode {
+    "cmd" => {
+      out.push("body: `cmd` (exit \{t.expect_exit_code} expected)")
+      match t.expect_stdout {
+        Some(_) => out.push("expect: stdout matches literal")
+        None => ()
+      }
+      match t.expect_stderr {
+        Some(_) => out.push("expect: stderr matches literal")
+        None => ()
+      }
+      match t.inline_stdout {
+        Some(v) => out.push("inline: stdout = \{quote_inline(v)}")
+        None => ()
+      }
+      match t.inline_stderr {
+        Some(v) => out.push("inline: stderr = \{quote_inline(v)}")
+        None => ()
+      }
+      match t.expect_stdout_snapshot_name {
+        Some(n) => out.push("snapshot (bytes): stdout → `\{n}`")
+        None => ()
+      }
+      match t.expect_stderr_snapshot_name {
+        Some(n) => out.push("snapshot (bytes): stderr → `\{n}`")
+        None => ()
+      }
+    }
+    "steps" => {
+      out.push("body: \{t.steps.length()} sequential step(s)")
+      for i, s in t.steps {
+        out.push(step_label(i, s))
+      }
+    }
+    "parallel" => {
+      out.push("body: \{t.parallel_steps.length()} parallel step(s)")
+      for i, s in t.parallel_steps {
+        out.push(step_label(i, s))
+      }
+    }
+    _ => out.push("body: _not yet implemented_")
+  }
+  if t.retries > 0 {
+    out.push("retries: \{t.retries} (flakyAcceptable=\{go_bool(t.flaky_acceptable)})")
+  }
+  if t.background_count > 0 {
+    out.push("background: \{t.background_count} process(es)")
+  }
+  out
+}
+
+///|
+/// Go `Test.Mode()`: "cmd" / "steps" / "parallel" when exactly one body shape
+/// is set, else "invalid".
+fn test_mode(t : @model.Test) -> String {
+  let mut count = 0
+  let mut which = "invalid"
+  match t.cmd {
+    Some(c) =>
+      if c != "" {
+        count = count + 1
+        which = "cmd"
+      }
+    None => ()
+  }
+  if t.steps.length() > 0 {
+    count = count + 1
+    which = "steps"
+  }
+  if t.parallel_steps.length() > 0 {
+    count = count + 1
+    which = "parallel"
+  }
+  if count == 1 {
+    which
+  } else {
+    "invalid"
+  }
+}
+
+///|
+/// Render a Go bool with `%v` formatting ("true"/"false").
+fn go_bool(b : Bool) -> String {
+  if b {
+    "true"
+  } else {
+    "false"
+  }
+}
+
+///|
+/// Inline badges next to a test name (Go `writeScenarioBadges`).
+fn scenario_badges(sc : @model.Scenario) -> String {
+  let b = StringBuilder::new()
+  if sc.deprecated {
+    b.write_string(" ⊘ deprecated")
+  }
+  if sc.severity != "" && sc.severity != "major" {
+    b.write_string(" (\{sc.severity})")
+  }
+  if sc.review_status != "" && sc.review_status != "approved" {
+    b.write_string(" [\{sc.review_status}]")
+  }
+  b.to_string()
+}
+
+///|
+/// Spec-graph per-test detail bullets (Go `writeScenarioMeta`).
+fn write_scenario_meta(b : StringBuilder, sc : @model.Scenario) -> Unit {
+  match sc.parent {
+    Some(p) => b.write_string("  - sub-spec of: \{p}\n")
+    None => ()
+  }
+  if sc.contributes.length() > 0 {
+    b.write_string("  - contributes to: \{join(sc.contributes, ", ")}\n")
+  }
+  if sc.depends_on.length() > 0 {
+    b.write_string("  - depends on: \{join(sc.depends_on, ", ")}\n")
+  }
+  if sc.supersedes.length() > 0 {
+    b.write_string("  - supersedes: \{join(sc.supersedes, ", ")}\n")
+  }
+  match sc.replaced_by {
+    Some(r) => b.write_string("  - replaced by: \{r}\n")
+    None => ()
+  }
+  if sc.deprecated {
+    match sc.deprecated_reason {
+      Some(r) => b.write_string("  - deprecated: \{r}\n")
+      None => ()
+    }
+  }
+  if sc.decisions.length() > 0 {
+    b.write_string("  - decisions: \{sc.decisions.length()} entry(ies)\n")
+  }
+}
+
+///|
+/// Render one test bullet (Go `writeTest`).
+fn write_test(b : StringBuilder, e : Entry) -> Unit {
+  let prefix = if is_pending(e.tst) { "- [ ] **" } else { "- [x] **" }
+  b.write_string("\{prefix}\{e.name}**")
+  match e.scenario {
+    Some(sc) => b.write_string(scenario_badges(sc))
+    None => ()
+  }
+  if e.tst.spec_ref.length() > 0 {
+    b.write_string(" — verifies: \{join(e.tst.spec_ref, ", ")}")
+  }
+  if e.tst.tags.length() > 0 {
+    b.write_string(" — tags: \{join(e.tst.tags, ", ")}")
+  }
+  b.write_string("\n")
+  match e.tst.description {
+    Some(d) =>
+      if d != "" {
+        for line in split_lines(trim_right_newlines(d)) {
+          b.write_string("  > \{line}\n")
+        }
+      }
+    None => ()
+  }
+  match e.scenario {
+    Some(sc) => write_scenario_meta(b, sc)
+    None => ()
+  }
+  for ex in expectations(e.tst) {
+    b.write_string("  - \{ex}\n")
+  }
+  b.write_string("\n")
+}
+
+///|
+/// Collect "**ref** — question" lines across entries (Go
+/// `collectOpenQuestions`), in entry order.
+fn collect_open_questions(entries : Array[Entry]) -> Array[String] {
+  let out : Array[String] = []
+  for e in entries {
+    match e.scenario {
+      Some(sc) =>
+        for q in sc.open_questions {
+          let ref_ = match sc.id {
+            Some(id) => id
+            None => sc.name
+          }
+          out.push("**\{ref_}** — \{q}")
+        }
+      None => ()
+    }
+  }
+  out
+}
+
+///|
+/// Count distinct scenarios carrying >=1 open question (Go
+/// `countOpenQuestionScenarios`).
+fn count_open_question_scenarios(entries : Array[Entry]) -> Int {
+  let mut n = 0
+  for e in entries {
+    match e.scenario {
+      Some(sc) => if sc.open_questions.length() > 0 { n = n + 1 }
+      None => ()
+    }
+  }
+  n
+}
+
+///|
+/// Build the implementation index from entries (Go
+/// `implementationIndexFromEntries`): like `implementation_index` but seeded
+/// from the rendered entry list rather than the raw plans.
+fn implementation_index_from_entries(
+  entries : Array[Entry],
+) -> Array[SpecImpl] {
+  let by_id : Map[String, SpecImpl] = Map::new()
+  let order : Array[String] = []
+  let seen : Map[String, Bool] = Map::new()
+  fn ensure(id : String) -> SpecImpl {
+    match by_id.get(id) {
+      Some(item) => item
+      None => {
+        let item = SpecImpl::{
+          spec_id: id,
+          scenario_name: "",
+          deprecated: false,
+          has_meta: false,
+          refs: [],
+        }
+        by_id[id] = item
+        order.push(id)
+        item
+      }
+    }
+  }
+
+  fn add_ref(id : String, ref_ : ImplRef) -> Unit {
+    if id == "" || ref_.kind == "" {
+      return
+    }
+    let item = ensure(id)
+    let key = join([id, ref_.kind, ref_.name, ref_.source_path, ref_.target], "\u{0000}")
+    if seen.get(key) is Some(true) {
+      return
+    }
+    seen[key] = true
+    item.refs.push(ref_)
+  }
+
+  for e in entries {
+    match e.scenario {
+      Some(sc) =>
+        match sc.id {
+          Some(id) => {
+            let item = ensure(id)
+            if not(item.has_meta) {
+              item.has_meta = true
+              item.scenario_name = sc.name
+              item.deprecated = sc.deprecated
+            }
+            for im in sc.implementations {
+              if im.kind == "" || im.kind == "test" {
+                continue
+              }
+              match im.at {
+                Some(a) =>
+                  if a != "" {
+                    add_ref(id, ImplRef::{
+                      kind: im.kind,
+                      name: "",
+                      source_path: "",
+                      target: a,
+                    })
+                  }
+                None => ()
+              }
+            }
+          }
+          None => ()
+        }
+      None => ()
+    }
+    // addTest
+    if not(is_pending(e.tst)) {
+      for id in e.tst.spec_ref {
+        add_ref(id, ImplRef::{
+          kind: "test",
+          name: e.name,
+          source_path: e.source_path,
+          target: "",
+        })
+      }
+    }
+  }
+  let out : Array[SpecImpl] = []
+  for id in order {
+    match by_id.get(id) {
+      Some(item) => {
+        stable_sort(item.refs, (a, c) => {
+          if impl_kind_rank(a.kind) != impl_kind_rank(c.kind) {
+            impl_kind_rank(a.kind) - impl_kind_rank(c.kind)
+          } else if a.source_path != c.source_path {
+            lex_cmp(a.source_path, c.source_path)
+          } else if a.name != c.name {
+            lex_cmp(a.name, c.name)
+          } else {
+            lex_cmp(a.target, c.target)
+          }
+        })
+        out.push(item)
+      }
+      None => ()
+    }
+  }
+  stable_sort(out, (a, c) => lex_cmp(a.spec_id, c.spec_id))
+  out
+}
+
+///|
+/// Render the `spec` SPEC.md (Go `spec.Render`). `root` relativizes source
+/// dirs in section headings.
+pub fn render_spec(
+  plans : Array[@model.Plan],
+  root : String,
+  tags : Array[String],
+) -> String {
+  let entries = collect_entries(plans, tags)
+  let b = StringBuilder::new()
+  b.write_string("# Test SPEC\n\n")
+  if entries.length() == 0 {
+    b.write_string("_No tests matched the filter._\n")
+    return b.to_string()
+  }
+
+  // tally: total / modules / pending / active.
+  let mut total = 0
+  let mut pending = 0
+  let mut active = 0
+  let seen_modules : Map[String, Bool] = Map::new()
+  let mut modules = 0
+  for e in entries {
+    total = total + 1
+    if seen_modules.get(e.source_path) is None {
+      seen_modules[e.source_path] = true
+      modules = modules + 1
+    }
+    if is_pending(e.tst) {
+      pending = pending + 1
+    } else {
+      active = active + 1
+    }
+  }
+  b.write_string(
+    "\{total} tests across \{modules} module(s) — \{pending} pending, \{active} active\n\n",
+  )
+  let qs = collect_open_questions(entries)
+  let q_scenarios = count_open_question_scenarios(entries)
+  if qs.length() > 0 {
+    b.write_string(
+      "\{qs.length()} outstanding question(s) across \{q_scenarios} scenario(s) — see \"Outstanding questions\" at the end.\n\n",
+    )
+  }
+  let mut current_dir = ""
+  let mut current_module = ""
+  for e in entries {
+    let mut dir = dir_name(e.source_path)
+    if root != "" {
+      dir = rel_path(root, dir)
+    }
+    if dir != current_dir {
+      b.write_string("## `\{dir}/`\n\n")
+      current_dir = dir
+      current_module = ""
+    }
+    let mod_name = base_name(e.source_path)
+    if mod_name != current_module {
+      b.write_string("### `\{mod_name}`\n\n")
+      current_module = mod_name
+    }
+    write_test(b, e)
+  }
+  let index = implementation_index_from_entries(entries)
+  if index.length() > 0 {
+    b.write_string(format_implementation_index(index, root, "##"))
+  }
+  if qs.length() > 0 {
+    b.write_string("\n## Outstanding questions\n\n")
+    for q in qs {
+      b.write_string("- \{q}\n")
+    }
+  }
+  b.to_string()
 }
 
 // ---- next ----

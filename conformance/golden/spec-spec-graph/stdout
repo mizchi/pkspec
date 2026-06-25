@@ -1,0 +1,91 @@
+# Test SPEC
+
+9 tests across 2 module(s) — 7 pending, 2 active
+
+3 outstanding question(s) across 2 scenario(s) — see "Outstanding questions" at the end.
+
+## `./`
+
+### `Spec.pkl`
+
+- [ ] **bearer_token_auth** ⊘ deprecated (minor) — verifies: AUTH-005 — tags: spec
+  > Authorization: Bearer <jwt>
+  - replaced by: AUTH-001
+  - deprecated: security review on 2026-03-01 ruled cookies over JWTs for SSR compat
+  - decisions: 1 entry(ies)
+  - body: 1 sequential step(s)
+  - step 1 (shell) Background the database is seeded with a known user `true`
+
+- [ ] **passwordless_magic_link** (minor) [draft] — verifies: AUTH-004 — tags: spec
+  > click email link → logged in without password
+  - contributes to: GOAL-FRICTIONLESS-LOGIN
+  - body: 1 sequential step(s)
+  - step 1 (shell) Background the database is seeded with a known user `true`
+
+- [ ] **rate-limits brute-force** [review] — verifies: AUTH-003 — tags: spec
+  > 5 wrong attempts in 1 minute returns 429
+  - contributes to: GOAL-SECURE-AUTH
+  - depends on: AUTH-002
+  - body: 1 sequential step(s)
+  - step 1 (shell) Background the database is seeded with a known user `true`
+
+- [ ] **rejects wrong password** (critical) — verifies: AUTH-002 — tags: spec
+  > a known user with a wrong password gets 401
+  - contributes to: GOAL-SECURE-AUTH, GOAL-AUDIT-TRAIL
+  - depends on: AUTH-001
+  - body: 1 sequential step(s)
+  - step 1 (shell) Background the database is seeded with a known user `true`
+
+- [ ] **valid credentials** (critical) — verifies: AUTH-001 — tags: spec
+  > a known user with the right password logs in
+  - contributes to: GOAL-SECURE-AUTH, GOAL-FRICTIONLESS-LOGIN
+  - decisions: 1 entry(ies)
+  - body: 1 sequential step(s)
+  - step 1 (shell) Background the database is seeded with a known user `true`
+
+- [ ] **valid credentials happy path** (critical) — verifies: AUTH-001a — tags: spec
+  > exact body shape on the happy path
+  - sub-spec of: AUTH-001
+  - contributes to: GOAL-SECURE-AUTH
+  - body: 1 sequential step(s)
+  - step 1 (shell) Background the database is seeded with a known user `true`
+
+- [ ] **valid credentials sets secure cookie** (critical) — verifies: AUTH-001b — tags: spec
+  > the Set-Cookie response has HttpOnly + Secure flags
+  - sub-spec of: AUTH-001
+  - contributes to: GOAL-SECURE-AUTH
+  - body: 1 sequential step(s)
+  - step 1 (shell) Background the database is seeded with a known user `true`
+
+### `Test.pkl`
+
+- [x] **login_happy_path** — verifies: AUTH-001
+  - body: `cmd` (exit 0 expected)
+  - inline: stdout = `200\n`
+
+- [x] **login_wrong_password** — verifies: AUTH-002
+  - body: `cmd` (exit 0 expected)
+  - inline: stdout = `401\n`
+
+## Spec implementation index
+
+- **AUTH-001** — valid credentials
+  - test: `Test.pkl` — login_happy_path
+- **AUTH-001a** — valid credentials happy path
+  - _No active implementation._
+- **AUTH-001b** — valid credentials sets secure cookie
+  - _No active implementation._
+- **AUTH-002** — rejects wrong password
+  - test: `Test.pkl` — login_wrong_password
+- **AUTH-003** — rate-limits brute-force
+  - _No active implementation._
+- **AUTH-004** — passwordless_magic_link
+  - _No active implementation._
+- **AUTH-005** — bearer_token_auth ⊘ deprecated
+  - _No active implementation._
+
+## Outstanding questions
+
+- **AUTH-004** — should this replace AUTH-001 or coexist?
+- **AUTH-003** — is 5 attempts the right threshold?
+- **AUTH-003** — should the window slide or reset hard?

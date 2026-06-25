@@ -53,22 +53,87 @@ pub struct Scenario {
 }
 
 ///|
+/// An HTTP request on a Step. Mirrors the spec-relevant subset of Go
+/// `config.HttpRequest`.
+pub struct HttpRequest {
+  http_method : String
+  url : String
+}
+
+///|
+/// An `eventually` poll spec on a Step. Mirrors Go `config.Eventually`.
+pub struct Eventually {
+  interval_ms : Int
+  timeout_sec : Int
+}
+
+///|
+/// An `expectAi` assertion on a Step. Mirrors the spec-relevant subset of
+/// Go `config.AiAssertion`.
+pub struct AiAssertion {
+  snapshot_name : String
+}
+
+///|
+/// One step in a steps/parallelSteps body. Mirrors the spec-relevant subset
+/// of Go `config.Step` (the fields `stepLabel` / `stepExpectations` read).
+pub struct Step {
+  name : String?
+  cmd : String?
+  http : HttpRequest?
+  expect_status : Int?
+  expect_status_between : Array[Int]
+  expect_body_equals : String?
+  expect_body_contains : String?
+  expect_body_json_path_count : Int
+  inline_stdout : String?
+  expect_ai : AiAssertion?
+  cassette : String?
+  eventually : Eventually?
+}
+
+///|
 /// The runner-side test record. Mirrors the spec-relevant subset of Go
-/// `config.Test` (the assertion fields are omitted — see the file header).
+/// `config.Test`. The full body detail is modelled so `pkspec spec` can
+/// reproduce Go's `expectations()` / `stepLabel()` byte-for-byte.
 ///
-/// `cmd` / `steps_count` / `parallel_steps_count` are carried so the
-/// spec commands can reproduce Go's `Test.Mode()` (and hence the
-/// `isPending` auto-pending rule): a `tags`-has-"spec" test with no
-/// runnable body (no cmd, no steps, no parallelSteps) is treated as
-/// pending even though the rendered JSON has `pending = false`.
+/// `cmd` / `steps` / `parallel_steps` are carried so the spec commands can
+/// reproduce Go's `Test.Mode()` (and hence the `isPending` auto-pending
+/// rule): a `tags`-has-"spec" test with no runnable body (no cmd, no steps,
+/// no parallelSteps) is treated as pending even though the rendered JSON has
+/// `pending = false`.
 pub struct Test {
   description : String?
   tags : Array[String]
   spec_ref : Array[String]
   pending : Bool
   cmd : String?
-  steps_count : Int
-  parallel_steps_count : Int
+  steps : Array[Step]
+  parallel_steps : Array[Step]
+  // cmd-body assertions
+  expect_exit_code : Int
+  expect_stdout : String?
+  expect_stderr : String?
+  inline_stdout : String?
+  inline_stderr : String?
+  expect_stdout_snapshot_name : String?
+  expect_stderr_snapshot_name : String?
+  // test-level
+  retries : Int
+  flaky_acceptable : Bool
+  background_count : Int
+}
+
+///|
+/// Count of `steps` (Go `len(t.Steps)`).
+pub fn Test::steps_count(self : Test) -> Int {
+  self.steps.length()
+}
+
+///|
+/// Count of `parallelSteps` (Go `len(t.ParallelSteps)`).
+pub fn Test::parallel_steps_count(self : Test) -> Int {
+  self.parallel_steps.length()
 }
 
 ///|

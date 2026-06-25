@@ -75,8 +75,8 @@ async test "model: spec-pending preserves cmd/steps for the Mode() rule" {
     }
   }
   assert_eq(stub.cmd, None)
-  assert_eq(stub.steps_count, 0)
-  assert_eq(stub.parallel_steps_count, 0)
+  assert_eq(stub.steps_count(), 0)
+  assert_eq(stub.parallel_steps_count(), 0)
   assert_eq(stub.pending, false)
 
   // Implemented test: cmd is present.

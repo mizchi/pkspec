@@ -1,0 +1,38 @@
+# Test SPEC
+
+5 tests across 2 module(s) — 3 pending, 2 active
+
+## `./`
+
+### `Spec.pkl`
+
+- [ ] **creates user** — verifies: SIGNUP-001 — tags: spec, audience:pm, audience:end-user, audience:developer
+  > POST /users with a fresh email returns 201
+  - body: _not yet implemented_
+
+- [ ] **rejects duplicate email** — verifies: SIGNUP-002 — tags: spec, audience:pm, audience:end-user, audience:developer
+  > POST /users with an existing email returns 409
+  - body: _not yet implemented_
+
+- [ ] **rejects invalid email** — verifies: SIGNUP-003 — tags: spec, audience:pm, audience:developer
+  > RFC 5322 violations return 422
+  - body: _not yet implemented_
+
+### `Test.pkl`
+
+- [x] **signup_duplicate** — verifies: SIGNUP-002
+  - body: `cmd` (exit 0 expected)
+  - inline: stdout = `409\n`
+
+- [x] **signup_happy_path** — verifies: SIGNUP-001
+  - body: `cmd` (exit 0 expected)
+  - inline: stdout = `201\n`
+
+## Spec implementation index
+
+- **SIGNUP-001** — creates user
+  - test: `Test.pkl` — signup_happy_path
+- **SIGNUP-002** — rejects duplicate email
+  - test: `Test.pkl` — signup_duplicate
+- **SIGNUP-003** — rejects invalid email
+  - _No active implementation._
