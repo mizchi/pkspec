@@ -455,16 +455,17 @@ scenarios: Listing<Scenario> = new {
   }
   // doctor: ENV-DEPENDENT (which tools are on PATH, their versions, and their
   // absolute paths all vary by machine), so it is gated STRUCTURALLY, not at
-  // byte parity. Assert exit 0 (pkl is present in the conformance environment),
-  // non-empty stdout, and the stable shape markers: the report banner, the four
-  // tool names, and the `[ok]`-style level tag. The volatile version/path bytes
-  // are never compared.
+  // byte parity. The EXIT CODE is also env-dependent (doctor exits 1 when a
+  // required tool like `pkl` is absent — and CI does NOT install pkl, since the
+  // evaluator is embedded), so exit is NOT gated. Assert only non-empty stdout
+  // and the stable shape markers: the report banner, the four tool names, and
+  // the `doctor:` summary. The volatile version/path bytes are never compared.
   new {
     id = "doctor-structural"
     fixture = "conformance/fixtures/empty"
     argv { "doctor" }
     contract = new {
-      exit = true
+      exit = false
       stdoutNonEmpty = true
       mustContain {
         "pkspec doctor"
@@ -487,7 +488,7 @@ scenarios: Listing<Scenario> = new {
     fixture = "conformance/fixtures/empty"
     argv { "doctor"; "--json" }
     contract = new {
-      exit = true
+      exit = false
       stdoutNonEmpty = true
       mustContain {
         "\"checks\""
