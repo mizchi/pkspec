@@ -67,3 +67,28 @@ for pair in $p3b_fixtures; do
   cp "$repo/examples/$src/Test.pkl" "$fx/examples/$id/Test.pkl"
   echo "regenerated $fx (from examples/$src)"
 done
+
+# P3c exec fixtures: retries/flaky + reference snapshots + eventually/repeat +
+# JUnit. VERBATIM copies of real examples/<src>/ (the fixture id == the example
+# name here). The snapshot-match fixture additionally carries the committed
+# `.pkspec/snapshots/<name>.bytes` raw-bytes snapshot so the second run matches;
+# the snapshot-write fixture deliberately has NO committed snapshot (the first
+# run writes it, which the harness gates via fsDelta).
+#   exec-retry-flaky    <- exec-retry-flaky    (retries=1 + flakyAcceptable; deterministic counter)
+#   exec-snapshot-match <- exec-snapshot-match (committed snapshot; PASS)
+#   exec-snapshot-write <- exec-snapshot-write (no snapshot; write-initial + FAIL)
+#   exec-eventually     <- exec-eventually     (eventually poll-to-pass + repeat)
+#   exec-junit          <- exec-junit          (pass + fail; JUnit XML report)
+p3c_fixtures="exec-retry-flaky exec-snapshot-match exec-snapshot-write exec-eventually exec-junit"
+for id in $p3c_fixtures; do
+  fx="$here/$id"
+  rm -rf "$fx"
+  mkdir -p "$fx/pkl" "$fx/examples/$id"
+  cp "$repo/pkl/Test.pkl" "$fx/pkl/"
+  cp "$repo/examples/$id/Test.pkl" "$fx/examples/$id/Test.pkl"
+  # Vendor any committed reference snapshot (raw .bytes) verbatim.
+  if [ -d "$repo/examples/$id/.pkspec" ]; then
+    cp -R "$repo/examples/$id/.pkspec" "$fx/examples/$id/.pkspec"
+  fi
+  echo "regenerated $fx (from examples/$id)"
+done

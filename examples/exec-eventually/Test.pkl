@@ -1,0 +1,43 @@
+amends "../../pkl/Test.pkl"
+
+// Deterministic `eventually` (poll) + `repeat` case, shell-only.
+//
+// Step 1 `poll_until_ready`: an `eventually` step whose cmd increments a
+// counter file and exits 0 only once the counter reaches 2. With intervalMs=50
+// / timeoutSec=5 it converges in two polls (fail, sleep, pass) inside the
+// budget, so the test PASSES — a passing eventually returns the passing
+// attempt UNCHANGED (no `eventually:` reason), so the per-step line stays
+// silent and the stderr is fully deterministic.
+//
+// Step 2 `repeat_thrice`: a `repeat = 3` shell step that always passes,
+// exercising the repeat loop (PKSPEC_REPEAT injected per repetition) without
+// any volatile output. Locks in the eventually poll-to-pass + the repeat loop.
+tests {
+  new {
+    name = "eventually_converges"
+    description = "eventually polls a counter to pass; repeat runs a step 3x"
+    tags { "unit" }
+    specRef { "runner.eventually" }
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "poll_until_ready"
+          body = new ShellBody {
+            cmd = "n=$(cat .poll 2>/dev/null || echo 0); n=$((n + 1)); echo $n > .poll; test \"$n\" -ge 2"
+          }
+          eventually = new Eventually {
+            intervalMs = 50
+            timeoutSec = 5
+          }
+        }
+        new {
+          name = "repeat_thrice"
+          repeat = 3
+          body = new ShellBody {
+            cmd = "echo rep-$PKSPEC_REPEAT"
+          }
+        }
+      }
+    }
+  }
+}

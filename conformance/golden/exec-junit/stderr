@@ -1,0 +1,5 @@
+[pkspec] a_passes: passed (4ms)
+[pkspec] b_fails: failed (3ms)
+      expected exit code 0, got 1
+pkspec: 1 passed, 0 flaky, 0 pending, 1 failed, 0 errored, 0 skipped (of 2)
+pkspec: 1 test(s) failed, 0 errored, 0 skipped

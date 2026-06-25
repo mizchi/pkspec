@@ -1,0 +1,18 @@
+amends "../../pkl/Test.pkl"
+
+// Reference-snapshot MATCH case: the committed snapshot
+// `.pkspec/snapshots/match_out.bytes` (raw bytes "snapshot-line\n") equals the
+// cmd's stdout, so the test PASSES, exit 0. Locks in the snapshot read + the
+// byte-exact compare + the `.bytes` path construction.
+tests {
+  new {
+    name = "snapshot_matches"
+    description = "stdout equals the committed reference snapshot"
+    tags { "unit" }
+    specRef { "diff.reference-snapshot" }
+    body = new CmdTest {
+      cmd = "echo snapshot-line"
+      expectStdoutSnapshot = new ReferenceSnapshot { name = "match_out" }
+    }
+  }
+}
