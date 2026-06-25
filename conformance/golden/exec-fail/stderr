@@ -1,0 +1,4 @@
+[pkspec] false_exits_nonzero: failed (4ms)
+      expected exit code 0, got 1
+pkspec: 0 passed, 0 flaky, 0 pending, 1 failed, 0 errored, 0 skipped (of 1)
+pkspec: 1 test(s) failed, 0 errored, 0 skipped

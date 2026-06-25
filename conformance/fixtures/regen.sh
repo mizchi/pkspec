@@ -26,3 +26,19 @@ for ex in spec-id spec-graph spec-open-questions spec-pending spec-docs spec-str
   done
   echo "regenerated $fx"
 done
+
+# P3a exec fixtures: unlike the spec-* fixtures, these have NO source under
+# examples/<name> — the examples/<name>/Test.pkl modules are hand-authored
+# (a pure-`cmd` subset / a tiny fail case) and copied verbatim into the repo,
+# so regen only re-vendors the pkl/Test.pkl schema and never overwrites the
+# hand-authored example module.
+for ex in exec-shell-smoke exec-stdout-contract exec-fail; do
+  fx="$here/$ex"
+  if [ ! -f "$fx/examples/$ex/Test.pkl" ]; then
+    echo "skip $fx (hand-authored example missing)" >&2
+    continue
+  fi
+  mkdir -p "$fx/pkl"
+  cp "$repo/pkl/Test.pkl" "$fx/pkl/"
+  echo "re-vendored schema for $fx"
+done
