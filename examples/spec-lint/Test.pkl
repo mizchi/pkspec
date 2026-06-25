@@ -1,0 +1,15 @@
+amends "../../pkl/Test.pkl"
+
+// Implementing test for examples/spec-lint/Spec.pkl. specRef "LINT-007" points
+// at a deprecated Scenario -> lint.deprecated-specRef (warn). (lint.dead-specRef
+// can't be shown here: the schema throws on an unknown specRef before render.)
+tests {
+  new {
+    name = "references_a_deprecated_spec"
+    specRef { "LINT-007" }
+    body = new CmdTest {
+      cmd = "echo ok"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "ok\n" }
+    }
+  }
+}

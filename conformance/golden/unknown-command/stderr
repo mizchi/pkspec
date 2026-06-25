@@ -1,0 +1,59 @@
+pkspec — language-agnostic Pkl-based spec & test runner
+
+usage:
+  pkspec <command> [args]
+
+commands:
+  init [--dir pkspec] [--force]
+                              write the embedded Pkl authoring schemas
+                              (Test.pkl, Spec.pkl, QuickCheck.pkl,
+                              Adapter.pkl, adapters/*.pkl) into
+                              a project so Go/Nix-installed binaries can
+                              be used without a source checkout.
+  doctor [--quiet] [--json]   check that the local environment has the
+                              tools pkspec needs (pkl required; git /
+                              node / go optional for specific kinds).
+  run [--allow-cmd] [pkl-test args...]
+                              wrap `pkl test` and force a non-zero exit on
+                              any assertion failure (closes pkl test's
+                              exit-code gap). With --allow-cmd, register
+                              this binary as an external resource reader
+                              for the `cmd:` scheme so pkl can run
+                              subprocesses inside facts/examples.
+  exec -f Test.pkl            load a Test schema module via pkl-go and
+                              execute each declared Test as a subprocess;
+                              asserts exit code + literal stdout/stderr
+  adapter -f Adapter.pkl      load an Adapter schema module, run its
+                              discover/run commands, and aggregate
+                              pkspec adapter protocol events
+  spec [--tag X]... <path>... render a Markdown SPEC.md from one or more
+                              Test.pkl modules (filesystem-hierarchical;
+                              groups by source directory; --output to
+                              write to a file instead of stdout).
+  docs --audience X [opts] <path>...
+                              render audience-specific Markdown from specs,
+                              hiding runner implementation details by default.
+  check [opts] <path>...      cross-reference Scenario.id with Test.specRef
+                              and exit non-zero on missing implementations.
+  coverage [opts] <path>...   print declared-vs-implemented coverage.
+  graph [opts] <path>...      output graphviz dot with spec + implementation edges.
+  decisions [opts] <path>...  print newest-first Markdown decision log.
+  goals [opts] <path>...      print Goals with contributing-spec coverage.
+  milestones [opts] <path>...
+                              print Milestones with Goal progress rollups.
+  next [opts] <path>...       rank unimplemented specs by Goal priority.
+  lint [opts] <path>...       run structural spec lint: broken graph refs,
+                              dead/deprecated Test.specRef links, missing
+                              descriptions, and similar authoring mistakes.
+  implementations [opts] <path>...
+                              list spec ids with active test/code/doc implementers.
+  orphans [opts] <path>...    list active tests with no specRef.
+  timings -f Test.pkl [opts]  inspect .pkspec/timings.jsonl —
+                              per-test median / p90 / latest outcome.
+                              --env / --failing / --shard=K/N (preview)
+  version                     print pkspec version
+  help                        show this message
+
+`pkspec run` forwards every argument it does not recognize to `pkl test`,
+including module paths, --junit-aggregate-reports, --overwrite, etc.
+pkspec: unknown command "definitely-not-a-command"

@@ -1,0 +1,8 @@
+pkspec doctor — environment check
+
+  [ok]      git    git version 2.52.0               /Users/mz/.devbox/nix/profile/default/bin/git
+  [ok]      go     go version go1.26.2 darwin/arm64 /etc/profiles/per-user/mz/bin/go
+  [ok]      node   v24.12.0                         /Users/mz/.local/share/mise/installs/node/24/bin/node
+  [ok]      pkl    Pkl 0.31.1 (macOS 26.2, native)  /etc/profiles/per-user/mz/bin/pkl
+
+doctor: required and recommended tools all present.

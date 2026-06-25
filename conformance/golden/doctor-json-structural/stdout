@@ -1,0 +1,36 @@
+{
+  "checks": [
+    {
+      "name": "git",
+      "required": false,
+      "level": "ok",
+      "path": "/Users/mz/.devbox/nix/profile/default/bin/git",
+      "version": "git version 2.52.0",
+      "why": "snapshot bytes and timings history are tracked through the repo's git working tree"
+    },
+    {
+      "name": "go",
+      "required": false,
+      "level": "ok",
+      "path": "/etc/profiles/per-user/mz/bin/go",
+      "version": "go version go1.26.2 darwin/arm64",
+      "why": "needed for the built-in `go test` adapter shim"
+    },
+    {
+      "name": "node",
+      "required": false,
+      "level": "ok",
+      "path": "/Users/mz/.local/share/mise/installs/node/24/bin/node",
+      "version": "v24.12.0",
+      "why": "needed for kind=playwright/playwrightTest and the Vitest / Playwright / node:test adapter shims"
+    },
+    {
+      "name": "pkl",
+      "required": true,
+      "level": "ok",
+      "path": "/etc/profiles/per-user/mz/bin/pkl",
+      "version": "Pkl 0.31.1 (macOS 26.2, native)",
+      "why": "pkl-go shells out to the pkl CLI for every spec / test / adapter eval"
+    }
+  ]
+}

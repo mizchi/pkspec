@@ -39,6 +39,15 @@ priv struct SpecArgs {
   discover : Bool
   root : String
   tags : Array[String]
+  // `--scan` / `--skip-dir` feed lint + graph; `--lint-disable` feeds lint.
+  // Parsed for every spec command (so a stray flag is consumed, not mistaken
+  // for a path), but the dispatcher validates per-command which apply.
+  scan : Array[String]
+  skip_dir : Array[String]
+  lint_disable : String
+  // `--output` writes the rendered SPEC to a file instead of stdout (spec
+  // render mode only). Empty means stdout.
+  output : String
 }
 
 ///|
@@ -52,40 +61,45 @@ fn parse_spec_args(args : ArrayView[String]) -> SpecArgs raise {
   let mut discover = false
   let mut root = ""
   let tags : Array[String] = []
+  let scan : Array[String] = []
+  let skip_dir : Array[String] = []
+  let mut lint_disable = ""
+  let mut output = ""
   let mut i = 0
   while i < args.length() {
     let a = args[i]
-    match a {
-      "--root" => {
-        i = i + 1
-        if i < args.length() {
-          root = args[i]
+    // Split `--flag=value` so the inline form is accepted (Go's flag package
+    // takes both `--scan PATH` and `--scan=PATH`).
+    let (name, inline) = split_eq(a)
+    fn take() -> String {
+      match inline {
+        Some(v) => v
+        None => {
+          i = i + 1
+          if i < args.length() {
+            args[i]
+          } else {
+            ""
+          }
         }
       }
-      "--tag" => {
-        i = i + 1
-        if i < args.length() {
-          tags.push(args[i])
-        }
-      }
-      "--goal" => {
-        i = i + 1
-        if i < args.length() {
-          goal = args[i]
-        }
-      }
-      "--severity" => {
-        i = i + 1
-        if i < args.length() {
-          severity = args[i]
-        }
-      }
+    }
+
+    match name {
+      "--root" => root = take()
+      "--tag" => tags.push(take())
+      "--goal" => goal = take()
+      "--severity" => severity = take()
+      "--scan" => scan.push(take())
+      "--skip-dir" => skip_dir.push(take())
+      "--lint-disable" => lint_disable = take()
+      "--output" => output = take()
       "--discover" => discover = true
       _ =>
         if a.has_prefix("--") {
           // Match Go's flag package: "flag provided but not defined: -<name>".
           raise SpecCliError(
-            "flag provided but not defined: -\{strip_dashes(a)}",
+            "flag provided but not defined: -\{strip_dashes(name)}",
           )
         } else {
           paths.push(a)
@@ -93,7 +107,41 @@ fn parse_spec_args(args : ArrayView[String]) -> SpecArgs raise {
     }
     i = i + 1
   }
-  SpecArgs::{ paths, goal, severity, discover, root, tags }
+  SpecArgs::{
+    paths,
+    goal,
+    severity,
+    discover,
+    root,
+    tags,
+    scan,
+    skip_dir,
+    lint_disable,
+    output,
+  }
+}
+
+///|
+/// Reject the lint/graph-only flags on a spec mode that does not accept them,
+/// mirroring Go `cmdSpec`'s validation order: `--scan` is lint/graph-only,
+/// `--skip-dir` requires `--scan`, `--lint-disable` requires lint mode. The
+/// `allow_scan` flag is true only for the graph/lint dispatchers (which call
+/// `resolve_scan_sources` instead); every other spec command passes false so a
+/// stray `--scan` errors exactly like the oracle rather than silently no-op-ing.
+fn validate_spec_mode_flags(
+  sa : SpecArgs,
+  allow_scan : Bool,
+  is_lint : Bool,
+) -> Unit raise {
+  if sa.scan.length() > 0 && not(allow_scan) {
+    raise SpecCliError("--scan is only supported by lint and graph modes")
+  }
+  if sa.skip_dir.length() > 0 && sa.scan.length() == 0 {
+    raise SpecCliError("--skip-dir requires --scan")
+  }
+  if sa.lint_disable != "" && not(is_lint) {
+    raise SpecCliError("--lint-disable requires lint mode")
+  }
 }
 
 ///|
@@ -140,7 +188,10 @@ async fn eprintln_pkspec(msg : String) -> Unit {
 /// into a plan list (Go aggregates Tests/Scenarios across plans by keeping a
 /// per-source-module plan). Applies the `--goal` / `--severity` filter
 /// (`spec.FilterPlansForSpec`) when set.
-async fn load_plans(sa : SpecArgs) -> Array[@model.Plan] raise {
+async fn load_plans(
+  sa : SpecArgs,
+  no_input_msg~ : String = "spec needs at least one Test.pkl path (or use --discover, or place a SPEC.pkl at the repo root)",
+) -> Array[@model.Plan] raise {
   let positional : Array[String] = []
   for p in sa.paths {
     positional.push(p)
@@ -151,13 +202,13 @@ async fn load_plans(sa : SpecArgs) -> Array[@model.Plan] raise {
     }
   }
   if positional.length() == 0 {
-    // Go: default to a cwd SPEC.pkl when it exists, else error.
+    // Go: default to a cwd SPEC.pkl when it exists, else error. Every spec
+    // mode emits `spec needs ...`; only `docs` overrides this with its own
+    // `docs needs ... Spec.pkl/Test.pkl ...` wording (via no_input_msg).
     if @xfs.exists("SPEC.pkl") {
       positional.push("SPEC.pkl")
     } else {
-      raise SpecCliError(
-        "needs at least one Test.pkl path (or use --discover, or place a SPEC.pkl at the repo root)",
-      )
+      raise SpecCliError(no_input_msg)
     }
   }
   let plans : Array[@model.Plan] = []
@@ -410,22 +461,24 @@ async fn main {
         plans, root,
       ))
     "next" => run_spec_cmd(rest, plans => render_next(plans))
-    "spec" =>
-      run_spec_cmd_ctx(rest, (plans, root, tags) => render_spec(
-        plans, root, tags,
-      ))
+    "spec" => run_spec_render_cmd(rest)
     "goals" => run_spec_cmd(rest, plans => render_goals(plans))
     "milestones" => run_spec_cmd(rest, plans => render_milestones(plans))
+    "graph" => run_graph_cmd_dispatch(rest)
+    "lint" => run_lint_cmd_dispatch(rest)
+    "doctor" => run_doctor_cmd(rest)
     "docs" => run_docs_cmd(rest)
     "check" => run_check_cmd(rest)
     other => {
       // Go prints the usage banner and the error to STDERR for an unknown
       // command (cmd/pkspec/main.go: usage(stderr) then the os.Exit(1)
       // error). Keep stdout empty so a caller capturing stdout sees nothing.
+      // Go returns an error from run() for the unknown command, which main()
+      // prints and exits 1 with — so the exit code is 1, not 2.
       @stdio.stderr.write(usage())
       @stdio.stderr.write("\n")
       eprintln_pkspec("unknown command: \{other}")
-      2
+      1
     }
   }
   @sys.exit(code)
@@ -441,6 +494,13 @@ async fn run_spec_cmd(
 ) -> Int {
   let sa = match (try? parse_spec_args(rest)) {
     Ok(v) => v
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  match (try? validate_spec_mode_flags(sa, false, false)) {
+    Ok(_) => ()
     Err(e) => {
       eprintln_pkspec(err_message(e))
       return 1
@@ -475,6 +535,13 @@ async fn run_spec_cmd_ctx(
       return 1
     }
   }
+  match (try? validate_spec_mode_flags(sa, false, false)) {
+    Ok(_) => ()
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
   let root = resolve_root(sa)
   let plans = match (try? load_plans(sa)) {
     Ok(v) => v
@@ -485,6 +552,68 @@ async fn run_spec_cmd_ctx(
   }
   @stdio.stdout.write(render(plans, root, sa.tags))
   0
+}
+
+///|
+/// Run `spec` render mode (Go `cmdSpec`'s default branch): render the SPEC and
+/// either write it to stdout, or — with `--output PATH` — atomically write it
+/// to PATH (mkdir-p the parent, write `PATH.tmp`, rename) and print the
+/// `pkspec: wrote <path> (N entries)` notice on stderr.
+async fn run_spec_render_cmd(rest : ArrayView[String]) -> Int {
+  let sa = match (try? parse_spec_args(rest)) {
+    Ok(v) => v
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  match (try? validate_spec_mode_flags(sa, false, false)) {
+    Ok(_) => ()
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  let root = resolve_root(sa)
+  let plans = match (try? load_plans(sa)) {
+    Ok(v) => v
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  let doc = render_spec(plans, root, sa.tags)
+  if sa.output == "" {
+    @stdio.stdout.write(doc)
+    return 0
+  }
+  let n = spec_entry_count(plans, sa.tags)
+  match (try? write_output_atomic(sa.output, doc)) {
+    Ok(_) => {
+      eprintln_pkspec("wrote \{sa.output} (\{n} entries)")
+      0
+    }
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      1
+    }
+  }
+}
+
+///|
+/// Atomically write `doc` to `path` (Go: `os.MkdirAll(dir)`, write
+/// `path+".tmp"`, `os.Rename`). The rename is the atomic publish step so a
+/// reader never observes a half-written SPEC.
+async fn write_output_atomic(path : String, doc : String) -> Unit raise {
+  let dir = dir_name(path)
+  // Go's os.MkdirAll is a no-op when the dir already exists; @xfs.mkdir errors
+  // ("File exists") in that case, so guard on existence to match MkdirAll.
+  if dir != "" && dir != "." && not(@xfs.exists(dir)) {
+    @xfs.mkdir(dir, recursive=true)
+  }
+  let tmp = path + ".tmp"
+  @xfs.write_file(tmp, doc)
+  @xfs.rename(tmp, path, replace=true)
 }
 
 ///|
@@ -593,8 +722,16 @@ async fn run_docs_cmd(rest : ArrayView[String]) -> Int {
     discover: da.discover,
     root: "",
     tags: [],
+    scan: [],
+    skip_dir: [],
+    lint_disable: "",
+    output: "",
   }
-  let plans = match (try? load_plans(sa)) {
+  let plans = match
+    (try? load_plans(
+      sa,
+      no_input_msg="docs needs at least one Spec.pkl/Test.pkl path (or use --discover, or place a SPEC.pkl at the repo root)",
+    )) {
     Ok(v) => v
     Err(e) => {
       eprintln_pkspec(err_message(e))
@@ -641,6 +778,13 @@ async fn run_check_cmd(rest : ArrayView[String]) -> Int {
       return 1
     }
   }
+  match (try? validate_spec_mode_flags(ca.spec, false, false)) {
+    Ok(_) => ()
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
   let plans = match (try? load_plans(ca.spec)) {
     Ok(v) => v
     Err(e) => {
@@ -650,6 +794,177 @@ async fn run_check_cmd(rest : ArrayView[String]) -> Int {
   }
   let repo_root = find_repo_root()
   let res = run_check(plans, ca.strict, repo_root)
+  if res.stdout != "" {
+    @stdio.stdout.write(res.stdout)
+  }
+  if res.stderr != "" {
+    @stdio.stderr.write(res.stderr)
+  }
+  res.exit
+}
+
+///|
+/// Validate `--scan` / `--skip-dir` against the active mode and run the
+/// `--scan` walk (Go's `--scan only supported by lint/graph` + `--skip-dir
+/// requires --scan` guards + `ScanSourcesWithOptions`). Returns the harvested
+/// SourceRefs (empty when no `--scan`).
+async fn resolve_scan_sources(sa : SpecArgs) -> Array[SourceRef] raise {
+  if sa.scan.length() == 0 {
+    return []
+  }
+  scan_sources(sa.scan, sa.skip_dir)
+}
+
+///|
+/// Run `graph`: load plans, run any `--scan` walk, emit graphviz DOT.
+async fn run_graph_cmd_dispatch(rest : ArrayView[String]) -> Int {
+  let sa = match (try? parse_spec_args(rest)) {
+    Ok(v) => v
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  // graph allows --scan but is not lint mode (so --lint-disable is rejected).
+  match (try? validate_spec_mode_flags(sa, true, false)) {
+    Ok(_) => ()
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  let root = resolve_root(sa)
+  let plans = match (try? load_plans(sa)) {
+    Ok(v) => v
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  let sources = match (try? resolve_scan_sources(sa)) {
+    Ok(v) => v
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  @stdio.stdout.write(render_graph_cmd(plans, root, sources))
+  0
+}
+
+///|
+/// Run `lint`: load plans, run any `--scan` walk, render the lint report, and
+/// route the report to stdout / the `N lint error(s)` message to stderr with
+/// exit 0/1.
+async fn run_lint_cmd_dispatch(rest : ArrayView[String]) -> Int {
+  let sa = match (try? parse_spec_args(rest)) {
+    Ok(v) => v
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  // lint allows both --scan and --lint-disable.
+  match (try? validate_spec_mode_flags(sa, true, true)) {
+    Ok(_) => ()
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  let plans = match (try? load_plans(sa)) {
+    Ok(v) => v
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  let sources = match (try? resolve_scan_sources(sa)) {
+    Ok(v) => v
+    Err(e) => {
+      eprintln_pkspec(err_message(e))
+      return 1
+    }
+  }
+  let disabled : Array[String] = []
+  if sa.lint_disable != "" {
+    for part in split_on_comma(sa.lint_disable) {
+      disabled.push(part)
+    }
+  }
+  let today = utc_today()
+  let res = run_lint(plans, sources, disabled, today)
+  if res.stdout != "" {
+    @stdio.stdout.write(res.stdout)
+  }
+  if res.stderr != "" {
+    @stdio.stderr.write(res.stderr)
+  }
+  res.exit
+}
+
+///|
+/// Split a comma-separated list (Go `strings.Split(s, ",")`); empty/whitespace
+/// segments are kept here and trimmed downstream by `run_lint`.
+fn split_on_comma(s : String) -> Array[String] {
+  let out : Array[String] = []
+  let buf = StringBuilder::new()
+  for c in s {
+    if c == ',' {
+      out.push(buf.to_string())
+      buf.reset()
+    } else {
+      buf.write_char(c)
+    }
+  }
+  out.push(buf.to_string())
+  out
+}
+
+///|
+/// Current UTC date as `YYYY-MM-DD`, mirroring Go's
+/// `time.Now().UTC().Format("2006-01-02")`. Shells out to `date -u` so the
+/// future-decision-date lint rule sees the same "today" the oracle does on the
+/// same machine. Returns "" on failure (no decision is then "in the future",
+/// which is the safe degrade).
+async fn utc_today() -> String {
+  match (try? @process.collect_output("date", ["-u", "+%Y-%m-%d"])) {
+    Ok((0, out_data, _)) =>
+      @utf8.decode_lossy(out_data.binary()[:]).trim_space().to_string()
+    _ => ""
+  }
+}
+
+///|
+/// Run `doctor`: parse `--quiet` / `--json`, probe the environment, write the
+/// report to stdout, and exit 1 iff a required tool is missing.
+async fn run_doctor_cmd(rest : ArrayView[String]) -> Int {
+  let mut quiet = false
+  let mut json_out = false
+  for a in rest {
+    let (name, inline) = split_eq(a)
+    match name {
+      "--quiet" =>
+        quiet = match inline {
+          Some(v) => parse_go_bool(v)
+          None => true
+        }
+      "--json" =>
+        json_out = match inline {
+          Some(v) => parse_go_bool(v)
+          None => true
+        }
+      _ =>
+        if a.has_prefix("--") {
+          eprintln_pkspec("flag provided but not defined: -\{strip_dashes(name)}")
+          return 1
+        } else {
+          eprintln_pkspec("doctor takes no positional args, got [\{a}]")
+          return 1
+        }
+    }
+  }
+  let res = run_doctor(quiet, json_out)
   if res.stdout != "" {
     @stdio.stdout.write(res.stdout)
   }
