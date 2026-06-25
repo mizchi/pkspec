@@ -53,3 +53,39 @@ async test "model: spec-id Spec.pkl round-trips into a Plan" {
   assert_eq(plan.scenarios.length(), 3)
   assert_eq(plan.source_path, path)
 }
+
+///|
+/// The Test fields that feed Go's `Mode()` / `isPending` must survive the
+/// parse: a body-less "spec"-tagged stub (cmd null, no steps) vs an
+/// implemented test (cmd present). spec-pending exercises both. The
+/// rendered JSON reports `pending = false` for the stubs, so these fields
+/// are what makes the auto-pending rule computable downstream.
+async test "model: spec-pending preserves cmd/steps for the Mode() rule" {
+  let path = repo_root() + "/examples/spec-pending/Test.pkl"
+  let json = @config.eval_module_to_json(path)
+  let plan = plan_from_json(json, path)
+
+  // Body-less auto-pending stub: cmd is None, no steps/parallelSteps, and
+  // the rendered pending flag is false (auto-pending is computed, not stored).
+  let stub = match plan.tests.get("rejects_duplicate_email") {
+    Some(t) => t
+    None => {
+      fail("expected test \"rejects_duplicate_email\"")
+      return
+    }
+  }
+  assert_eq(stub.cmd, None)
+  assert_eq(stub.steps_count, 0)
+  assert_eq(stub.parallel_steps_count, 0)
+  assert_eq(stub.pending, false)
+
+  // Implemented test: cmd is present.
+  let runnable = match plan.tests.get("creates_user") {
+    Some(t) => t
+    None => {
+      fail("expected test \"creates_user\"")
+      return
+    }
+  }
+  assert_eq(runnable.cmd, Some("echo 201"))
+}

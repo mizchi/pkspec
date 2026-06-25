@@ -55,11 +55,20 @@ pub struct Scenario {
 ///|
 /// The runner-side test record. Mirrors the spec-relevant subset of Go
 /// `config.Test` (the assertion fields are omitted — see the file header).
+///
+/// `cmd` / `steps_count` / `parallel_steps_count` are carried so the
+/// spec commands can reproduce Go's `Test.Mode()` (and hence the
+/// `isPending` auto-pending rule): a `tags`-has-"spec" test with no
+/// runnable body (no cmd, no steps, no parallelSteps) is treated as
+/// pending even though the rendered JSON has `pending = false`.
 pub struct Test {
   description : String?
   tags : Array[String]
   spec_ref : Array[String]
   pending : Bool
+  cmd : String?
+  steps_count : Int
+  parallel_steps_count : Int
 }
 
 ///|

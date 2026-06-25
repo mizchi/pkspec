@@ -5,6 +5,45 @@
 // ---- shared spec helpers ----
 
 ///|
+/// Whether `t`'s body resolves to exactly one runnable shape, mirroring Go
+/// `config.Test.Mode()`: ModeCmd iff `cmd != nil && *cmd != ""`, ModeSteps
+/// iff `len(steps) > 0`, ModeParallelSteps iff `len(parallelSteps) > 0`. The
+/// mode is valid iff exactly one of those is set (count == 1).
+fn mode_is_valid(t : @model.Test) -> Bool {
+  let mut count = 0
+  match t.cmd {
+    Some(c) => if c != "" { count = count + 1 }
+    None => ()
+  }
+  if t.steps_count > 0 {
+    count = count + 1
+  }
+  if t.parallel_steps_count > 0 {
+    count = count + 1
+  }
+  count == 1
+}
+
+///|
+/// Mirror Go `spec.isPending`: a test is pending when its `pending` flag is
+/// set, OR it is tagged "spec" and has no valid runnable body (Mode invalid).
+/// The rendered JSON reports `pending = false` for these auto-pending stubs,
+/// so this computed rule is load-bearing for coverage / orphans correctness.
+fn is_pending(t : @model.Test) -> Bool {
+  if t.pending {
+    return true
+  }
+  let mut has_spec = false
+  for tag in t.tags {
+    if tag == "spec" {
+      has_spec = true
+      break
+    }
+  }
+  has_spec && not(mode_is_valid(t))
+}
+
+///|
 /// A scenario is implemented iff (Go `scenarioIsImplemented`):
 ///   - it has an Implementation entry of kind code/doc/task with a non-empty
 ///     `at`, OR an entry of kind=test; OR
@@ -37,7 +76,7 @@ fn collect_impls(plans : Array[@model.Plan]) -> Map[String, Bool] {
   let out : Map[String, Bool] = Map::new()
   for p in plans {
     for _, t in p.tests {
-      if t.pending {
+      if is_pending(t) {
         continue
       }
       for id in t.spec_ref {
@@ -243,7 +282,7 @@ pub fn render_orphans(plans : Array[@model.Plan]) -> String {
   let orphans : Array[OrphanTest] = []
   for p in plans {
     for name, t in p.tests {
-      if t.pending {
+      if is_pending(t) {
         continue
       }
       if t.spec_ref.length() > 0 {

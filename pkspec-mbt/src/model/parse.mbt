@@ -51,6 +51,9 @@ fn parse_tests(j : Json?) -> Map[String, Test] {
               tags: arr_str(t.get("tags")),
               spec_ref: arr_str(t.get("specRef")),
               pending: bool_val(t.get("pending")),
+              cmd: opt_str(t.get("cmd")),
+              steps_count: arr_len(t.get("steps")),
+              parallel_steps_count: arr_len(t.get("parallelSteps")),
             }
           _ => ()
         }
@@ -219,6 +222,15 @@ fn bool_val(j : Json?) -> Bool {
 fn int_val(j : Json?) -> Int {
   match j {
     Some(Number(x, ..)) => x.to_int()
+    _ => 0
+  }
+}
+
+///|
+/// Length of a JSON array value (missing key / null / non-array => 0).
+fn arr_len(j : Json?) -> Int {
+  match j {
+    Some(Array(a)) => a.length()
     _ => 0
   }
 }

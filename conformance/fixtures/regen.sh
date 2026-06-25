@@ -8,11 +8,15 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
 
-for ex in spec-id spec-graph; do
+for ex in spec-id spec-graph spec-open-questions spec-pending; do
   fx="$here/$ex"
   rm -rf "$fx"
   mkdir -p "$fx/pkl" "$fx/examples/$ex"
   cp "$repo/pkl/Spec.pkl" "$repo/pkl/Test.pkl" "$fx/pkl/"
-  cp "$repo/examples/$ex/Spec.pkl" "$repo/examples/$ex/Test.pkl" "$fx/examples/$ex/"
+  # Copy whichever of the example's .pkl modules exist (spec-pending has no
+  # Spec.pkl). The files are copied verbatim — do not hand-edit.
+  for f in Spec.pkl Test.pkl; do
+    [ -f "$repo/examples/$ex/$f" ] && cp "$repo/examples/$ex/$f" "$fx/examples/$ex/"
+  done
   echo "regenerated $fx"
 done

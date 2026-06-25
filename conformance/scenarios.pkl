@@ -98,4 +98,38 @@ scenarios: Listing<Scenario> = new {
       exactStdout = true
     }
   }
+  // spec-open-questions: the 3 Test.pkl stubs are auto-pending (tagged "spec"
+  // with no runnable body — Go's isPending via Mode()==ModeInvalid). They
+  // carry specRef but, being pending, do NOT count as implementing, so
+  // coverage is 0 / 3. Regression gate for the auto-pending Mode/isPending
+  // port — without it the model would over-count these as implemented.
+  new {
+    id = "coverage-spec-open-questions"
+    fixture = "conformance/fixtures/spec-open-questions"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-open-questions" }
+    argv { "coverage"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // spec-pending: the two body-less stubs (rejects_duplicate_email /
+  // rejects_invalid_email) are tagged "spec" with no runnable body, so Go's
+  // isPending (Mode()==ModeInvalid) auto-pends them — pending tests are
+  // excluded from the orphans listing — and the one implemented test
+  // (creates_user) carries a specRef, so it is not an orphan either. The
+  // oracle therefore prints the deterministic "(0)" listing (no abs path),
+  // gated with exactStdout. This is the direct regression for the auto-
+  // pending fix: WITHOUT it the candidate wrongly lists the two stubs as
+  // "# Orphan tests (2)", which fails this exact golden.
+  new {
+    id = "orphans-spec-pending"
+    fixture = "conformance/fixtures/spec-pending"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-pending" }
+    argv { "orphans"; "--root"; "."; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
 }
