@@ -376,4 +376,18 @@ scenarios: Listing<Scenario> = new {
       }
     }
   }
+  // docs with NO --audience: the required-flag error path. Go (and now the
+  // candidate) route the error to STDERR and exit 1 with stdout empty —
+  // regression gate for the stdout-vs-stderr routing fix.
+  new {
+    id = "docs-missing-audience-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "docs"; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      mustContainStderr { "requires --audience" }
+    }
+  }
 }

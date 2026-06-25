@@ -83,7 +83,10 @@ fn parse_spec_args(args : ArrayView[String]) -> SpecArgs raise {
       "--discover" => discover = true
       _ =>
         if a.has_prefix("--") {
-          raise SpecCliError("unknown flag: \{a}")
+          // Match Go's flag package: "flag provided but not defined: -<name>".
+          raise SpecCliError(
+            "flag provided but not defined: -\{strip_dashes(a)}",
+          )
         } else {
           paths.push(a)
         }
@@ -121,6 +124,15 @@ fn err_message(e : Error) -> String {
     SpecCliError(msg) => msg
     _ => e.to_string()
   }
+}
+
+///|
+/// Write a `pkspec: <msg>\n` diagnostic to STDERR — Go routes every command
+/// error through `fmt.Fprintln(os.Stderr, "pkspec:", err)` (cmd/pkspec/main.go).
+/// Using `println` (stdout) here was wrong: the oracle leaves stdout empty on
+/// error and emits the message on stderr.
+async fn eprintln_pkspec(msg : String) -> Unit {
+  @stdio.stderr.write("pkspec: \{msg}\n")
 }
 
 ///|
@@ -407,8 +419,12 @@ async fn main {
     "docs" => run_docs_cmd(rest)
     "check" => run_check_cmd(rest)
     other => {
-      println("pkspec: unknown command: \{other}")
-      println(usage())
+      // Go prints the usage banner and the error to STDERR for an unknown
+      // command (cmd/pkspec/main.go: usage(stderr) then the os.Exit(1)
+      // error). Keep stdout empty so a caller capturing stdout sees nothing.
+      @stdio.stderr.write(usage())
+      @stdio.stderr.write("\n")
+      eprintln_pkspec("unknown command: \{other}")
       2
     }
   }
@@ -426,14 +442,14 @@ async fn run_spec_cmd(
   let sa = match (try? parse_spec_args(rest)) {
     Ok(v) => v
     Err(e) => {
-      println("pkspec: \{e}")
+      eprintln_pkspec(err_message(e))
       return 1
     }
   }
   let plans = match (try? load_plans(sa)) {
     Ok(v) => v
     Err(e) => {
-      println("pkspec: \{e}")
+      eprintln_pkspec(err_message(e))
       return 1
     }
   }
@@ -455,7 +471,7 @@ async fn run_spec_cmd_ctx(
   let sa = match (try? parse_spec_args(rest)) {
     Ok(v) => v
     Err(e) => {
-      println("pkspec: \{e}")
+      eprintln_pkspec(err_message(e))
       return 1
     }
   }
@@ -463,7 +479,7 @@ async fn run_spec_cmd_ctx(
   let plans = match (try? load_plans(sa)) {
     Ok(v) => v
     Err(e) => {
-      println("pkspec: \{e}")
+      eprintln_pkspec(err_message(e))
       return 1
     }
   }
@@ -562,12 +578,12 @@ async fn run_docs_cmd(rest : ArrayView[String]) -> Int {
   let da = match (try? parse_docs_args(rest)) {
     Ok(v) => v
     Err(e) => {
-      println("pkspec: \{err_message(e)}")
+      eprintln_pkspec(err_message(e))
       return 1
     }
   }
   if trim_space(da.audience) == "" {
-    println("pkspec: docs requires --audience")
+    eprintln_pkspec("docs requires --audience")
     return 1
   }
   let sa = SpecArgs::{
@@ -581,7 +597,7 @@ async fn run_docs_cmd(rest : ArrayView[String]) -> Int {
   let plans = match (try? load_plans(sa)) {
     Ok(v) => v
     Err(e) => {
-      println("pkspec: \{e}")
+      eprintln_pkspec(err_message(e))
       return 1
     }
   }
@@ -621,14 +637,14 @@ async fn run_check_cmd(rest : ArrayView[String]) -> Int {
   let ca = match (try? parse_check_args(rest)) {
     Ok(v) => v
     Err(e) => {
-      println("pkspec: \{err_message(e)}")
+      eprintln_pkspec(err_message(e))
       return 1
     }
   }
   let plans = match (try? load_plans(ca.spec)) {
     Ok(v) => v
     Err(e) => {
-      println("pkspec: \{e}")
+      eprintln_pkspec(err_message(e))
       return 1
     }
   }
