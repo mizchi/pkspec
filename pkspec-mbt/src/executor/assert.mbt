@@ -35,13 +35,25 @@ pub fn assert_shell_stream(
     }
   }
   for pattern in a.matches {
-    match (try? @regexp.compile(pattern)) {
+    // Go embeds RE2 inline flags in the pattern body (e.g. `(?m)^x$`);
+    // moonbitlang/regexp rejects the `(?flags)` group syntax and instead takes
+    // a separate `flags` argument. Translate a LEADING `(?<flags>)` group into
+    // that argument so the common `(?m)` / `(?i)` / `(?s)` cases compile and
+    // behave like Go. Scoped/mid-pattern inline flags are not translated (Go
+    // supports them; no fixture uses them — a future one would surface as a
+    // compile error here, which is the loud-fail we want).
+    let (body, flags) = split_inline_flags(pattern)
+    let compiled = if flags == "" {
+      try? @regexp.compile(body)
+    } else {
+      try? @regexp.compile(body, flags~)
+    }
+    match compiled {
       Err(_) =>
         // Go: "%s regex %q is invalid: %v" — the trailing %v is the engine's
         // error text, which differs between RE2-Go and moonbitlang/regexp, so
-        // this exact wording is not byte-portable. Deterministic P3a fixtures
-        // never use an invalid pattern; we surface a stable prefix so a future
-        // bad-pattern test fails loudly rather than silently.
+        // this exact wording is not byte-portable. We surface a stable prefix
+        // so a bad / unsupported pattern fails loudly rather than silently.
         reasons.push("\{name} regex \{go_quote(pattern)} is invalid")
       Ok(re) =>
         // Go's regexp.MatchString is an unanchored search (match anywhere);
@@ -77,6 +89,44 @@ pub fn assert_shell_stream(
       }
   }
   reasons
+}
+
+///|
+/// Split a leading RE2 inline-flag group `(?flags)` off the front of `pattern`,
+/// returning `(body_without_the_group, flags)`. Only a CLEAN leading group of
+/// flag letters that moonbitlang/regexp accepts (`i` / `m` / `s`) is
+/// translated; anything else (a `-` negation, an unknown letter, a
+/// non-capturing `(?:`, a lookahead `(?=`, or no leading group) is left
+/// untouched with `flags = ""`. Go's RE2 also has `U`; it is left inline (and
+/// will fail to compile loudly) since no fixture uses it.
+fn split_inline_flags(pattern : String) -> (String, String) {
+  let chars = pattern.to_array()
+  // Need at least `(?x)`.
+  if chars.length() < 4 || chars[0] != '(' || chars[1] != '?' {
+    return (pattern, "")
+  }
+  let flags = StringBuilder::new()
+  let mut i = 2
+  let mut ok = true
+  while i < chars.length() && chars[i] != ')' {
+    let c = chars[i]
+    if c == 'i' || c == 'm' || c == 's' {
+      flags.write_char(c)
+    } else {
+      ok = false
+      break
+    }
+    i = i + 1
+  }
+  // Require a non-empty flag run terminated by ')'.
+  if not(ok) || i >= chars.length() || chars[i] != ')' {
+    return (pattern, "")
+  }
+  let f = flags.to_string()
+  if f == "" {
+    return (pattern, "")
+  }
+  (pattern.substring(start=i + 1, end=pattern.length()), f)
 }
 
 ///|

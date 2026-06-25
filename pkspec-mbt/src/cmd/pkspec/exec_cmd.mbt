@@ -1,17 +1,21 @@
-// The `exec` command (P3a scope: ModeCmd tests only). Mirrors the Go
-// `cmdExec` (cmd/pkspec/main.go) + `executor.Run`'s test loop, restricted to
-// single-`cmd` bodies. Loads the Test.pkl plan, filters by --only / --tag,
-// runs each test in name-sorted order, prints the per-test progress line and
-// the summary to STDERR byte-for-byte like Go (modulo the volatile duration),
-// and returns 0 iff the tally is green (Go `Tally.IsGreen`).
+// The `exec` command (P3a + P3b scope). Mirrors the Go `cmdExec`
+// (cmd/pkspec/main.go) + `executor.Run`'s test loop: loads the Test.pkl plan,
+// filters by --only / --tag, runs each test in name-sorted order around the
+// before/after hooks, prints the per-test progress line (with per-step detail)
+// and the summary to STDERR byte-for-byte like Go (modulo the volatile
+// duration / ports), and returns 0 iff the tally is green (Go `Tally.IsGreen`).
 //
-// DEFERRED vs Go's cmdExec (P3b+; consumed-but-unsupported here so the
-// deterministic pure-`cmd` fixtures still run): steps / parallelSteps /
-// background bodies, retries / flaky / iterations, hooks (before/after),
-// snapshots + inline rewrite (--update-inline-snapshots), --junit-reports,
-// --shard / --rerun-failed / --total-timeout, timings recording. A non-cmd
-// body is reported Errored with a clear "deferred" reason rather than
-// silently skipped.
+// IN SCOPE (P3a + P3b): cmd / steps / parallelSteps bodies, the `shell` step
+// kind, sequential capture propagation + skip-on-failure, background processes
+// (portEnv + readyProbe / readyStdoutMatches + grace-kill), before/after hooks
+// (all / each scopes + captures + alwaysRun).
+//
+// DEFERRED vs Go's cmdExec (later phases; consumed-but-unsupported here so the
+// in-scope fixtures still run): retries / flaky / iterations / inputs,
+// http / playwright / sql step kinds (a step that uses them errors loudly),
+// `eventually` / `repeat` step control, snapshots + inline rewrite
+// (--update-inline-snapshots), --junit-reports, --shard / --rerun-failed /
+// --total-timeout, timings recording.
 
 ///|
 /// Parsed `exec` flags (P3a subset). The deferred flags are parsed-and-ignored
@@ -137,10 +141,12 @@ fn fmt_duration(ms : Int64) -> String {
 }
 
 ///|
-/// Format one per-test progress line, mirroring Go `formatResult`'s first
-/// line: `[pkspec] <name>: <outcome>[ <attempts>][ (verifies <refs>)] (<dur>)`,
-/// followed by one indented reason line per reason. P3a never emits the
-/// attempt suffix (no retries) — that path lands in P3b.
+/// Format one per-test progress line, mirroring Go `formatResult`: the status
+/// line `[pkspec] <name>: <outcome>[ <attempts>][ (verifies <refs>)] (<dur>)`,
+/// then the per-step detail (a skipped step gets `      step "<name>": skipped`;
+/// a non-passing step gets `      step "<name>": <outcome>` plus its reasons
+/// indented one level deeper), then the test-level reasons. Passing steps stay
+/// silent. P3b never emits the attempt suffix (retries are a later phase).
 fn format_result(res : @executor.Result) -> String {
   let buf = StringBuilder::new()
   let spec_suffix = if res.spec_ref.length() > 0 {
@@ -151,9 +157,44 @@ fn format_result(res : @executor.Result) -> String {
   buf.write_string(
     "[pkspec] \{res.name}: \{res.outcome.to_string()}\{spec_suffix} \{fmt_duration(res.duration_ms)}\n",
   )
+  for sr in res.steps {
+    if sr.outcome is @executor.Skipped {
+      buf.write_string("      step \{go_dquote(sr.name)}: skipped\n")
+      continue
+    }
+    if not(sr.outcome is @executor.Passed) {
+      buf.write_string(
+        "      step \{go_dquote(sr.name)}: \{sr.outcome.to_string()}\n",
+      )
+      for r in sr.reasons {
+        buf.write_string("        \{r}\n")
+      }
+    }
+  }
   for r in res.reasons {
     buf.write_string("      \{r}\n")
   }
+  buf.to_string()
+}
+
+///|
+/// Render `s` the way Go's `%q` verb does for the step name in the progress
+/// line: a double-quoted Go string literal. Step names here are plain text
+/// (the explicit name or a cmd snippet), so the standard escapes suffice.
+fn go_dquote(s : String) -> String {
+  let buf = StringBuilder::new()
+  buf.write_char('"')
+  for c in s {
+    match c {
+      '"' => buf.write_string("\\\"")
+      '\\' => buf.write_string("\\\\")
+      '\n' => buf.write_string("\\n")
+      '\t' => buf.write_string("\\t")
+      '\r' => buf.write_string("\\r")
+      _ => buf.write_char(c)
+    }
+  }
+  buf.write_char('"')
   buf.to_string()
 }
 
@@ -194,29 +235,141 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
     return 1
   }
   names.sort_by((a, b) => lex_cmp(a, b))
-  let defaults = @executor.Defaults::new()
+  let defaults = @executor.Defaults::from_model(plan.defaults)
   let tally = @executor.Tally::new()
+
+  // Hook state. scope="all" captures live for the whole Run (Go's runState).
+  let run_state : Map[String, String] = Map::new()
+  let mut before_all_err = ""
+  for hname in @executor.sorted_scoped_hook_names(plan.before, "all") {
+    let h = plan.before.get(hname).unwrap()
+    let hr = @executor.run_hook(
+      "before " + hname,
+      h,
+      defaults,
+      workdir,
+      run_state,
+    )
+    if not(hr.outcome is @executor.Passed) {
+      print_hook_failure(hr)
+      before_all_err = "before hook \{go_dquote(hname)} failed: \{join_str(hr.reasons, "; ")}"
+      break
+    }
+    @executor.capture_hook_stdout(h, hr, run_state)
+  }
+
+  let mut any_test_failed = false
   for name in names {
     let t = plan.tests.get(name).unwrap()
-    let res = if exec_is_pending(t) {
-      // Pending: bypass the body entirely (Go's isTestPending path).
-      @executor.Result::synthetic(name, @executor.Pending, [], t.spec_ref)
-    } else if t.mode() is @model.Cmd {
-      run_exec_one(name, t, defaults, workdir)
-    } else {
-      // Non-cmd body: deferred to P3b (steps / parallelSteps), or an authoring
-      // error (Invalid). Report Errored with a clear reason rather than a
-      // silent skip.
-      let reason = if t.mode() is @model.Invalid {
-        "specify exactly one of cmd / steps / parallelSteps"
-      } else {
-        "steps / parallelSteps bodies are not supported yet (P3a runs cmd only)"
+    // A failed before-all errors every test (Go's beforeAllErr branch).
+    if before_all_err != "" {
+      let res = @executor.Result::synthetic(
+        name,
+        @executor.Errored,
+        [before_all_err],
+        t.spec_ref,
+      )
+      tally.record(res.outcome)
+      any_test_failed = true
+      @stdio.stderr.write(format_result(res))
+      continue
+    }
+    if exec_is_pending(t) {
+      // Pending tests bypass all per-test hooks + the body (Go's isTestPending).
+      let res = @executor.Result::synthetic(
+        name,
+        @executor.Pending,
+        [],
+        t.spec_ref,
+      )
+      tally.record(res.outcome)
+      @stdio.stderr.write(format_result(res))
+      continue
+    }
+
+    // Per-test state seeded with run-level captures.
+    let test_state : Map[String, String] = Map::new()
+    for k, v in run_state {
+      test_state[k] = v
+    }
+    // before-each hooks (name order); a failure errors the test.
+    let mut before_each_err = ""
+    for hname in @executor.sorted_scoped_hook_names(plan.before, "each") {
+      let h = plan.before.get(hname).unwrap()
+      let hr = @executor.run_hook(
+        "beforeEach " + hname,
+        h,
+        defaults,
+        workdir,
+        test_state,
+      )
+      if not(hr.outcome is @executor.Passed) {
+        print_hook_failure(hr)
+        before_each_err = "beforeEach \{go_dquote(hname)} failed: \{join_str(hr.reasons, "; ")}"
+        break
       }
-      @executor.Result::synthetic(name, @executor.Errored, [reason], t.spec_ref)
+      @executor.capture_hook_stdout(h, hr, test_state)
+    }
+    let res = if before_each_err != "" {
+      @executor.Result::synthetic(
+        name,
+        @executor.Errored,
+        [before_each_err],
+        t.spec_ref,
+      )
+    } else {
+      run_exec_one(name, t, defaults, workdir, test_state)
+    }
+
+    // after-each in LIFO order. Skip when the body failed unless alwaysRun.
+    let body_failed = res.outcome is @executor.Failed ||
+      res.outcome is @executor.Errored
+    let after_each = @executor.sorted_scoped_hook_names(plan.after, "each")
+    for i = after_each.length() - 1; i >= 0; i = i - 1 {
+      let hname = after_each[i]
+      let h = plan.after.get(hname).unwrap()
+      if body_failed && not(h.always_run) {
+        continue
+      }
+      let hr = @executor.run_hook(
+        "afterEach " + hname,
+        h,
+        defaults,
+        workdir,
+        test_state,
+      )
+      if not(hr.outcome is @executor.Passed) {
+        print_hook_failure(hr)
+      }
     }
     tally.record(res.outcome)
+    if body_failed || res.outcome is @executor.Skipped {
+      any_test_failed = true
+    }
     @stdio.stderr.write(format_result(res))
   }
+
+  // after-all in LIFO order. Skip when the suite had failures unless alwaysRun.
+  let suite_failed = any_test_failed || before_all_err != ""
+  let after_all = @executor.sorted_scoped_hook_names(plan.after, "all")
+  for i = after_all.length() - 1; i >= 0; i = i - 1 {
+    let hname = after_all[i]
+    let h = plan.after.get(hname).unwrap()
+    if suite_failed && not(h.always_run) {
+      continue
+    }
+    let hr = @executor.run_hook(
+      "afterAll " + hname,
+      h,
+      defaults,
+      workdir,
+      run_state,
+    )
+    if not(hr.outcome is @executor.Passed) {
+      print_hook_failure(hr)
+    }
+  }
+
   // Summary line (Go cmdExec): always printed to stderr.
   @stdio.stderr.write(
     "pkspec: \{tally.passed} passed, \{tally.flaky} flaky, \{tally.pending} pending, \{tally.failed} failed, \{tally.errored} errored, \{tally.skipped} skipped (of \{tally.total()})\n",
@@ -234,14 +387,34 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
 }
 
 ///|
-/// Run one ModeCmd test (thin wrapper for clarity / future hook insertion).
+/// Run one test envelope: dispatch on the body mode (cmd / steps /
+/// parallelSteps) with the per-test hook `state` layered in, wrapped in the
+/// background lifecycle (start before / tear down after, always). Mirrors Go's
+/// `runOne` for the P3b feature set (retries / iterations / snapshots are still
+/// deferred). An `Invalid` body errors with Go's exact wording.
 async fn run_exec_one(
   name : String,
   t : @model.Test,
   defaults : @executor.Defaults,
   workdir : String,
+  state : Map[String, String],
 ) -> @executor.Result {
-  @executor.run_cmd(name, t, defaults, workdir, t.spec_ref)
+  @executor.run_one(name, t, defaults, workdir, state, t.spec_ref)
+}
+
+///|
+/// Print a non-passing hook's progress line to stderr, mirroring Go `runHook`'s
+/// trailing block: `[pkspec] <displayName>: <outcome> (<dur>)` + indented
+/// reasons. Passing hooks are silent.
+async fn print_hook_failure(hr : @executor.StepResult) -> Unit {
+  let buf = StringBuilder::new()
+  buf.write_string(
+    "[pkspec] \{hr.name}: \{hr.outcome.to_string()} \{fmt_duration(hr.duration_ms)}\n",
+  )
+  for r in hr.reasons {
+    buf.write_string("      \{r}\n")
+  }
+  @stdio.stderr.write(buf.to_string())
 }
 
 ///|

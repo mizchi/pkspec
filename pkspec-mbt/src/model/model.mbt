@@ -78,21 +78,103 @@ pub struct AiAssertion {
 }
 
 ///|
-/// One step in a steps/parallelSteps body. Mirrors the spec-relevant subset
-/// of Go `config.Step` (the fields `stepLabel` / `stepExpectations` read).
+/// One step in a steps/parallelSteps body. Mirrors Go `config.Step`. The spec
+/// commands read `name` / `cmd` / `http` / the expect* fields for `stepLabel` /
+/// `stepExpectations`; the executor (P3b) additionally reads `kind`, the
+/// execution context (`shell` / `stdin` / `env` / `workdir` / `timeoutSec`),
+/// the full shell stream assertions, `capture_stdout` / `capture_exit_code`
+/// (sequential capture propagation), and `always` / `repeat` (skip-on-fail
+/// + in-step repeat). HTTP-only capture/assert fields are carried so
+/// `validateStepKind` can reject a shell step that sets them (Go's exact
+/// authoring-error gate), but the HTTP body itself is deferred to P4.
 pub struct Step {
   name : String?
+  kind : String
   cmd : String?
   http : HttpRequest?
+  // execution context (Go `Step.Shell` / `Stdin` / `Env` / `Workdir` /
+  // `TimeoutSec`).
+  shell : String
+  stdin : String?
+  env : Map[String, String]
+  workdir : String?
+  timeout_sec : Int
+  // shell stream assertions (Go `Step.ExpectExitCode` / `ExpectStdout*` /
+  // `ExpectStderr*`). Same shape as the cmd-body assertions.
+  expect_exit_code : Int
+  expect_stdout : String?
+  expect_stderr : String?
+  expect_stdout_contains : Array[String]
+  expect_stderr_contains : Array[String]
+  expect_stdout_matches : Array[String]
+  expect_stderr_matches : Array[String]
+  expect_stdout_json_path : Map[String, Json]
+  expect_stderr_json_path : Map[String, Json]
+  inline_stdout : String?
+  // sequential capture (Go `Step.CaptureStdout` / `CaptureExitCode`): on a
+  // passing shell step, propagate the captured value into the downstream env.
+  capture_stdout : String?
+  capture_exit_code : String?
+  // sequential control (Go `Step.Always` / `Repeat`).
+  always : Bool
+  repeat : Int
+  // HTTP-only fields (used only by `validateStepKind` to reject a shell step
+  // that sets them; the HTTP body is a P4 step kind).
   expect_status : Int?
   expect_status_between : Array[Int]
   expect_body_equals : String?
   expect_body_contains : String?
   expect_body_json_path_count : Int
-  inline_stdout : String?
+  expect_header_equals_count : Int
+  capture_body : String?
+  capture_status : String?
+  capture_body_json_path_count : Int
   expect_ai : AiAssertion?
   cassette : String?
   eventually : Eventually?
+}
+
+///|
+/// One background process on a Test (Go `config.Background`). Started before
+/// the body, torn down after (always). `port_env` allocates a free TCP port
+/// injected into the test env; readiness is polled via `ready_stdout_matches`
+/// (grep the captured stdout) or `ready_probe` (a bash command), every 200ms
+/// up to `ready_timeout_sec`. Cleanup is SIGTERM -> grace -> SIGKILL.
+pub struct Background {
+  name : String?
+  cmd : String
+  shell : String
+  env : Map[String, String]
+  workdir : String?
+  ready_probe : String?
+  ready_stdout_matches : String?
+  ready_timeout_sec : Int
+  grace_timeout_sec : Int
+  port_env : String?
+}
+
+///|
+/// A before/after hook (Go `config.Hook`). `scope` is "all" (once per Run) or
+/// "each" (per test). `capture_stdout` propagates the hook's stdout into the
+/// hook state (run-level for "all", per-test for "each"). `always_run` lets an
+/// after-hook fire even when the body / suite failed.
+pub struct Hook {
+  cmd : String
+  scope : String
+  shell : String
+  env : Map[String, String]
+  workdir : String?
+  timeout_sec : Int
+  capture_stdout : String?
+  always_run : Bool
+}
+
+///|
+/// Plan-level defaults (Go `config.Defaults`): the fallback `shell` and the
+/// `env` layered under every test / step / hook / background.
+pub struct Defaults {
+  shell : String
+  env : Map[String, String]
 }
 
 ///|
@@ -142,7 +224,14 @@ pub struct Test {
   // test-level
   retries : Int
   flaky_acceptable : Bool
-  background_count : Int
+  // background processes spawned around the body (Go `Test.Background`).
+  backgrounds : Array[Background]
+}
+
+///|
+/// Count of `background` entries (Go `len(t.Background)`).
+pub fn Test::background_count(self : Test) -> Int {
+  self.backgrounds.length()
 }
 
 ///|
@@ -235,5 +324,11 @@ pub(all) struct Plan {
   goals : Map[String, Goal]
   milestones : Map[String, Milestone]
   domains : Array[String]
+  // executor-side plan state (Go `Plan.Defaults` / `Before` / `After`). The
+  // spec commands ignore these; the runner (P3b) reads them to compose env +
+  // run before/after hooks around the tests.
+  defaults : Defaults
+  before : Map[String, Hook]
+  after : Map[String, Hook]
   source_path : String // set by the loader, not from Pkl
 }

@@ -26,6 +26,13 @@ pub fn Defaults::new(
 }
 
 ///|
+/// Build the executor's env-defaults from the decoded plan defaults (Go's
+/// `*config.Defaults`). Shares the `env` map by reference (read-only here).
+pub fn Defaults::from_model(d : @model.Defaults) -> Defaults {
+  Defaults::{ shell: d.shell, env: d.env }
+}
+
+///|
 /// Inherited environment keys, copied from the process env so user commands
 /// can find tools. Mirrors Go's `inheritedEnvKeys` whitelist exactly — every
 /// other host env var stays out unless a test opts in.
@@ -59,19 +66,30 @@ fn merge_env(layers : Array[Map[String, String]]) -> Map[String, String] {
 ///|
 /// Resolve the working directory the way Go `resolveDir(base, components...)`
 /// does: start from `base`, and for each non-empty component either replace
-/// (absolute) or join (relative). P3a passes `base` + the test's `workdir`.
+/// (absolute) or join (relative). The cmd body passes `base` + the test's
+/// `workdir`; a step passes `base` + test workdir + step workdir.
 fn resolve_dir(base : String, workdir : String?) -> String {
+  resolve_dir_n(base, [workdir])
+}
+
+///|
+/// `resolveDir(base, components...)` with an ordered list of optional
+/// components (Go's variadic). Each non-empty component is absolute-replace or
+/// relative-join, applied left to right.
+fn resolve_dir_n(base : String, components : Array[String?]) -> String {
   let mut dir = base
-  match workdir {
-    Some(c) =>
-      if c != "" {
-        if c.has_prefix("/") {
-          dir = c
-        } else {
-          dir = join_dir(dir, c)
+  for comp in components {
+    match comp {
+      Some(c) =>
+        if c != "" {
+          if c.has_prefix("/") {
+            dir = c
+          } else {
+            dir = join_dir(dir, c)
+          }
         }
-      }
-    None => ()
+      None => ()
+    }
   }
   dir
 }
@@ -96,6 +114,7 @@ pub async fn run_cmd(
   defaults : Defaults,
   workdir : String,
   spec_ref : Array[String],
+  extra_env? : Map[String, String] = Map::new(),
 ) -> Result {
   let res = Result::{
     name,
@@ -104,6 +123,7 @@ pub async fn run_cmd(
     exit_code: 0,
     stdout: "",
     stderr: "",
+    steps: [],
     duration_ms: 0,
     attempts: 1,
     passed_attempts: 0,
@@ -121,7 +141,9 @@ pub async fn run_cmd(
   if shell == "" {
     shell = "bash"
   }
-  let env = merge_env([defaults.env, t.env])
+  // Env layering mirrors Go runCmd: defaults.env, then test.env, then the
+  // inbound hook/run state (extraEnv). Later layers win.
+  let env = merge_env([defaults.env, t.env, extra_env])
   let dir = resolve_dir(workdir, t.workdir)
   let start = @async.now()
   // Spawn `<shell> -c <cmd>` and capture exit/stdout/stderr, mirroring Go's
@@ -185,6 +207,29 @@ pub async fn run_cmd(
       res
     }
   }
+}
+
+///|
+/// Run a `ModeCmd` body into an existing `res` (the runOne envelope created by
+/// the runner), mirroring Go `runCmd` which fills `*Result` by reference. Used
+/// when the cmd body runs inside the background envelope so the outcome /
+/// reasons / capture land on the same `res` the background wrapper owns.
+pub async fn run_cmd_into(
+  res : Result,
+  name : String,
+  t : @model.Test,
+  defaults : Defaults,
+  workdir : String,
+  extra_env : Map[String, String],
+) -> Unit {
+  let r = run_cmd(name, t, defaults, workdir, t.spec_ref, extra_env~)
+  res.outcome = r.outcome
+  for rr in r.reasons {
+    res.reasons.push(rr)
+  }
+  res.exit_code = r.exit_code
+  res.stdout = r.stdout
+  res.stderr = r.stderr
 }
 
 ///|

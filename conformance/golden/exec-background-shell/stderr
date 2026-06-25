@@ -1,0 +1,2 @@
+[pkspec] background_shell_lifecycle: passed (verifies parallel.background) (219ms)
+pkspec: 1 passed, 0 flaky, 0 pending, 0 failed, 0 errored, 0 skipped (of 1)

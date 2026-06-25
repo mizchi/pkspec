@@ -1,0 +1,32 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  // Reference: 3 steps run sequentially (cumulative ~600ms).
+  new {
+    name = "sequential"
+    description = "3 sleep steps, one at a time"
+    tags { "unit" }
+    specRef { "runner.steps.sequential"; "kind.shell" }
+    body = new SequentialTest {
+      steps {
+        new { name = "s1"; body = new ShellBody { cmd = "sleep 0.2" } }
+        new { name = "s2"; body = new ShellBody { cmd = "sleep 0.2" } }
+        new { name = "s3"; body = new ShellBody { cmd = "sleep 0.2" } }
+      }
+    }
+  }
+  // Same 3 steps in parallel — should finish in ~200ms.
+  new {
+    name = "parallel"
+    description = "same 3 sleeps fanned out via parallelSteps"
+    tags { "unit" }
+    specRef { "parallel.parallel-steps" }
+    body = new ParallelTest {
+      parallelSteps {
+        new { name = "p1"; body = new ShellBody { cmd = "sleep 0.2" } }
+        new { name = "p2"; body = new ShellBody { cmd = "sleep 0.2" } }
+        new { name = "p3"; body = new ShellBody { cmd = "sleep 0.2" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,3 @@
+[pkspec] step_stdout_contract: passed (verifies runner.shell.stdout-patterns) (4ms)
+[pkspec] top_level_stdout_contract: passed (verifies runner.shell.stdout-patterns, runner.shell.stdout-jsonpath) (4ms)
+pkspec: 2 passed, 0 flaky, 0 pending, 0 failed, 0 errored, 0 skipped (of 2)

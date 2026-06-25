@@ -48,8 +48,36 @@ pub fn Outcome::is_green(self : Outcome) -> Bool {
 }
 
 ///|
-/// The per-test outcome the runner reports. Mirrors the P3a-relevant subset
-/// of Go `executor.Result` (steps detail deferred to P3b).
+/// The result of one step within a steps / parallelSteps body. Mirrors Go
+/// `executor.StepResult`. `name` is the step's display name (Go `stepName`);
+/// `reasons` carry the failure detail surfaced under the step line.
+pub struct StepResult {
+  name : String
+  mut outcome : Outcome
+  reasons : Array[String]
+  mut exit_code : Int
+  mut stdout : String
+  mut stderr : String
+  mut duration_ms : Int64
+}
+
+///|
+/// Construct a bare StepResult with a name and (so far) Passed outcome.
+pub fn StepResult::new(name : String) -> StepResult {
+  StepResult::{
+    name,
+    outcome: Passed,
+    reasons: [],
+    exit_code: 0,
+    stdout: "",
+    stderr: "",
+    duration_ms: 0,
+  }
+}
+
+///|
+/// The per-test outcome the runner reports. Mirrors Go `executor.Result`.
+/// `steps` is populated for steps / parallelSteps bodies (empty for ModeCmd).
 pub struct Result {
   name : String
   mut outcome : Outcome
@@ -57,6 +85,7 @@ pub struct Result {
   mut exit_code : Int
   mut stdout : String
   mut stderr : String
+  steps : Array[StepResult]
   mut duration_ms : Int64
   attempts : Int
   mut passed_attempts : Int
@@ -80,6 +109,7 @@ pub fn Result::synthetic(
     exit_code: 0,
     stdout: "",
     stderr: "",
+    steps: [],
     duration_ms: 0,
     attempts: 1,
     passed_attempts: 0,
