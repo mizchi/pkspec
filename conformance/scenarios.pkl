@@ -132,4 +132,110 @@ scenarios: Listing<Scenario> = new {
       exactStdout = true
     }
   }
+  // decisions on spec-graph: two scenarios (AUTH-001, AUTH-005) carry
+  // append-only Decision entries dated 2026-03-01. The flattened log is
+  // newest-first (date DESC, spec-id ASC), entirely deterministic (no abs
+  // paths), so it is gated at byte parity.
+  new {
+    id = "decisions-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "decisions"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // decisions on spec-id: no scenario declares a Decision, so the log is the
+  // deterministic "_No decisions recorded._" empty state.
+  new {
+    id = "decisions-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "decisions"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // implementations on spec-id: each spec id with its active test backlink.
+  // The test SourcePath relativizes to `Test.pkl` via `--root .`, so the
+  // index is deterministic (no abs paths) and gated at byte parity.
+  new {
+    id = "implementations-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "implementations"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // implementations on spec-graph: mixes implemented (test backlink) and
+  // "_No active implementation._" rows plus a "⊘ deprecated" badge (AUTH-005).
+  new {
+    id = "implementations-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "implementations"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // next on spec-graph: three unimplemented non-draft, non-deprecated specs
+  // ranked by Goal priority then severity; exercises severity / status /
+  // contributes / open-questions bullets. Fully deterministic.
+  new {
+    id = "next-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "next"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // next on spec-id: one unimplemented spec (SIGNUP-003), no Goals — the
+  // minimal numbered-entry path.
+  new {
+    id = "next-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "next"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // spec on spec-id: the full SPEC.md — grouped by source dir (relativized
+  // via `--root .` to `./`) -> module -> test, with checkboxes, verifies/tags,
+  // blockquoted descriptions, cmd-body + inline-stdout expectations, and the
+  // trailing "## Spec implementation index". Deterministic (paths relativize
+  // to `Spec.pkl`/`Test.pkl`), gated at byte parity.
+  new {
+    id = "spec-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "spec"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // spec on spec-graph: the rich SPEC path — scenario badges (⊘ deprecated /
+  // severity / [reviewStatus]), the outstanding-questions banner + tail,
+  // scenario-meta bullets (sub-spec of / contributes / depends on / replaced
+  // by / deprecated / decisions count), prelude-injected step labels, and
+  // the implementation index. Fully deterministic.
+  new {
+    id = "spec-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "spec"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
 }

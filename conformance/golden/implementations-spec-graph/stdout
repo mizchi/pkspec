@@ -1,0 +1,16 @@
+# Spec implementation index
+
+- **AUTH-001** — valid credentials
+  - test: `Test.pkl` — login_happy_path
+- **AUTH-001a** — valid credentials happy path
+  - _No active implementation._
+- **AUTH-001b** — valid credentials sets secure cookie
+  - _No active implementation._
+- **AUTH-002** — rejects wrong password
+  - test: `Test.pkl` — login_wrong_password
+- **AUTH-003** — rate-limits brute-force
+  - _No active implementation._
+- **AUTH-004** — passwordless_magic_link
+  - _No active implementation._
+- **AUTH-005** — bearer_token_auth ⊘ deprecated
+  - _No active implementation._

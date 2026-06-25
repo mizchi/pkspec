@@ -1,0 +1,18 @@
+# Decision log
+
+## 2026-03-01 — AUTH-001 — valid credentials
+
+lock the spec to require 200 + Set-Cookie
+
+_by: mizchi_
+
+> earlier draft accepted bearer-token responses; security review chose cookies for SSR compatibility
+
+## 2026-03-01 — AUTH-005 — bearer_token_auth
+
+retired in favour of cookie-based AUTH-001
+
+_by: mizchi_
+
+> JWT validation logic doubled the auth-middleware footprint; cookie path covers the same SSR + CSRF surface
+

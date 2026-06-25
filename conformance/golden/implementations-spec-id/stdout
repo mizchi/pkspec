@@ -1,0 +1,8 @@
+# Spec implementation index
+
+- **SIGNUP-001** — creates user
+  - test: `Test.pkl` — signup_happy_path
+- **SIGNUP-002** — rejects duplicate email
+  - test: `Test.pkl` — signup_duplicate
+- **SIGNUP-003** — rejects invalid email
+  - _No active implementation._

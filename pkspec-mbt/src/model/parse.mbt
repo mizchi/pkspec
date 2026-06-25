@@ -52,8 +52,18 @@ fn parse_tests(j : Json?) -> Map[String, Test] {
               spec_ref: arr_str(t.get("specRef")),
               pending: bool_val(t.get("pending")),
               cmd: opt_str(t.get("cmd")),
-              steps_count: arr_len(t.get("steps")),
-              parallel_steps_count: arr_len(t.get("parallelSteps")),
+              steps: parse_steps(t.get("steps")),
+              parallel_steps: parse_steps(t.get("parallelSteps")),
+              expect_exit_code: int_val(t.get("expectExitCode")),
+              expect_stdout: opt_str(t.get("expectStdout")),
+              expect_stderr: opt_str(t.get("expectStderr")),
+              inline_stdout: opt_str(t.get("inlineStdout")),
+              inline_stderr: opt_str(t.get("inlineStderr")),
+              expect_stdout_snapshot_name: snapshot_name(t.get("expectStdoutSnapshot")),
+              expect_stderr_snapshot_name: snapshot_name(t.get("expectStderrSnapshot")),
+              retries: int_val(t.get("retries")),
+              flaky_acceptable: bool_val(t.get("flakyAcceptable")),
+              background_count: arr_len(t.get("background")),
             }
           _ => ()
         }
@@ -61,6 +71,80 @@ fn parse_tests(j : Json?) -> Map[String, Test] {
     _ => ()
   }
   out
+}
+
+///|
+/// Parse a `steps` / `parallelSteps` JSON array into typed Steps.
+fn parse_steps(j : Json?) -> Array[Step] {
+  let out : Array[Step] = []
+  match j {
+    Some(Array(a)) =>
+      for e in a {
+        match e {
+          Object(s) =>
+            out.push(Step::{
+              name: opt_str(s.get("name")),
+              cmd: opt_str(s.get("cmd")),
+              http: parse_http(s.get("http")),
+              expect_status: opt_int(s.get("expectStatus")),
+              expect_status_between: arr_int(s.get("expectStatusBetween")),
+              expect_body_equals: opt_str(s.get("expectBodyEquals")),
+              expect_body_contains: opt_str(s.get("expectBodyContains")),
+              expect_body_json_path_count: map_len(s.get("expectBodyJsonPath")),
+              inline_stdout: opt_str(s.get("inlineStdout")),
+              expect_ai: parse_ai(s.get("expectAi")),
+              cassette: opt_str(s.get("cassette")),
+              eventually: parse_eventually(s.get("eventually")),
+            })
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+  out
+}
+
+///|
+fn parse_http(j : Json?) -> HttpRequest? {
+  match j {
+    Some(Object(h)) =>
+      Some(HttpRequest::{
+        http_method: str_val(h.get("method")),
+        url: str_val(h.get("url")),
+      })
+    _ => None
+  }
+}
+
+///|
+fn parse_eventually(j : Json?) -> Eventually? {
+  match j {
+    Some(Object(e)) =>
+      Some(Eventually::{
+        interval_ms: int_val(e.get("intervalMs")),
+        timeout_sec: int_val(e.get("timeoutSec")),
+      })
+    _ => None
+  }
+}
+
+///|
+fn parse_ai(j : Json?) -> AiAssertion? {
+  match j {
+    Some(Object(a)) =>
+      Some(AiAssertion::{ snapshot_name: str_val(a.get("snapshotName")) })
+    _ => None
+  }
+}
+
+///|
+/// Extract the `name` of a RenderedSnapshot object, or None when the key is
+/// absent / null. Mirrors Go's `*ReferenceSnapshot` non-nil check.
+fn snapshot_name(j : Json?) -> String? {
+  match j {
+    Some(Object(s)) => Some(str_val(s.get("name")))
+    _ => None
+  }
 }
 
 ///|
@@ -222,6 +306,41 @@ fn bool_val(j : Json?) -> Bool {
 fn int_val(j : Json?) -> Int {
   match j {
     Some(Number(x, ..)) => x.to_int()
+    _ => 0
+  }
+}
+
+///|
+/// Optional int (Go `*int`): present number => Some, missing / null => None.
+fn opt_int(j : Json?) -> Int? {
+  match j {
+    Some(Number(x, ..)) => Some(x.to_int())
+    _ => None
+  }
+}
+
+///|
+/// Decode a JSON array of numbers into an `Array[Int]` (Go `[]int`).
+fn arr_int(j : Json?) -> Array[Int] {
+  let out : Array[Int] = []
+  match j {
+    Some(Array(a)) =>
+      for e in a {
+        match e {
+          Number(x, ..) => out.push(x.to_int())
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+  out
+}
+
+///|
+/// Number of keys in a JSON object value (Go `len(map)`); 0 when missing.
+fn map_len(j : Json?) -> Int {
+  match j {
+    Some(Object(m)) => m.size()
     _ => 0
   }
 }
