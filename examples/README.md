@@ -102,6 +102,8 @@ native runner to be installed for that fixture.
   `scope = "all" | "each"`
 - [`background-server`](background-server/) — `background` block
   feeding an http step
+- [`background-shell`](background-shell/) — shell-only `background`
+  (`portEnv` + `readyStdoutMatches` + grace-kill) feeding a shell step
 - [`spec-pending`](spec-pending/) — `tags { "spec" }` +
   body-empty auto-pending
 - [`parallel-steps`](parallel-steps/) — fan-out 3 steps with

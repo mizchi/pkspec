@@ -1,0 +1,7 @@
+[pkspec] capture_and_chain: failed (verifies runner.steps.sequential, runner.shell.capture-stdout, diff.inline-snapshot) (8ms)
+      step "use_id": failed
+        inlineStdout mismatch:
+  expected: ""
+      actual:   "processed evt-abc123\n"
+pkspec: 0 passed, 0 flaky, 0 pending, 1 failed, 0 errored, 0 skipped (of 1)
+pkspec: 1 test(s) failed, 0 errored, 0 skipped

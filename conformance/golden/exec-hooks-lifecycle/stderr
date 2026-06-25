@@ -1,0 +1,10 @@
+[pkspec] alpha: failed (verifies runner.hooks.lifecycle) (4ms)
+      inlineStdout mismatch:
+  expected: ""
+      actual:   "SEED=seed-1782418212 PER_TEST=seed-1782418212-7477\n"
+[pkspec] beta: failed (verifies runner.hooks.lifecycle) (4ms)
+      inlineStdout mismatch:
+  expected: ""
+      actual:   "SEED=seed-1782418212 PER_TEST=seed-1782418212-7038\n"
+pkspec: 0 passed, 0 flaky, 0 pending, 2 failed, 0 errored, 0 skipped (of 2)
+pkspec: 2 test(s) failed, 0 errored, 0 skipped

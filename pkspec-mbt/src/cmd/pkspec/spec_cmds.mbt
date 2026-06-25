@@ -1406,8 +1406,8 @@ fn expectations(t : @model.Test) -> Array[String] {
   if t.retries > 0 {
     out.push("retries: \{t.retries} (flakyAcceptable=\{go_bool(t.flaky_acceptable)})")
   }
-  if t.background_count > 0 {
-    out.push("background: \{t.background_count} process(es)")
+  if t.background_count() > 0 {
+    out.push("background: \{t.background_count()} process(es)")
   }
   out
 }

@@ -575,6 +575,114 @@ scenarios: Listing<Scenario> = new {
       normalizeDurations = true
     }
   }
+  // ── P3b: exec steps / parallelSteps / background / hooks ──────────────
+  //
+  // Same oracle CLASS 2 gating as the P3a exec scenarios. The DETERMINISTIC
+  // shell-only fixtures (steps-contract / steps-capture / parallel-steps) gate
+  // the normalized stderr at byte parity (exactStderr + normalizeDurations).
+  // The VOLATILE fixtures (hooks-lifecycle uses `date +%s` / `$RANDOM`;
+  // background-shell allocates a non-deterministic TCP port) gate via exit +
+  // mustContainStderr on the stable outcome / summary markers ONLY — their
+  // per-line ports / random tokens must NOT be byte-compared.
+
+  // exec-steps-contract: examples/shell-output-contract verbatim — a top-level
+  // CmdTest + a SequentialTest step, both passing (contains / regex(`(?m)`) /
+  // JSONPath asserts). Tests are name-sorted, so `step_stdout_contract` prints
+  // before `top_level_stdout_contract`. Passing steps stay silent. exit 0.
+  new {
+    id = "exec-steps-contract"
+    fixture = "conformance/fixtures/exec-steps-contract"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-steps-contract" }
+    argv { "exec"; "-f"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-steps-capture: examples/shell-steps-capture verbatim — two sequential
+  // steps where step 1 `captureStdout = EVENT_ID` and step 2 interpolates
+  // `$EVENT_ID` (deterministic `echo`, so the captured value is stable). The
+  // step-2 empty inlineStdout snapshot mismatches its actual stdout, so the
+  // test FAILS deterministically: this gates the capture-propagation +
+  // skip/step-line + first-failure-reason wording. exit 1.
+  new {
+    id = "exec-steps-capture"
+    fixture = "conformance/fixtures/exec-steps-capture"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-steps-capture" }
+    argv { "exec"; "-f"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-parallel-steps: examples/parallel-steps verbatim — a SequentialTest and
+  // a ParallelTest, each 3 sleeps, both passing. Passing steps print no per-step
+  // line, so the concurrent finish ORDER never reaches stderr; the only stderr
+  // is the two name-sorted (`parallel` before `sequential`) test lines + the
+  // summary, which is fully deterministic. exit 0.
+  new {
+    id = "exec-parallel-steps"
+    fixture = "conformance/fixtures/exec-parallel-steps"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-parallel-steps" }
+    argv { "exec"; "-f"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-hooks-lifecycle: examples/hooks-lifecycle verbatim — before("all")
+  // captures $SEED, before("each") captures $PER_TEST, after("all") alwaysRun.
+  // The hook cmds embed `date +%s` / `$RANDOM`, so the captured values are
+  // VOLATILE → no exactStderr. Gate exit 1 (the empty inline snapshots
+  // mismatch) + mustContainStderr on the stable structure: both tests fail with
+  // the inlineStdout-mismatch reason carrying the propagated `SEED=seed-` value,
+  // and the red summary. This proves the hook capture + before/after wiring.
+  new {
+    id = "exec-hooks-lifecycle"
+    fixture = "conformance/fixtures/exec-hooks-lifecycle"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-hooks-lifecycle" }
+    argv { "exec"; "-f"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      mustContainStderr {
+        "[pkspec] alpha: failed (verifies runner.hooks.lifecycle)"
+        "[pkspec] beta: failed (verifies runner.hooks.lifecycle)"
+        "inlineStdout mismatch:"
+        "actual: \"SEED=seed-"
+        "PER_TEST=seed-"
+        "pkspec: 0 passed, 0 flaky, 0 pending, 2 failed, 0 errored, 0 skipped (of 2)"
+        "pkspec: 2 test(s) failed, 0 errored, 0 skipped"
+      }
+    }
+  }
+  // exec-background-shell: examples/background-shell verbatim — a shell-only
+  // background with portEnv (a free TCP port, NON-DETERMINISTIC) +
+  // readyStdoutMatches, then a step asserting `$BG_PORT` is numeric. The test
+  // PASSES (the background spawns, becomes ready, the body sees the port, then
+  // SIGTERM/grace/SIGKILL tears it down). Ports / pids are volatile → no
+  // exactStderr; gate exit 0 + mustContainStderr on the passing test line +
+  // green summary. This proves the start → ready → body → kill lifecycle.
+  new {
+    id = "exec-background-shell"
+    fixture = "conformance/fixtures/exec-background-shell"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-background-shell" }
+    argv { "exec"; "-f"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      mustContainStderr {
+        "[pkspec] background_shell_lifecycle: passed (verifies parallel.background)"
+        "pkspec: 1 passed, 0 flaky, 0 pending, 0 failed, 0 errored, 0 skipped (of 1)"
+      }
+    }
+  }
   // spec --output PATH: write the rendered SPEC.md to a file (atomic tmp+rename)
   // instead of stdout, print the `pkspec: wrote <path> (N entries)` notice on
   // STDERR, exit 0. `fsDelta = true` makes the harness assert the created file

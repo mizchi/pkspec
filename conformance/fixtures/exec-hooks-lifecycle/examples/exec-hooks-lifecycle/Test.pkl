@@ -1,0 +1,43 @@
+amends "../../pkl/Test.pkl"
+
+// scope = "all": fires once for the whole Run.
+// scope = "each": fires per test in name order; afterEach is LIFO.
+before {
+  ["01_init"] = new Hook {
+    cmd = "echo seed-$(date +%s)"
+    scope = "all"
+    captureStdout = "SEED"
+  }
+  ["10_per_test"] = new Hook {
+    cmd = "echo $SEED-$RANDOM"
+    scope = "each"
+    captureStdout = "PER_TEST"
+  }
+}
+
+after {
+  ["01_finalise"] = new Hook {
+    cmd = "echo finalised at $(date +%s)"
+    scope = "all"
+    alwaysRun = true
+  }
+}
+
+tests {
+  new {
+    name = "alpha"
+    specRef { "runner.hooks.lifecycle" }
+    body = new CmdTest {
+      cmd = "echo SEED=$SEED PER_TEST=$PER_TEST"
+      inlineStdout = new InlineSnapshot {}
+    }
+  }
+  new {
+    name = "beta"
+    specRef { "runner.hooks.lifecycle" }
+    body = new CmdTest {
+      cmd = "echo SEED=$SEED PER_TEST=$PER_TEST"
+      inlineStdout = new InlineSnapshot {}
+    }
+  }
+}

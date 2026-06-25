@@ -42,3 +42,28 @@ for ex in exec-shell-smoke exec-stdout-contract exec-fail; do
   cp "$repo/pkl/Test.pkl" "$fx/pkl/"
   echo "re-vendored schema for $fx"
 done
+
+# P3b exec fixtures: steps / parallelSteps / background / hooks bodies. Unlike
+# the P3a exec fixtures, these are VERBATIM copies of real examples/<src>/ (the
+# fixture id differs from the source example name, so the mapping is explicit).
+# The example .pkl is copied byte-for-byte — do not hand-edit it.
+#   exec-steps-contract  <- shell-output-contract  (cmd + SequentialTest steps)
+#   exec-steps-capture   <- shell-steps-capture     (steps + captureStdout chain)
+#   exec-parallel-steps  <- parallel-steps          (ParallelTest fan-out)
+#   exec-hooks-lifecycle <- hooks-lifecycle         (before/after hooks; VOLATILE)
+#   exec-background-shell <- background-shell        (portEnv + readyStdoutMatches; VOLATILE)
+p3b_fixtures="exec-steps-contract:shell-output-contract \
+exec-steps-capture:shell-steps-capture \
+exec-parallel-steps:parallel-steps \
+exec-hooks-lifecycle:hooks-lifecycle \
+exec-background-shell:background-shell"
+for pair in $p3b_fixtures; do
+  id="${pair%%:*}"
+  src="${pair##*:}"
+  fx="$here/$id"
+  rm -rf "$fx"
+  mkdir -p "$fx/pkl" "$fx/examples/$id"
+  cp "$repo/pkl/Test.pkl" "$fx/pkl/"
+  cp "$repo/examples/$src/Test.pkl" "$fx/examples/$id/Test.pkl"
+  echo "regenerated $fx (from examples/$src)"
+done

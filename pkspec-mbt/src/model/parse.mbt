@@ -34,8 +34,79 @@ pub fn plan_from_json(j : Json, source_path : String) -> Plan raise {
     goals: parse_goals(o.get("goals")),
     milestones: parse_milestones(o.get("milestones")),
     domains: arr_str(o.get("domains")),
+    defaults: parse_defaults(o.get("defaults")),
+    before: parse_hooks(o.get("before")),
+    after: parse_hooks(o.get("after")),
     source_path,
   }
+}
+
+///|
+/// Parse the plan-level `defaults` object (Go `config.Defaults`). Missing =>
+/// empty shell + empty env (the executor then falls back to "bash").
+fn parse_defaults(j : Json?) -> Defaults {
+  match j {
+    Some(Object(d)) =>
+      Defaults::{ shell: str_val(d.get("shell")), env: str_map(d.get("env")) }
+    _ => Defaults::{ shell: "", env: Map::new() }
+  }
+}
+
+///|
+/// Parse a `before` / `after` hook map (Go `map[string]*config.Hook`). Keyed
+/// by the Pkl map id (the hook's sort key).
+fn parse_hooks(j : Json?) -> Map[String, Hook] {
+  let out : Map[String, Hook] = Map::new()
+  match j {
+    Some(Object(m)) =>
+      for k, v in m {
+        match v {
+          Object(h) =>
+            out[k] = Hook::{
+              cmd: str_val(h.get("cmd")),
+              scope: str_val(h.get("scope")),
+              shell: str_val(h.get("shell")),
+              env: str_map(h.get("env")),
+              workdir: opt_str(h.get("workdir")),
+              timeout_sec: int_val(h.get("timeoutSec")),
+              capture_stdout: opt_str(h.get("captureStdout")),
+              always_run: bool_val(h.get("alwaysRun")),
+            }
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+  out
+}
+
+///|
+/// Parse a `background` array (Go `[]*config.Background`).
+fn parse_backgrounds(j : Json?) -> Array[Background] {
+  let out : Array[Background] = []
+  match j {
+    Some(Array(a)) =>
+      for e in a {
+        match e {
+          Object(b) =>
+            out.push(Background::{
+              name: opt_str(b.get("name")),
+              cmd: str_val(b.get("cmd")),
+              shell: str_val(b.get("shell")),
+              env: str_map(b.get("env")),
+              workdir: opt_str(b.get("workdir")),
+              ready_probe: opt_str(b.get("readyProbe")),
+              ready_stdout_matches: opt_str(b.get("readyStdoutMatches")),
+              ready_timeout_sec: int_val(b.get("readyTimeoutSec")),
+              grace_timeout_sec: int_val(b.get("graceTimeoutSec")),
+              port_env: opt_str(b.get("portEnv")),
+            })
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+  out
 }
 
 ///|
@@ -74,7 +145,7 @@ fn parse_tests(j : Json?) -> Map[String, Test] {
               timeout_sec: int_val(t.get("timeoutSec")),
               retries: int_val(t.get("retries")),
               flaky_acceptable: bool_val(t.get("flakyAcceptable")),
-              background_count: arr_len(t.get("background")),
+              backgrounds: parse_backgrounds(t.get("background")),
             }
           _ => ()
         }
@@ -95,14 +166,37 @@ fn parse_steps(j : Json?) -> Array[Step] {
           Object(s) =>
             out.push(Step::{
               name: opt_str(s.get("name")),
+              kind: str_val(s.get("kind")),
               cmd: opt_str(s.get("cmd")),
               http: parse_http(s.get("http")),
+              shell: str_val(s.get("shell")),
+              stdin: opt_str(s.get("stdin")),
+              env: str_map(s.get("env")),
+              workdir: opt_str(s.get("workdir")),
+              timeout_sec: int_val(s.get("timeoutSec")),
+              expect_exit_code: int_val(s.get("expectExitCode")),
+              expect_stdout: opt_str(s.get("expectStdout")),
+              expect_stderr: opt_str(s.get("expectStderr")),
+              expect_stdout_contains: arr_str(s.get("expectStdoutContains")),
+              expect_stderr_contains: arr_str(s.get("expectStderrContains")),
+              expect_stdout_matches: arr_str(s.get("expectStdoutMatches")),
+              expect_stderr_matches: arr_str(s.get("expectStderrMatches")),
+              expect_stdout_json_path: json_map(s.get("expectStdoutJsonPath")),
+              expect_stderr_json_path: json_map(s.get("expectStderrJsonPath")),
+              inline_stdout: opt_str(s.get("inlineStdout")),
+              capture_stdout: opt_str(s.get("captureStdout")),
+              capture_exit_code: opt_str(s.get("captureExitCode")),
+              always: bool_val(s.get("always")),
+              repeat: int_val(s.get("repeat")),
               expect_status: opt_int(s.get("expectStatus")),
               expect_status_between: arr_int(s.get("expectStatusBetween")),
               expect_body_equals: opt_str(s.get("expectBodyEquals")),
               expect_body_contains: opt_str(s.get("expectBodyContains")),
               expect_body_json_path_count: map_len(s.get("expectBodyJsonPath")),
-              inline_stdout: opt_str(s.get("inlineStdout")),
+              expect_header_equals_count: map_len(s.get("expectHeaderEquals")),
+              capture_body: opt_str(s.get("captureBody")),
+              capture_status: opt_str(s.get("captureStatus")),
+              capture_body_json_path_count: map_len(s.get("captureBodyJsonPath")),
               expect_ai: parse_ai(s.get("expectAi")),
               cassette: opt_str(s.get("cassette")),
               eventually: parse_eventually(s.get("eventually")),
@@ -353,15 +447,6 @@ fn arr_int(j : Json?) -> Array[Int] {
 fn map_len(j : Json?) -> Int {
   match j {
     Some(Object(m)) => m.size()
-    _ => 0
-  }
-}
-
-///|
-/// Length of a JSON array value (missing key / null / non-array => 0).
-fn arr_len(j : Json?) -> Int {
-  match j {
-    Some(Array(a)) => a.length()
     _ => 0
   }
 }

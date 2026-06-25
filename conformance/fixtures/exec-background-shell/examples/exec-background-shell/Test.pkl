@@ -1,0 +1,43 @@
+amends "../../pkl/Test.pkl"
+
+// A deterministic, shell-only `background` fixture (no HTTP step — the HTTP
+// step kind is a later phase). The background prints a ready marker on stdout;
+// the runner waits for `readyStdoutMatches` before running the body. `portEnv`
+// allocates a free TCP port and injects it into the env; the body asserts the
+// port var is present and numeric (the VALUE is volatile, but "set + numeric"
+// is a deterministic, byte-stable assertion). The background is torn down
+// (SIGTERM -> grace -> SIGKILL) after the body.
+tests {
+  new {
+    name = "background_shell_lifecycle"
+    description = "shell-only background: portEnv + readyStdoutMatches + grace-kill"
+    tags { "unit" }
+    specRef { "parallel.background" }
+    background {
+      new {
+        name = "ready_marker"
+        // Print the ready marker, then stay alive so the runner has to kill it.
+        cmd = "echo SERVER_READY; sleep 30"
+        readyStdoutMatches = "SERVER_READY"
+        readyTimeoutSec = 5
+        graceTimeoutSec = 1
+        portEnv = "BG_PORT"
+      }
+    }
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "port_is_set"
+          body = new ShellBody {
+            // $BG_PORT was injected by portEnv; assert it is a non-empty
+            // decimal (the value itself is volatile, so we match the SHAPE).
+            cmd = "echo \"port-shape=$(echo -n $BG_PORT | grep -qE '^[0-9]+$' && echo ok)\""
+            shellExpectations {
+              expectStdoutContains { "port-shape=ok" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

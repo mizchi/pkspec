@@ -291,6 +291,9 @@ fn filter_plans_for_spec(
       goals: p.goals,
       milestones: p.milestones,
       domains: p.domains,
+      defaults: p.defaults,
+      before: p.before,
+      after: p.after,
       source_path: p.source_path,
     })
   }
