@@ -14,6 +14,8 @@ fn usage() -> String {
     #|  coverage [opts] <path>...   print declared-vs-implemented coverage
     #|  orphans  [opts] <path>...   list active tests with no specRef
     #|  decisions [opts] <path>...  print newest-first Markdown decision log
+    #|  implementations [opts] <path>...  list spec ids with active implementers
+    #|  next [opts] <path>...       rank unimplemented specs by Goal priority
   s
 }
 
@@ -30,6 +32,7 @@ priv struct SpecArgs {
   goal : String
   severity : String
   discover : Bool
+  root : String
 }
 
 ///|
@@ -41,12 +44,19 @@ fn parse_spec_args(args : ArrayView[String]) -> SpecArgs raise {
   let mut goal = ""
   let mut severity = ""
   let mut discover = false
+  let mut root = ""
   let mut i = 0
   while i < args.length() {
     let a = args[i]
     match a {
-      // Consumed-and-discarded for coverage/orphans (see SpecArgs doc).
-      "--root" | "--tag" => i = i + 1
+      "--root" => {
+        i = i + 1
+        if i < args.length() {
+          root = args[i]
+        }
+      }
+      // `--tag` is consumed-and-discarded until `spec` rendering uses it.
+      "--tag" => i = i + 1
       "--goal" => {
         i = i + 1
         if i < args.length() {
@@ -69,7 +79,22 @@ fn parse_spec_args(args : ArrayView[String]) -> SpecArgs raise {
     }
     i = i + 1
   }
-  SpecArgs::{ paths, goal, severity, discover }
+  SpecArgs::{ paths, goal, severity, discover, root }
+}
+
+///|
+/// Resolve the `--root` directory the way Go `cmdSpec` does: default to the
+/// current working dir when unset, otherwise absolutize the given path. Used
+/// by `implementations` / `spec` to relativize source paths in headings.
+fn resolve_root(sa : SpecArgs) -> String {
+  if sa.root == "" {
+    match @env.current_dir() {
+      Some(d) => d
+      None => "."
+    }
+  } else {
+    abs_path(sa.root)
+  }
 }
 
 ///|
@@ -345,6 +370,11 @@ async fn main {
     "coverage" => run_spec_cmd(rest, plans => render_coverage(plans))
     "orphans" => run_spec_cmd(rest, plans => render_orphans(plans))
     "decisions" => run_spec_cmd(rest, plans => render_decisions(plans))
+    "implementations" =>
+      run_spec_cmd_ctx(rest, (plans, root) => render_implementations(
+        plans, root,
+      ))
+    "next" => run_spec_cmd(rest, plans => render_next(plans))
     other => {
       println("pkspec: unknown command: \{other}")
       println(usage())
@@ -380,5 +410,32 @@ async fn run_spec_cmd(
   // via io.WriteString. Writing straight to the stdout fd preserves byte
   // parity (println would append a stray '\n').
   @stdio.stdout.write(render(plans))
+  0
+}
+
+///|
+/// Like `run_spec_cmd` but passes the resolved `--root` directory to the
+/// renderer (for commands that relativize source paths: implementations /
+/// spec).
+async fn run_spec_cmd_ctx(
+  rest : ArrayView[String],
+  render : (Array[@model.Plan], String) -> String,
+) -> Int {
+  let sa = match (try? parse_spec_args(rest)) {
+    Ok(v) => v
+    Err(e) => {
+      println("pkspec: \{e}")
+      return 1
+    }
+  }
+  let root = resolve_root(sa)
+  let plans = match (try? load_plans(sa)) {
+    Ok(v) => v
+    Err(e) => {
+      println("pkspec: \{e}")
+      return 1
+    }
+  }
+  @stdio.stdout.write(render(plans, root))
   0
 }

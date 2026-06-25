@@ -158,4 +158,54 @@ scenarios: Listing<Scenario> = new {
       exactStdout = true
     }
   }
+  // implementations on spec-id: each spec id with its active test backlink.
+  // The test SourcePath relativizes to `Test.pkl` via `--root .`, so the
+  // index is deterministic (no abs paths) and gated at byte parity.
+  new {
+    id = "implementations-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "implementations"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // implementations on spec-graph: mixes implemented (test backlink) and
+  // "_No active implementation._" rows plus a "⊘ deprecated" badge (AUTH-005).
+  new {
+    id = "implementations-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "implementations"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // next on spec-graph: three unimplemented non-draft, non-deprecated specs
+  // ranked by Goal priority then severity; exercises severity / status /
+  // contributes / open-questions bullets. Fully deterministic.
+  new {
+    id = "next-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "next"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // next on spec-id: one unimplemented spec (SIGNUP-003), no Goals — the
+  // minimal numbered-entry path.
+  new {
+    id = "next-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "next"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
 }

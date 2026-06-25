@@ -265,6 +265,397 @@ pub fn render_coverage(plans : Array[@model.Plan]) -> String {
   b.to_string()
 }
 
+// ---- implementations ----
+
+///|
+priv struct ImplRef {
+  kind : String // "test" | "code" | "doc" | other
+  name : String
+  source_path : String
+  target : String
+}
+
+///|
+priv struct SpecImpl {
+  spec_id : String
+  mut scenario_name : String
+  mut deprecated : Bool
+  mut has_meta : Bool
+  refs : Array[ImplRef]
+}
+
+///|
+/// Kind rank for ordering implementation refs (Go `implementationKindRank`):
+/// test < code < doc < unknown.
+fn impl_kind_rank(kind : String) -> Int {
+  match kind {
+    "test" => 0
+    "code" => 1
+    "doc" => 2
+    _ => 3
+  }
+}
+
+///|
+/// Relativize `path` against `root` and convert to slash form, mirroring Go
+/// `displayPath` (filepath.Rel then filepath.ToSlash). Both inputs are
+/// absolute or relative; we only ever pass an absolute `path` and `root`.
+fn display_path(path : String, root : String) -> String {
+  if path == "" {
+    return ""
+  }
+  if root == "" {
+    return path
+  }
+  rel_path(root, path)
+}
+
+///|
+/// Go `filepath.Rel(base, target)` for the absolute paths this CLI handles.
+/// Returns `target` unchanged when a relative path can't be computed (e.g.
+/// different roots) — Go returns an error there and the caller keeps the
+/// original, which `displayPath` does by ignoring the error.
+fn rel_path(base : String, target : String) -> String {
+  // Both are cleaned absolute paths beginning with '/'.
+  if not(base.has_prefix("/")) || not(target.has_prefix("/")) {
+    return target
+  }
+  let bsegs = split_path_segments(base)
+  let tsegs = split_path_segments(target)
+  // common prefix length
+  let mut i = 0
+  let n = if bsegs.length() < tsegs.length() {
+    bsegs.length()
+  } else {
+    tsegs.length()
+  }
+  while i < n && bsegs[i] == tsegs[i] {
+    i = i + 1
+  }
+  let parts : Array[String] = []
+  for _ in i..<bsegs.length() {
+    parts.push("..")
+  }
+  for j in i..<tsegs.length() {
+    parts.push(tsegs[j])
+  }
+  if parts.length() == 0 {
+    "."
+  } else {
+    join(parts, "/")
+  }
+}
+
+///|
+/// Split an absolute path into its non-empty segments.
+fn split_path_segments(p : String) -> Array[String] {
+  let out : Array[String] = []
+  let cur = StringBuilder::new()
+  for c in p {
+    if c == '/' {
+      let s = cur.to_string()
+      if s != "" {
+        out.push(s)
+      }
+      cur.reset()
+    } else {
+      cur.write_char(c)
+    }
+  }
+  let s = cur.to_string()
+  if s != "" {
+    out.push(s)
+  }
+  out
+}
+
+///|
+/// Build the reverse implementation index, mirroring Go
+/// `spec.ImplementationIndex`. Scenarios contribute the spec-id row plus
+/// code/doc/task backlinks (kind=test skipped — covered by the Test walk),
+/// active (non-pending) tests contribute test backlinks via specRef.
+fn implementation_index(plans : Array[@model.Plan]) -> Array[SpecImpl] {
+  let by_id : Map[String, SpecImpl] = Map::new()
+  let order : Array[String] = []
+  let seen : Map[String, Bool] = Map::new()
+  fn ensure(id : String) -> SpecImpl {
+    match by_id.get(id) {
+      Some(item) => item
+      None => {
+        let item = SpecImpl::{
+          spec_id: id,
+          scenario_name: "",
+          deprecated: false,
+          has_meta: false,
+          refs: [],
+        }
+        by_id[id] = item
+        order.push(id)
+        item
+      }
+    }
+  }
+
+  fn add_ref(id : String, ref_ : ImplRef) -> Unit {
+    if id == "" || ref_.kind == "" {
+      return
+    }
+    let item = ensure(id)
+    let key = join([id, ref_.kind, ref_.name, ref_.source_path, ref_.target], "\u{0000}")
+    if seen.get(key) is Some(true) {
+      return
+    }
+    seen[key] = true
+    item.refs.push(ref_)
+  }
+
+  for p in plans {
+    for _, sc in p.scenarios {
+      match sc.id {
+        Some(id) => {
+          let item = ensure(id)
+          if not(item.has_meta) {
+            item.has_meta = true
+            item.scenario_name = sc.name
+            item.deprecated = sc.deprecated
+          }
+          for im in sc.implementations {
+            if im.kind == "" || im.kind == "test" {
+              continue
+            }
+            match im.at {
+              Some(a) =>
+                if a != "" {
+                  add_ref(id, ImplRef::{
+                    kind: im.kind,
+                    name: "",
+                    source_path: "",
+                    target: a,
+                  })
+                }
+              None => ()
+            }
+          }
+        }
+        None => ()
+      }
+    }
+    for name, t in p.tests {
+      if is_pending(t) {
+        continue
+      }
+      for id in t.spec_ref {
+        add_ref(id, ImplRef::{
+          kind: "test",
+          name,
+          source_path: p.source_path,
+          target: "",
+        })
+      }
+    }
+  }
+  // Sort each item's refs by (kind-rank, source_path, name, target).
+  let out : Array[SpecImpl] = []
+  for id in order {
+    match by_id.get(id) {
+      Some(item) => {
+        stable_sort(item.refs, (a, c) => {
+          if impl_kind_rank(a.kind) != impl_kind_rank(c.kind) {
+            impl_kind_rank(a.kind) - impl_kind_rank(c.kind)
+          } else if a.source_path != c.source_path {
+            lex_cmp(a.source_path, c.source_path)
+          } else if a.name != c.name {
+            lex_cmp(a.name, c.name)
+          } else {
+            lex_cmp(a.target, c.target)
+          }
+        })
+        out.push(item)
+      }
+      None => ()
+    }
+  }
+  stable_sort(out, (a, c) => lex_cmp(a.spec_id, c.spec_id))
+  out
+}
+
+///|
+/// Format the implementation index with a configurable heading (Go
+/// `formatImplementationIndex`). Top-level command uses "#".
+fn format_implementation_index(
+  index : Array[SpecImpl],
+  root : String,
+  heading : String,
+) -> String {
+  let b = StringBuilder::new()
+  b.write_string("\{heading} Spec implementation index\n\n")
+  if index.length() == 0 {
+    b.write_string("_No spec implementation links found._\n")
+    return b.to_string()
+  }
+  for item in index {
+    b.write_string("- **\{item.spec_id}**")
+    if item.scenario_name != "" {
+      b.write_string(" — \{item.scenario_name}")
+    }
+    if item.deprecated {
+      b.write_string(" ⊘ deprecated")
+    }
+    b.write_string("\n")
+    if item.refs.length() == 0 {
+      b.write_string("  - _No active implementation._\n")
+      continue
+    }
+    for ref_ in item.refs {
+      match ref_.kind {
+        "test" =>
+          b.write_string(
+            "  - test: `\{display_path(ref_.source_path, root)}` — \{ref_.name}\n",
+          )
+        _ => b.write_string("  - \{ref_.kind}: `\{ref_.target}`\n")
+      }
+    }
+  }
+  b.to_string()
+}
+
+///|
+/// Render the top-level `implementations` command (Go
+/// `spec.FormatImplementationIndex`).
+pub fn render_implementations(
+  plans : Array[@model.Plan],
+  root : String,
+) -> String {
+  format_implementation_index(implementation_index(plans), root, "#")
+}
+
+// ---- next ----
+
+///|
+priv struct NextGoalRef {
+  id : String
+  priority : Int
+}
+
+///|
+priv struct NextAction {
+  spec_id : String
+  name : String
+  severity : String
+  review_status : String
+  goals : Array[NextGoalRef]
+  mut top_priority : Int
+  open_questions : Int
+}
+
+///|
+/// Severity rank for ordering (Go `severityRank`): critical 3, major 2,
+/// minor 1, else 0.
+fn severity_rank(s : String) -> Int {
+  match s {
+    "critical" => 3
+    "major" => 2
+    "minor" => 1
+    _ => 0
+  }
+}
+
+///|
+/// Render the `next` listing, byte-mirroring Go `spec.NextActions` +
+/// `spec.FormatNext`. Unimplemented, non-draft, non-deprecated scenarios
+/// ranked by top Goal priority DESC, severity DESC, open-questions DESC,
+/// spec-id ASC.
+pub fn render_next(plans : Array[@model.Plan]) -> String {
+  let impls = collect_impls(plans)
+  let goals : Map[String, @model.Goal] = Map::new()
+  for p in plans {
+    for id, g in p.goals {
+      goals[id] = g
+    }
+  }
+  let out : Array[NextAction] = []
+  for p in plans {
+    for _, sc in p.scenarios {
+      let id = match sc.id {
+        Some(x) => x
+        None => continue
+      }
+      if sc.deprecated || sc.review_status == "draft" {
+        continue
+      }
+      if scenario_is_implemented(sc, impls) {
+        continue
+      }
+      let n = NextAction::{
+        spec_id: id,
+        name: sc.name,
+        severity: sc.severity,
+        review_status: sc.review_status,
+        goals: [],
+        top_priority: 0,
+        open_questions: sc.open_questions.length(),
+      }
+      for gid in sc.contributes {
+        match goals.get(gid) {
+          Some(g) =>
+            if not(g.deprecated) {
+              n.goals.push(NextGoalRef::{ id: gid, priority: g.priority })
+              if g.priority > n.top_priority {
+                n.top_priority = g.priority
+              }
+            }
+          None => ()
+        }
+      }
+      out.push(n)
+    }
+  }
+  stable_sort(out, (a, c) => {
+    if a.top_priority != c.top_priority {
+      c.top_priority - a.top_priority // priority desc
+    } else if severity_rank(a.severity) != severity_rank(c.severity) {
+      severity_rank(c.severity) - severity_rank(a.severity) // severity desc
+    } else if a.open_questions != c.open_questions {
+      c.open_questions - a.open_questions // open questions desc
+    } else {
+      lex_cmp(a.spec_id, c.spec_id)
+    }
+  })
+  let b = StringBuilder::new()
+  b.write_string("# Next actions\n\n")
+  if out.length() == 0 {
+    b.write_string(
+      "_No outstanding implementation work — all reviewable specs have impls._\n",
+    )
+    return b.to_string()
+  }
+  b.write_string(
+    "\{out.length()} unimplemented spec(s), ranked by Goal priority then severity:\n\n",
+  )
+  for i, a in out {
+    b.write_string("\{i + 1}. **\{a.spec_id}** — \{a.name}\n")
+    if a.severity != "" && a.severity != "major" {
+      b.write_string("   - severity: \{a.severity}\n")
+    }
+    if a.review_status != "" && a.review_status != "approved" {
+      b.write_string("   - status: \{a.review_status}\n")
+    }
+    if a.goals.length() > 0 {
+      let gs : Array[String] = []
+      for gr in a.goals {
+        gs.push("\{gr.id} (p=\{gr.priority})")
+      }
+      b.write_string("   - contributes to: \{join(gs, ", ")}\n")
+    }
+    if a.open_questions > 0 {
+      b.write_string(
+        "   - open questions: \{a.open_questions} (challenge before approving)\n",
+      )
+    }
+  }
+  b.to_string()
+}
+
 // ---- decisions ----
 
 ///|

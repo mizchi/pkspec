@@ -1,0 +1,14 @@
+# Next actions
+
+3 unimplemented spec(s), ranked by Goal priority then severity:
+
+1. **AUTH-001a** — valid credentials happy path
+   - severity: critical
+   - contributes to: GOAL-SECURE-AUTH (p=90)
+2. **AUTH-001b** — valid credentials sets secure cookie
+   - severity: critical
+   - contributes to: GOAL-SECURE-AUTH (p=90)
+3. **AUTH-003** — rate-limits brute-force
+   - status: review
+   - contributes to: GOAL-SECURE-AUTH (p=90)
+   - open questions: 2 (challenge before approving)
