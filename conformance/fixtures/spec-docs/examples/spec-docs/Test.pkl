@@ -1,0 +1,41 @@
+/// Tests paired with spec-docs/Spec.pkl. `creates_user` has a multi-step
+/// body with NAMED steps so `pkspec docs` renders a Behavior subsection, and
+/// shell assertions so the Implementation subsection renders under
+/// `--hide-implementation=false`.
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "creates_user"
+    description = "POST /users with a fresh email returns 201."
+    tags { "spec"; "audience:pm"; "audience:end-user"; "audience:developer" }
+    specRef { "DOC-SIGNUP-001" }
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "post fresh email"
+          body = new ShellBody {
+            cmd = "echo 201"
+          }
+        }
+        new {
+          name = "assert created id present"
+          body = new ShellBody {
+            cmd = "echo id-42"
+            inlineStdout = new InlineSnapshot {}
+          }
+        }
+      }
+    }
+  }
+
+  new {
+    name = "rejects_duplicate_email"
+    description = "POST /users with an existing email returns 409."
+    tags { "spec"; "audience:pm"; "audience:developer" }
+    specRef { "DOC-SIGNUP-002" }
+    body = new CmdTest {
+      cmd = "echo 409"
+    }
+  }
+}

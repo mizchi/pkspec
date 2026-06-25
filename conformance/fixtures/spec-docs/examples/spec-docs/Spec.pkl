@@ -1,0 +1,72 @@
+/// Exercises `pkspec docs` end-to-end: audience-tagged scenarios that also
+/// `contributes` to a Goal (so the Goals section renders), carry openQuestions
+/// and Decisions (rendered for the developer/pm profiles), and are paired with
+/// a Test.pkl whose body has named steps (so the Behavior subsection renders)
+/// and runnable assertions (so the Implementation subsection renders under
+/// `--hide-implementation=false`, the non-default).
+amends "../../pkl/Spec.pkl"
+
+feature = "audience docs projection"
+
+goals {
+  new Goal {
+    id = "goal.signup-clarity"
+    name = "signup behaviour is documented for every audience"
+    priority = 80
+    reviewStatus = "approved"
+    description =
+      "Each signup scenario reads cleanly for PMs, developers, and end users without leaking runner internals."
+    rationale =
+      "Audience docs are the contract reviewers read before approving; ambiguity here ships ambiguity downstream."
+  }
+}
+
+milestones {
+  new Milestone {
+    id = "ms.signup-docs"
+    name = "signup docs reviewed"
+    description = "Every signup scenario carries audience-ready prose."
+    targetDate = "2026-03-01"
+    reviewStatus = "approved"
+    goals { "goal.signup-clarity" }
+  }
+}
+
+scenarios {
+  new {
+    id = "DOC-SIGNUP-001"
+    name = "creates_user"
+    description = "POST /users with a fresh email returns 201 and a user id."
+    tags { "spec"; "audience:pm"; "audience:end-user"; "audience:developer" }
+    severity = "major"
+    // Kept at "review" (not "approved") because this scenario still carries an
+    // openQuestion — otherwise `pkspec lint` warns
+    // (lint.approved-with-open-questions). Keeping it green means the example
+    // is safe to include in a project-wide lint sweep.
+    reviewStatus = "review"
+    contributes { "goal.signup-clarity" }
+    audienceNotes {
+      ["end-user"] = "Signing up with a new email creates your account."
+    }
+    openQuestions {
+      "Should the 201 body include the verification-email status inline?"
+    }
+    decisions {
+      new {
+        date = "2026-02-01"
+        summary = "Return the created user id in the 201 body."
+        rationale = "Clients need the id to poll verification status without a second round-trip."
+      }
+    }
+  }
+
+  new {
+    id = "DOC-SIGNUP-002"
+    name = "rejects_duplicate_email"
+    description = "POST /users with an existing email returns 409."
+    tags { "spec"; "audience:pm"; "audience:developer" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "goal.signup-clarity" }
+  }
+}

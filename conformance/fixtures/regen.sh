@@ -8,7 +8,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
 
-for ex in spec-id spec-graph spec-open-questions spec-pending; do
+for ex in spec-id spec-graph spec-open-questions spec-pending spec-docs spec-strict-missing; do
   fx="$here/$ex"
   rm -rf "$fx"
   mkdir -p "$fx/pkl" "$fx/examples/$ex"

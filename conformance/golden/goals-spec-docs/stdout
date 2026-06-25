@@ -1,0 +1,13 @@
+# Goals
+
+## goal.signup-clarity — signup behaviour is documented for every audience
+
+_priority 80 · 2 / 2 contributing specs implemented (100%)_
+
+Each signup scenario reads cleanly for PMs, developers, and end users without leaking runner internals.
+
+> Audience docs are the contract reviewers read before approving; ambiguity here ships ambiguity downstream.
+
+- [x] **DOC-SIGNUP-001** — creates_user [review]
+- [x] **DOC-SIGNUP-002** — rejects_duplicate_email
+

@@ -1,0 +1,28 @@
+# End User docs
+
+2 scenario(s) for `audience:end-user`
+
+## Goals
+
+- **signup behaviour is documented for every audience** (`goal.signup-clarity`)
+  Each signup scenario reads cleanly for PMs, developers, and end users without leaking runner internals.
+
+## Scenarios
+
+### creates_user (`DOC-SIGNUP-001`)
+
+Signing up with a new email creates your account.
+
+- contributes to: goal.signup-clarity
+
+
+### creates_user
+
+POST /users with a fresh email returns 201.
+
+#### Behavior
+
+- post fresh email
+- assert created id present
+
+

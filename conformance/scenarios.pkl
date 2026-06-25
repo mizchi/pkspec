@@ -238,4 +238,156 @@ scenarios: Listing<Scenario> = new {
       exactStdout = true
     }
   }
+  // ── P2c: goals / milestones / docs / check ──────────────────────────
+  //
+  // goals on spec-graph: three non-deprecated Goals ranked priority DESC,
+  // each with its contributing-spec checklist (unimplemented first, id ASC),
+  // severity/status badges, blockquoted rationale, and the scenario-count
+  // progress line. The truncating `progressPercent` (int()) — NOT coverage's
+  // round-half-even — is load-bearing here (66% not 67%, 95% not 96%).
+  new {
+    id = "goals-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "goals"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // goals on spec-id: no Goals declared — the deterministic empty state.
+  new {
+    id = "goals-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "goals"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // goals on spec-docs: a single approved Goal with a rationale and a fully
+  // implemented contributing-spec list (severity-major rows omit the badge).
+  new {
+    id = "goals-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "goals"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // milestones on spec-docs: one Milestone with a due date, approved status,
+  // and a goal rollup at 100% via goal-average — exercises the `[x]` mark and
+  // the per-Goal inline progress fragment.
+  new {
+    id = "milestones-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "milestones"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // milestones on spec-id: no Milestones declared — the empty state.
+  new {
+    id = "milestones-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "milestones"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // docs --audience developer on spec-docs: the full docs surface — the Goals
+  // section, per-scenario H3, meta bullets, the Behavior subsection (named
+  // steps), and Open questions / Decisions (developer profile). Implementation
+  // is hidden (the default). Deterministic; gated at byte parity.
+  new {
+    id = "docs-developer-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "docs"; "--audience"; "developer"; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // docs --audience end-user on spec-docs: the minimal profile (no Goals
+  // lifecycle detail, no meta/questions/decisions) plus the audienceNotes
+  // override on DOC-SIGNUP-001's description.
+  new {
+    id = "docs-end-user-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "docs"; "--audience"; "end-user"; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // check on spec-docs: every declared spec has a test backlink, so check
+  // PASSES — stdout success line, exit 0.
+  new {
+    id = "check-pass-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "check"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // check on spec-id: SIGNUP-003 has no implementing test, so check FAILS —
+  // exit 1, empty stdout, and the grouped unimplemented report on STDERR.
+  new {
+    id = "check-fail-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "check"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      mustContainStderr {
+        "1 unimplemented spec(s) — 0 critical, 1 major, 0 minor"
+        "SIGNUP-003 (major; declared in: rejects invalid email)"
+        "1 unimplemented spec(s), 0 missing impl path(s)"
+      }
+    }
+  }
+  // check --strict on spec-strict-missing: the spec is implemented via a
+  // CodeImpl (bare check would pass), but its `at` file does not exist, so
+  // --strict FAILS — exit 1, empty stdout, the missing-path report on STDERR.
+  new {
+    id = "check-strict-fail-spec-strict-missing"
+    fixture = "conformance/fixtures/spec-strict-missing"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-strict-missing" }
+    argv { "check"; "--strict"; "--root"; "."; "Spec.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      mustContainStderr {
+        "--strict: 1 implementedAt path(s) missing"
+        "STRICT-001 → examples/spec-strict-missing/does-not-exist.go (file not found)"
+        "0 unimplemented spec(s), 1 missing impl path(s)"
+      }
+    }
+  }
+  // docs with NO --audience: the required-flag error path. Go (and now the
+  // candidate) route the error to STDERR and exit 1 with stdout empty —
+  // regression gate for the stdout-vs-stderr routing fix.
+  new {
+    id = "docs-missing-audience-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "docs"; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      mustContainStderr { "requires --audience" }
+    }
+  }
 }
