@@ -281,5 +281,30 @@ scenarios: Listing<Scenario> = new {
   // milestones on spec-docs: one Milestone with a due date, approved status,
   // and a goal rollup at 100% via goal-average — exercises the `[x]` mark and
   // the per-Goal inline progress fragment.
+  new {
+    id = "milestones-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "milestones"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // milestones on spec-id: no Milestones declared — the empty state.
+  new {
+    id = "milestones-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "milestones"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // docs --audience developer on spec-docs: the full docs surface — the Goals
+  // section, per-scenario H3, meta bullets, the Behavior subsection (named
+  // steps), and Open questions / Decisions (developer profile). Implementation
+  // is hidden (the default). Deterministic; gated at byte parity.
 
 }
