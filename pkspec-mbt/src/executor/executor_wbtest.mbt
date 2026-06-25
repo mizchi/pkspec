@@ -134,3 +134,95 @@ async test "run_step: non-shell kind errors loudly (deferred)" {
   assert_eq(res.steps[0].outcome, Errored)
   assert_true(res.steps[0].reasons[0].contains("not supported yet"))
 }
+
+// ── P3c ──────────────────────────────────────────────────────────────
+
+///|
+test "classify: parity with Go's (attempts, passed, flakyOK) buckets" {
+  // 0 passes => last outcome.
+  assert_eq(classify(Failed, 2, 0, true), Failed)
+  assert_eq(classify(Errored, 3, 0, false), Errored)
+  // 1 pass on the first attempt => clean Passed.
+  assert_eq(classify(Passed, 1, 1, false), Passed)
+  assert_eq(classify(Passed, 1, 1, true), Passed)
+  // passed after >=1 failure => Flaky iff flakyOK, else Failed.
+  assert_eq(classify(Failed, 2, 1, true), Flaky)
+  assert_eq(classify(Failed, 2, 1, false), Failed)
+}
+
+///|
+async test "run_one: retry passes 2nd attempt -> Flaky with attempt accounting" {
+  // A counter-file cmd (fail 1st, pass 2nd) in an isolated temp dir, with
+  // retries=1 + flakyAcceptable => deterministically Flaky, 1/2 attempts.
+  let dir = @xfs.tmpdir(prefix="pkspec-wb-retry-")
+  let body =
+    "{\"retries\":1,\"flakyAcceptable\":true," +
+    "\"cmd\":\"n=$(cat .c 2>/dev/null || echo 0); echo $((n+1)) > .c; test \\\"$n\\\" -ge 1\"}"
+  let t = one_test_full(body)
+  let res = run_one("t", t, Defaults::new(), dir, Map::new(), [])
+  assert_eq(res.outcome, Flaky)
+  assert_eq(res.attempts, 2)
+  assert_eq(res.passed_attempts, 1)
+}
+
+///|
+async test "run_step eventually: converges to pass within the budget" {
+  // An eventually step polling a counter to pass on the 2nd attempt; the
+  // passing attempt is returned unchanged (no `eventually:` reason).
+  let dir = @xfs.tmpdir(prefix="pkspec-wb-evt-")
+  let body =
+    "{\"steps\":[{\"name\":\"poll\",\"kind\":\"shell\"," +
+    "\"cmd\":\"n=$(cat .p 2>/dev/null || echo 0); n=$((n+1)); echo $n > .p; test \\\"$n\\\" -ge 2\"," +
+    "\"eventually\":{\"intervalMs\":20,\"timeoutSec\":5}}]}"
+  let t = one_test_full(body)
+  let res = Result::synthetic("t", Passed, [], [])
+  run_steps(res, t, Defaults::new(), dir, Map::new())
+  assert_eq(res.outcome, Passed)
+  assert_eq(res.steps[0].outcome, Passed)
+  assert_eq(res.steps[0].reasons.length(), 0)
+}
+
+///|
+async test "run_cmd snapshot: match passes; missing writes initial + fails" {
+  let dir = @xfs.tmpdir(prefix="pkspec-wb-snap-")
+  // Commit a snapshot equal to the cmd output -> pass.
+  @xfs.mkdir(dir + "/.pkspec/snapshots", recursive=true)
+  @xfs.write_file(dir + "/.pkspec/snapshots/s.bytes", "hello\n")
+  let t = one_test_full(
+    "{\"cmd\":\"echo hello\",\"expectStdoutSnapshot\":{\"name\":\"s\"}}",
+  )
+  let res = run_cmd("t", t, Defaults::new(), dir, [])
+  assert_eq(res.outcome, Passed)
+  // A missing snapshot -> wrote-initial fail with the em-dash reason.
+  let t2 = one_test_full(
+    "{\"cmd\":\"echo fresh\",\"expectStdoutSnapshot\":{\"name\":\"fresh\"}}",
+  )
+  let res2 = run_cmd("t", t2, Defaults::new(), dir, [])
+  assert_eq(res2.outcome, Failed)
+  assert_true(
+    res2.reasons[0].contains(
+      "stdout snapshot \"fresh\": wrote initial from this test's output — review and commit",
+    ),
+  )
+}
+
+///|
+test "build_suite + marshal_suite: pass + fail XML shape" {
+  let pass = Result::synthetic("a_passes", Passed, [], [])
+  let fail = Result::synthetic("b_fails", Failed, ["expected exit code 0, got 1"], [])
+  let tally = Tally::new()
+  tally.record(Passed)
+  tally.record(Failed)
+  let suite = build_suite("/abs/Test.pkl", [pass, fail], tally)
+  let xml = marshal_suite(suite)
+  // Header + suite counts + the failure element + escaped chardata newline.
+  assert_true(xml.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"))
+  assert_true(xml.contains("<testsuite name=\"Test\" tests=\"2\" failures=\"1\">"))
+  assert_true(
+    xml.contains(
+      "<failure message=\"expected exit code 0, got 1\">expected exit code 0, got 1&#xA;</failure>",
+    ),
+  )
+  // Passing case is a bare empty testcase (classname present, no time at 0).
+  assert_true(xml.contains("name=\"a_passes\"></testcase>"))
+}

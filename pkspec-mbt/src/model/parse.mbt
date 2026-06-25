@@ -130,8 +130,8 @@ fn parse_tests(j : Json?) -> Map[String, Test] {
               expect_stderr: opt_str(t.get("expectStderr")),
               inline_stdout: opt_str(t.get("inlineStdout")),
               inline_stderr: opt_str(t.get("inlineStderr")),
-              expect_stdout_snapshot_name: snapshot_name(t.get("expectStdoutSnapshot")),
-              expect_stderr_snapshot_name: snapshot_name(t.get("expectStderrSnapshot")),
+              expect_stdout_snapshot: parse_snapshot(t.get("expectStdoutSnapshot")),
+              expect_stderr_snapshot: parse_snapshot(t.get("expectStderrSnapshot")),
               expect_stdout_contains: arr_str(t.get("expectStdoutContains")),
               expect_stderr_contains: arr_str(t.get("expectStderrContains")),
               expect_stdout_matches: arr_str(t.get("expectStdoutMatches")),
@@ -243,12 +243,49 @@ fn parse_ai(j : Json?) -> AiAssertion? {
 }
 
 ///|
-/// Extract the `name` of a RenderedSnapshot object, or None when the key is
-/// absent / null. Mirrors Go's `*ReferenceSnapshot` non-nil check.
-fn snapshot_name(j : Json?) -> String? {
+/// Parse a RenderedSnapshot object into a `ReferenceSnapshot` (name +
+/// optional generator), or None when the key is absent / null. Mirrors Go's
+/// `*ReferenceSnapshot` non-nil check + the nested `Generator *Test`.
+fn parse_snapshot(j : Json?) -> ReferenceSnapshot? {
   match j {
-    Some(Object(s)) => Some(str_val(s.get("name")))
+    Some(Object(s)) =>
+      Some(ReferenceSnapshot::{
+        name: str_val(s.get("name")),
+        generator: parse_reference_test(s.get("generator")),
+      })
     _ => None
+  }
+}
+
+///|
+/// Parse a snapshot generator's RenderedTest into a `ReferenceTest` (the
+/// cmd-mode execution subset the runner reads in `snapshotSource`), or None
+/// when absent. `steps` / `parallelSteps` are read only as counts so the
+/// runner can reject a non-cmd generator with Go's exact wording.
+fn parse_reference_test(j : Json?) -> ReferenceTest? {
+  match j {
+    Some(Object(t)) =>
+      Some(ReferenceTest::{
+        cmd: opt_str(t.get("cmd")),
+        steps_count: arr_len(t.get("steps")),
+        parallel_steps_count: arr_len(t.get("parallelSteps")),
+        shell: str_val(t.get("shell")),
+        env: str_map(t.get("env")),
+        workdir: opt_str(t.get("workdir")),
+        stdin: opt_str(t.get("stdin")),
+        timeout_sec: int_val(t.get("timeoutSec")),
+        expect_exit_code: int_val(t.get("expectExitCode")),
+      })
+    _ => None
+  }
+}
+
+///|
+/// Number of elements in a JSON array value (Go `len(slice)`); 0 when missing.
+fn arr_len(j : Json?) -> Int {
+  match j {
+    Some(Array(a)) => a.length()
+    _ => 0
   }
 }
 

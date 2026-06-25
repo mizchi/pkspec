@@ -25,6 +25,8 @@ priv struct ExecArgs {
   file : String
   only : Array[String]
   tags : Array[String]
+  junit_reports : String
+  refresh_snapshots : Bool
 }
 
 ///|
@@ -32,6 +34,8 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
   let mut file = "Test.pkl"
   let only : Array[String] = []
   let tags : Array[String] = []
+  let mut junit_reports = ""
+  let mut refresh_snapshots = false
   let mut i = 0
   while i < args.length() {
     let a = args[i]
@@ -54,15 +58,15 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
       "-f" | "--file" => file = take()
       "--only" => only.push(take())
       "--tag" => tags.push(take())
+      // P3c: write a JUnit XML report into <dir>/<module-basename>.xml.
+      "--junit-reports" => junit_reports = take()
+      // P3c: (re)write every reference snapshot file unconditionally.
+      "--refresh-snapshots" => refresh_snapshots = true
       // Deferred value-flags: consume the value so it is not mistaken for a
-      // positional arg, but ignore it (no effect in P3a).
-      "--junit-reports"
-      | "--shard"
-      | "--total-timeout"
-      | "--timings-file" => take() |> ignore
+      // positional arg, but ignore it (no effect this phase).
+      "--shard" | "--total-timeout" | "--timings-file" => take() |> ignore
       // Deferred boolean-flags: accept and ignore.
-      "--refresh-snapshots"
-      | "--refresh-ai"
+      "--refresh-ai"
       | "--refresh-http"
       | "--http-replay-only"
       | "--update-inline-snapshots"
@@ -78,7 +82,7 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
     }
     i = i + 1
   }
-  ExecArgs::{ file, only, tags }
+  ExecArgs::{ file, only, tags, junit_reports, refresh_snapshots }
 }
 
 ///|
@@ -149,13 +153,20 @@ fn fmt_duration(ms : Int64) -> String {
 /// silent. P3b never emits the attempt suffix (retries are a later phase).
 fn format_result(res : @executor.Result) -> String {
   let buf = StringBuilder::new()
+  // Attempt suffix (Go `formatResult`): ` [P/N attempts passed]`, shown ONLY
+  // when there was more than one attempt (i.e. retries fired).
+  let attempt_suffix = if res.attempts > 1 {
+    " [\{res.passed_attempts}/\{res.attempts} attempts passed]"
+  } else {
+    ""
+  }
   let spec_suffix = if res.spec_ref.length() > 0 {
     " (verifies " + join_str(res.spec_ref, ", ") + ")"
   } else {
     ""
   }
   buf.write_string(
-    "[pkspec] \{res.name}: \{res.outcome.to_string()}\{spec_suffix} \{fmt_duration(res.duration_ms)}\n",
+    "[pkspec] \{res.name}: \{res.outcome.to_string()}\{attempt_suffix}\{spec_suffix} \{fmt_duration(res.duration_ms)}\n",
   )
   for sr in res.steps {
     if sr.outcome is @executor.Skipped {
@@ -237,6 +248,9 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
   names.sort_by((a, b) => lex_cmp(a, b))
   let defaults = @executor.Defaults::from_model(plan.defaults)
   let tally = @executor.Tally::new()
+  // Collect every test's Result (in run order = name order) so a JUnit report
+  // can be emitted after the run (Go's cmdExec passes `results` to buildSuite).
+  let results : Array[@executor.Result] = []
 
   // Hook state. scope="all" captures live for the whole Run (Go's runState).
   let run_state : Map[String, String] = Map::new()
@@ -270,6 +284,7 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
         t.spec_ref,
       )
       tally.record(res.outcome)
+      results.push(res)
       any_test_failed = true
       @stdio.stderr.write(format_result(res))
       continue
@@ -283,6 +298,7 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
         t.spec_ref,
       )
       tally.record(res.outcome)
+      results.push(res)
       @stdio.stderr.write(format_result(res))
       continue
     }
@@ -318,7 +334,7 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
         t.spec_ref,
       )
     } else {
-      run_exec_one(name, t, defaults, workdir, test_state)
+      run_exec_one(name, t, defaults, workdir, test_state, ea.refresh_snapshots)
     }
 
     // after-each in LIFO order. Skip when the body failed unless alwaysRun.
@@ -343,6 +359,7 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
       }
     }
     tally.record(res.outcome)
+    results.push(res)
     if body_failed || res.outcome is @executor.Skipped {
       any_test_failed = true
     }
@@ -367,6 +384,20 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
     )
     if not(hr.outcome is @executor.Passed) {
       print_hook_failure(hr)
+    }
+  }
+
+  // JUnit XML report (Go cmdExec lines 453-459): write
+  // <junitDir>/<module-basename-without-ext>.xml. A write failure is a
+  // non-fatal warning to stderr (does not change the exit code).
+  if ea.junit_reports != "" {
+    let base = strip_ext(base_name(abs))
+    let junit_path = ea.junit_reports + "/" + base + ".xml"
+    let suite = @executor.build_suite(abs, results, tally)
+    match (try? @executor.write_junit_suite(junit_path, suite)) {
+      Ok(_) => ()
+      Err(e) =>
+        @stdio.stderr.write("pkspec: warning: write junit report: \{e}\n")
     }
   }
 
@@ -398,8 +429,11 @@ async fn run_exec_one(
   defaults : @executor.Defaults,
   workdir : String,
   state : Map[String, String],
+  refresh_snapshots : Bool,
 ) -> @executor.Result {
-  @executor.run_one(name, t, defaults, workdir, state, t.spec_ref)
+  @executor.run_one(
+    name, t, defaults, workdir, state, t.spec_ref, refresh_snapshots~,
+  )
 }
 
 ///|
@@ -424,4 +458,26 @@ async fn print_hook_failure(hr : @executor.StepResult) -> Unit {
 async fn load_exec_plan(rel : String, abs : String) -> @model.Plan raise {
   let json = @config.eval_module_to_json(rel)
   @model.plan_from_json(json, abs)
+}
+
+///|
+/// Strip the file extension from a basename the way Go
+/// `strings.TrimSuffix(base, filepath.Ext(base))` does: drop everything from
+/// the LAST `.` in the final path element. `Test.pkl` -> `Test`; a leading-dot
+/// name with no other dot (e.g. `.hidden`) keeps the name (Go's Ext is "").
+fn strip_ext(base : String) -> String {
+  let chars = base.to_array()
+  let mut dot = -1
+  for i in 0..<chars.length() {
+    if chars[i] == '.' {
+      dot = i
+    }
+  }
+  // Go's filepath.Ext("") == "" and Ext(".x") == ".x" but TrimSuffix leaves a
+  // leading-dot-only name intact; here a dot at index 0 is treated as no ext.
+  if dot <= 0 {
+    base
+  } else {
+    base.substring(start=0, end=dot)
+  }
 }

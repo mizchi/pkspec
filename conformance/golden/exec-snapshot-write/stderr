@@ -1,0 +1,4 @@
+[pkspec] snapshot_writes_initial: failed (verifies diff.reference-snapshot) (5ms)
+      stdout snapshot "fresh_out": wrote initial from this test's output — review and commit /private/tmp/pkfconf-exec-snapshot-write-.63249.8717e1d/work/examples/exec-snapshot-write/.pkspec/snapshots/fresh_out.bytes
+pkspec: 0 passed, 0 flaky, 0 pending, 1 failed, 0 errored, 0 skipped (of 1)
+pkspec: 1 test(s) failed, 0 errored, 0 skipped

@@ -64,6 +64,38 @@ pub struct HttpRequest {
 }
 
 ///|
+/// A reference-snapshot assertion on a cmd-body Test (Go
+/// `config.ReferenceSnapshot`). The captured stream is compared against
+/// `.pkspec/snapshots/<name>.bytes`. When the file is missing (and not
+/// `--refresh-snapshots`), the runner writes an initial file from the
+/// `generator`'s stdout (if set) or this test's own output. The generator is
+/// itself a single-`cmd` Test (Go nests `Generator *Test`); modelled as
+/// `ReferenceTest` to avoid a recursive `Test` struct (only the cmd-body
+/// execution fields a generator can use are carried).
+pub struct ReferenceSnapshot {
+  name : String
+  generator : ReferenceTest?
+}
+
+///|
+/// A snapshot generator's runnable body (Go `ReferenceSnapshot.Generator
+/// *Test`, but in practice a leaf single-`cmd` invocation). Only the cmd-mode
+/// execution fields the runner reads in `snapshotSource` are modelled; a
+/// generator that uses steps / parallelSteps is rejected at run time with Go's
+/// exact wording.
+pub struct ReferenceTest {
+  cmd : String?
+  steps_count : Int
+  parallel_steps_count : Int
+  shell : String
+  env : Map[String, String]
+  workdir : String?
+  stdin : String?
+  timeout_sec : Int
+  expect_exit_code : Int
+}
+
+///|
 /// An `eventually` poll spec on a Step. Mirrors Go `config.Eventually`.
 pub struct Eventually {
   interval_ms : Int
@@ -201,8 +233,11 @@ pub struct Test {
   expect_stderr : String?
   inline_stdout : String?
   inline_stderr : String?
-  expect_stdout_snapshot_name : String?
-  expect_stderr_snapshot_name : String?
+  // reference snapshots (Go `Test.ExpectStdoutSnapshot` /
+  // `ExpectStderrSnapshot`, `*ReferenceSnapshot`). The executor (P3c) compares
+  // the captured stream against `.pkspec/snapshots/<name>.bytes`.
+  expect_stdout_snapshot : ReferenceSnapshot?
+  expect_stderr_snapshot : ReferenceSnapshot?
   // cmd-body stream assertions the executor (P3a) needs. Mirrors Go
   // `Test.ExpectStdoutContains` / `ExpectStdoutMatches` / `ExpectStdoutJsonPath`
   // (and the stderr counterparts). The JSONPath maps carry the raw expected

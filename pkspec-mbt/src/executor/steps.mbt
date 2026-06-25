@@ -105,10 +105,11 @@ pub async fn run_parallel(
 }
 
 ///|
-/// Dispatch + run a single step, mirroring Go `runStep` -> `runStepOnce`.
-/// P3b runs the `shell` kind; `eventually` / `repeat` are deferred and a step
-/// that sets them is reported Errored. Non-shell kinds dispatch to the
-/// deferred-kind error path.
+/// Dispatch + run a single step, mirroring Go `runStep`. Applies `repeat`
+/// (run N times in sequence, `$PKSPEC_REPEAT` injected when reps>1, first
+/// non-pass aborts with a `repeat i/N: failed` reason prepended) wrapping the
+/// `eventually` (poll) / once dispatch. P3c runs the `shell` kind; non-shell
+/// kinds dispatch to the deferred-kind error path.
 async fn run_step(
   step : @model.Step,
   t : @model.Test,
@@ -116,27 +117,50 @@ async fn run_step(
   workdir : String,
   state : Map[String, String],
 ) -> StepResult {
-  // Deferred control flow (Go `runStep` handles these; P3b does not):
-  // surface loudly rather than silently running once.
-  match step.eventually {
-    Some(_) => {
-      let sr = StepResult::new(step_name(step))
-      sr.outcome = Errored
-      sr.reasons.push(
-        "step `eventually` (polling) is not supported yet (deferred to a later phase)",
-      )
-      return sr
+  // `repeat`: run N times in sequence; first failure aborts. PKSPEC_REPEAT
+  // carries the 0-based index (only injected when reps>1, matching Go).
+  let mut reps = step.repeat
+  if reps < 1 {
+    reps = 1
+  }
+  let mut last = StepResult::new(step_name(step))
+  for i in 0..<reps {
+    let rep_state = if reps > 1 {
+      let copy : Map[String, String] = Map::new()
+      for k, v in state {
+        copy[k] = v
+      }
+      copy["PKSPEC_REPEAT"] = "\{i}"
+      copy
+    } else {
+      state
     }
-    None => ()
+    last = match step.eventually {
+      Some(_) => run_step_eventually(step, t, defaults, workdir, rep_state)
+      None => run_step_once(step, t, defaults, workdir, rep_state)
+    }
+    if not(last.outcome is Passed) {
+      if reps > 1 {
+        // Prepend `repeat i/N: failed` (1-based), mirroring Go.
+        last.reasons.insert(0, "repeat \{i + 1}/\{reps}: failed")
+      }
+      return last
+    }
   }
-  if step.repeat > 1 {
-    let sr = StepResult::new(step_name(step))
-    sr.outcome = Errored
-    sr.reasons.push(
-      "step `repeat` is not supported yet (deferred to a later phase)",
-    )
-    return sr
-  }
+  last
+}
+
+///|
+/// Run one step attempt (Go `runStepOnce`): validate the step kind, then
+/// dispatch on the kind. P3c runs `shell`; http / playwright / sql are deferred
+/// and surfaced Errored (no silent skip).
+async fn run_step_once(
+  step : @model.Step,
+  t : @model.Test,
+  defaults : Defaults,
+  workdir : String,
+  state : Map[String, String],
+) -> StepResult {
   // validateStepKind (shell vs http field cross-checks) before dispatch.
   let vreason = validate_step_kind(step)
   if vreason != "" {
@@ -164,6 +188,51 @@ async fn run_step(
       sr
     }
   }
+}
+
+///|
+/// Poll a step until it passes or `eventually.timeoutSec` elapses, mirroring
+/// Go `runStepEventually`: re-run `runStepOnce` every `intervalMs`; on a pass
+/// return that attempt unchanged; on timeout prepend
+/// `"eventually: N attempts over Xs, all failed"` (where Xs is the CONFIGURED
+/// timeout formatted as a Go duration, e.g. `2s`, not the measured elapsed)
+/// to the last attempt's reasons and return it.
+async fn run_step_eventually(
+  step : @model.Step,
+  t : @model.Test,
+  defaults : Defaults,
+  workdir : String,
+  state : Map[String, String],
+) -> StepResult {
+  let ev = step.eventually.unwrap()
+  let timeout_ms = (ev.timeout_sec * 1000).to_int64()
+  let deadline = @async.now() + timeout_ms
+  let mut attempts = 0
+  let mut last = StepResult::new(step_name(step))
+  while true {
+    attempts = attempts + 1
+    last = run_step_once(step, t, defaults, workdir, state)
+    if last.outcome is Passed {
+      return last
+    }
+    if @async.now() >= deadline {
+      last.reasons.insert(
+        0,
+        "eventually: \{attempts} attempts over \{go_duration_secs(ev.timeout_sec)}, all failed",
+      )
+      return last
+    }
+    @async.sleep(ev.interval_ms)
+  }
+  last
+}
+
+///|
+/// Render `n` seconds the way Go's `time.Duration.String()` renders
+/// `n * time.Second`: `"<n>s"` for a whole-second value (e.g. `2` -> `"2s"`).
+/// The `eventually` timeout is always a whole second count, so this is exact.
+fn go_duration_secs(n : Int) -> String {
+  "\{n}s"
 }
 
 ///|

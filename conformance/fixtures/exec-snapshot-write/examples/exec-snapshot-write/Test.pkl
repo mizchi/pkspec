@@ -1,0 +1,19 @@
+amends "../../pkl/Test.pkl"
+
+// Reference-snapshot WRITE case: there is NO committed snapshot file, so the
+// first run writes the initial `.pkspec/snapshots/fresh_out.bytes` from this
+// test's own stdout and FAILS with the wrote-initial reason (exit 1). Locks in
+// the missing-file write path + the em-dash "wrote initial from this test's
+// output — review and commit <path>" reason + the created-file fsDelta.
+tests {
+  new {
+    name = "snapshot_writes_initial"
+    description = "no committed snapshot — first run writes it and fails"
+    tags { "unit" }
+    specRef { "diff.reference-snapshot" }
+    body = new CmdTest {
+      cmd = "echo fresh-line"
+      expectStdoutSnapshot = new ReferenceSnapshot { name = "fresh_out" }
+    }
+  }
+}

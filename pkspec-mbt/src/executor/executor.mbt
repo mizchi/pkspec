@@ -115,6 +115,7 @@ pub async fn run_cmd(
   workdir : String,
   spec_ref : Array[String],
   extra_env? : Map[String, String] = Map::new(),
+  refresh_snapshots? : Bool = false,
 ) -> Result {
   let res = Result::{
     name,
@@ -194,6 +195,27 @@ pub async fn run_cmd(
       }) {
         res.reasons.push(r)
       }
+      // Reference snapshots (Go's checkSnapshot, prefixed "stdout " / "stderr ").
+      let snap_out = check_snapshot(
+        t.expect_stdout_snapshot,
+        stdout,
+        defaults,
+        workdir,
+        refresh_snapshots,
+      )
+      if not(snap_out.ok) {
+        res.reasons.push("stdout " + snap_out.reason)
+      }
+      let snap_err = check_snapshot(
+        t.expect_stderr_snapshot,
+        stderr,
+        defaults,
+        workdir,
+        refresh_snapshots,
+      )
+      if not(snap_err.ok) {
+        res.reasons.push("stderr " + snap_err.reason)
+      }
       match check_inline("inlineStdout", t.inline_stdout, stdout) {
         Some(r) => res.reasons.push(r)
         None => ()
@@ -221,8 +243,11 @@ pub async fn run_cmd_into(
   defaults : Defaults,
   workdir : String,
   extra_env : Map[String, String],
+  refresh_snapshots? : Bool = false,
 ) -> Unit {
-  let r = run_cmd(name, t, defaults, workdir, t.spec_ref, extra_env~)
+  let r = run_cmd(
+    name, t, defaults, workdir, t.spec_ref, extra_env~, refresh_snapshots~,
+  )
   res.outcome = r.outcome
   for rr in r.reasons {
     res.reasons.push(rr)

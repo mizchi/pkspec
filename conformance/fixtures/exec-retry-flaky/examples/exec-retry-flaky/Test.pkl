@@ -1,0 +1,24 @@
+amends "../../pkl/Test.pkl"
+
+// Deterministic retry → flaky case. The cmd reads + increments a counter file
+// in the work dir: the FIRST attempt sees count 0 and exits 1 (fail); the
+// SECOND attempt sees count 1 and exits 0 (pass). With `retries = 1`
+// (`1 + retries = 2` attempts) and `flakyAcceptable = true`, the test is
+// classified Flaky deterministically — the outcome + the `[1/2 attempts
+// passed]` suffix are stable across runs (each `exec` runs in a fresh dir, so
+// the counter always starts at 0). Locks in the retry loop + `classify` +
+// the attempt-count progress format.
+tests {
+  new {
+    name = "flaky_passes_on_retry"
+    description = "fails the 1st attempt, passes the 2nd via a counter file"
+    tags { "unit" }
+    specRef { "runner.retries"; "runner.flaky" }
+    retries = 1
+    flakyAcceptable = true
+    body = new CmdTest {
+      // n := current counter (0 if absent); write n+1 back; succeed iff n>=1.
+      cmd = "n=$(cat .attempt 2>/dev/null || echo 0); echo $((n + 1)) > .attempt; test \"$n\" -ge 1"
+    }
+  }
+}

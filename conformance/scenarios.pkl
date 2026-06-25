@@ -683,6 +683,108 @@ scenarios: Listing<Scenario> = new {
       }
     }
   }
+  // ── P3c: exec retries/flaky + reference snapshots + eventually/repeat + JUnit ──
+  //
+  // Same oracle CLASS 2 gating as the P3a/b exec scenarios. The DETERMINISTIC
+  // fixtures (retry-flaky / snapshot-match / eventually) gate the normalized
+  // stderr at byte parity (exactStderr + normalizeDurations) — each is made
+  // deterministic with an in-work-dir counter file (retry / eventually) or a
+  // committed snapshot (snapshot-match). The snapshot-WRITE + JUnit fixtures
+  // create files, so they additionally gate fsDelta; the snapshot-write reason
+  // carries the per-run ABSOLUTE snapshot path, so it gates mustContainStderr on
+  // the stable prefix (not exactStderr).
+
+  // exec-retry-flaky: `retries = 1` + `flakyAcceptable = true`; the cmd reads +
+  // increments a `.attempt` counter file, failing the 1st attempt (count 0) and
+  // passing the 2nd (count 1). Deterministically Flaky → exit 0, with the stable
+  // `[1/2 attempts passed]` suffix on the progress line. Gates the retry loop +
+  // classify + the attempt-count format.
+  new {
+    id = "exec-retry-flaky"
+    fixture = "conformance/fixtures/exec-retry-flaky"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-retry-flaky" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-snapshot-match: the committed `.pkspec/snapshots/match_out.bytes` (raw
+  // "snapshot-line\n") equals the cmd stdout, so the test PASSES, exit 0. Gates
+  // the snapshot read + byte-exact compare via exact stderr.
+  new {
+    id = "exec-snapshot-match"
+    fixture = "conformance/fixtures/exec-snapshot-match"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-snapshot-match" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-snapshot-write: NO committed snapshot, so the first run writes
+  // `.pkspec/snapshots/fresh_out.bytes` from this test's stdout and FAILS, exit
+  // 1. The wrote-initial reason carries the per-run ABSOLUTE snapshot path (the
+  // temp work dir), so it is NOT byte-stable → gate exit + the created-file
+  // fsDelta + mustContainStderr on the stable prefix (no abs path).
+  new {
+    id = "exec-snapshot-write"
+    fixture = "conformance/fixtures/exec-snapshot-write"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-snapshot-write" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      fsDelta = true
+      mustContainStderr {
+        "[pkspec] snapshot_writes_initial: failed (verifies diff.reference-snapshot)"
+        "stdout snapshot \"fresh_out\": wrote initial from this test's output — review and commit"
+        "pkspec: 0 passed, 0 flaky, 0 pending, 1 failed, 0 errored, 0 skipped (of 1)"
+        "pkspec: 1 test(s) failed, 0 errored, 0 skipped"
+      }
+    }
+  }
+  // exec-eventually: an `eventually` step polls a `.poll` counter to pass on the
+  // 2nd poll (intervalMs=50/timeoutSec=5, converges in-budget) followed by a
+  // `repeat = 3` shell step. A passing eventually returns the attempt unchanged
+  // (no `eventually:` reason) and passing steps stay silent, so the stderr is
+  // fully deterministic → exit 0 + exact stderr. Gates the eventually poll-to-
+  // pass + the repeat loop.
+  new {
+    id = "exec-eventually"
+    fixture = "conformance/fixtures/exec-eventually"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-eventually" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-junit: `exec --junit-reports reports` on a pass+fail fixture writes
+  // `reports/Test.xml`. The XML's `time` + `classname` attrs are volatile, so
+  // the CONTENT is gated by the all-examples sweep (byte-identical after
+  // normalizing those two attrs), NOT here; this scenario gates the FILE is
+  // emitted (fsDelta on `reports/Test.xml`) + the run's exit 1 + the normalized
+  // stderr progress / summary (exactStderr + normalizeDurations).
+  new {
+    id = "exec-junit"
+    fixture = "conformance/fixtures/exec-junit"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-junit" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings"; "--junit-reports"; "reports" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      fsDelta = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
   // spec --output PATH: write the rendered SPEC.md to a file (atomic tmp+rename)
   // instead of stdout, print the `pkspec: wrote <path> (N entries)` notice on
   // STDERR, exit 0. `fsDelta = true` makes the harness assert the created file

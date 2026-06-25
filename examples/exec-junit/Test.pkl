@@ -1,0 +1,29 @@
+amends "../../pkl/Test.pkl"
+
+// JUnit-report fixture: a deterministic mix of a PASSING and a FAILING cmd
+// test so `exec --junit-reports <dir>` emits a `<testsuite>` carrying one bare
+// `<testcase>` (pass) and one `<testcase>` with a `<failure>` child (the
+// `expected exit code 0, got 1` reason). Tests are name-sorted, so
+// `a_passes` precedes `b_fails`. Used to gate the JUnit XML element / attr
+// structure (the volatile `time` + `classname` are normalized away).
+tests {
+  new {
+    name = "a_passes"
+    description = "true exits 0"
+    tags { "unit" }
+    body = new CmdTest {
+      cmd = "true"
+    }
+  }
+  new {
+    name = "b_fails"
+    description = "false exits 1 against expectExitCode 0"
+    tags { "unit" }
+    body = new CmdTest {
+      cmd = "false"
+      shellExpectations {
+        expectExitCode = 0
+      }
+    }
+  }
+}
