@@ -1,0 +1,52 @@
+/// Self-contained P0 conformance scenarios for pkspec-mbt. The schema
+/// classes are inlined (no `amends`) so the harness can evaluate this with
+/// a bare AnalysisSession — the full amends/package:// loader is a P1
+/// concern. P1+ will split the schema back out into Conformance.pkl and
+/// `amends` it here, once the embedded loader handles the real schemas.
+module pkspec.conformance.scenarios
+
+class Contract {
+  json: Boolean = false
+  unorderedPaths: Listing<String> = new {}
+  jsonIgnorePaths: Listing<String> = new {}
+  exit: Boolean = true
+  mustContain: Listing<String> = new {}
+  fsDelta: Boolean = false
+  env: Boolean = false
+  mustContainStderr: Listing<String> = new {}
+  stdoutEmpty: Boolean = false
+  stdoutNonEmpty: Boolean = false
+}
+
+class Scenario {
+  id: String(matches(Regex(#"^[a-z0-9][a-z0-9-]*$"#)))
+  fixture: String
+  argv: Listing<String>
+  env: Mapping<String, String> = new {}
+  setup: Listing<String> = new {}
+  contract: Contract
+}
+
+scenarios: Listing<Scenario> = new {
+  // version differs by design (Go 0.3.0 vs MoonBit 0.4.0), so assert only
+  // exit code + non-empty stdout — this proves dispatch + capture plumbing.
+  new {
+    id = "version"
+    fixture = "conformance/fixtures/empty"
+    argv { "version" }
+    contract = new {
+      exit = true
+      stdoutNonEmpty = true
+    }
+  }
+  // help text is semantic-equivalent across impls; assert a stable marker.
+  new {
+    id = "help"
+    fixture = "conformance/fixtures/empty"
+    argv { "help" }
+    contract = new {
+      exit = true
+      mustContain { "pkspec" }
+    }
+  }
+}

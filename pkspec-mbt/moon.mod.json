@@ -1,0 +1,8 @@
+{
+  "name": "mizchi/pkspec-mbt",
+  "version": "0.4.0",
+  "deps": {
+    "moonbitlang/x": "0.4.43"
+  },
+  "preferred-target": "native"
+}
