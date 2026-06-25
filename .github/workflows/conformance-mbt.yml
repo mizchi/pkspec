@@ -15,12 +15,12 @@ jobs:
       - name: Build MoonBit pkspec candidate
         working-directory: pkspec-mbt
         run: |
-          moon install
+          moon update
           moon build --target native --release
       - name: Run conformance harness vs frozen goldens
         working-directory: conformance
         env:
           PKSPEC_BIN: ${{ github.workspace }}/pkspec-mbt/_build/native/release/build/src/cmd/pkspec/pkspec.exe
         run: |
-          moon install
+          moon update
           moon run --target native --release src
