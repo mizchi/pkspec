@@ -13,9 +13,10 @@
     { "path": "moonbitlang/core/encoding/utf8", "alias": "utf8" },
     { "path": "moonbitlang/core/env", "alias": "env" }
   ],
-  "warn-list": "-29-20",
+  "warn-list": "-29-20-6",
   "targets": {
     "main.mbt": ["native"],
-    "spec_cmds.mbt": ["native"]
+    "spec_cmds.mbt": ["native"],
+    "doctor.mbt": ["native"]
   }
 }

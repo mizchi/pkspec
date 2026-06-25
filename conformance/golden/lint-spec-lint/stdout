@@ -1,0 +1,40 @@
+lint: 19 issue(s): 5 error, 5 warn, 9 info
+
+[error] lint.broken-ref.dependsOn — LINT-001: dependsOn "LINT-NOPE-DEP" has no matching scenario
+        fix: fix typo or remove the dangling reference
+[error] lint.broken-ref.parent — LINT-001: parent "LINT-NOPE-PARENT" has no matching scenario
+        fix: fix typo or remove the dangling reference
+[error] lint.broken-ref.replacedBy — LINT-001: replacedBy "LINT-NOPE-REPL" has no matching scenario
+        fix: declare the successor or fix typo
+[error] lint.broken-ref.supersedes — LINT-001: supersedes "LINT-NOPE-SUP" has no matching scenario
+        fix: fix typo or remove the dangling reference
+[error] lint.critical-approved-with-open-questions — LINT-002: critical approved scenario still has 1 open question(s)
+        fix: answer the questions before approving, or lower severity if the impact is overstated
+[warn]  lint.approved-with-open-questions — LINT-003: approved scenario still has 1 open question(s)
+        fix: resolve the questions or downgrade reviewStatus to "review"
+[warn]  lint.critical-without-contributes — LINT-004: critical scenario contributes to no Goal — its impact is not anchored
+        fix: add at least one Goal id to contributes, or lower severity
+[warn]  lint.deprecated-specRef — Test.pkl:references_a_deprecated_spec: specRef "LINT-007" points at a deprecated Scenario
+        fix: replace "LINT-007" with "LINT-001", or remove the stale reference
+[warn]  lint.future-decision-date — LINT-006: decision dated 2099-01-01 is in the future (today UTC: 2026-06-25)
+        fix: fix the date typo
+[warn]  lint.missing-description — GOAL-LINT: approved Goal has empty description
+        fix: add a description before approving
+[info]  lint.deprecated-without-replacedBy — LINT-005: deprecated scenario without replacedBy forwarding pointer
+        fix: set replacedBy to the successor id, or leave a deprecatedReason explaining the absence
+[info]  lint.unknown-domain-prefix — LINT-001: Scenario id domain prefix "LINT-001" is not in this module's `domains` allow-list
+        fix: add "LINT-001" to module-level `domains` in Spec.pkl, rename the id, or remove the `domains` declaration entirely to opt out of this rule.
+[info]  lint.unknown-domain-prefix — LINT-002: Scenario id domain prefix "LINT-002" is not in this module's `domains` allow-list
+        fix: add "LINT-002" to module-level `domains` in Spec.pkl, rename the id, or remove the `domains` declaration entirely to opt out of this rule.
+[info]  lint.unknown-domain-prefix — LINT-003: Scenario id domain prefix "LINT-003" is not in this module's `domains` allow-list
+        fix: add "LINT-003" to module-level `domains` in Spec.pkl, rename the id, or remove the `domains` declaration entirely to opt out of this rule.
+[info]  lint.unknown-domain-prefix — LINT-004: Scenario id domain prefix "LINT-004" is not in this module's `domains` allow-list
+        fix: add "LINT-004" to module-level `domains` in Spec.pkl, rename the id, or remove the `domains` declaration entirely to opt out of this rule.
+[info]  lint.unknown-domain-prefix — LINT-005: Scenario id domain prefix "LINT-005" is not in this module's `domains` allow-list
+        fix: add "LINT-005" to module-level `domains` in Spec.pkl, rename the id, or remove the `domains` declaration entirely to opt out of this rule.
+[info]  lint.unknown-domain-prefix — LINT-006: Scenario id domain prefix "LINT-006" is not in this module's `domains` allow-list
+        fix: add "LINT-006" to module-level `domains` in Spec.pkl, rename the id, or remove the `domains` declaration entirely to opt out of this rule.
+[info]  lint.unknown-domain-prefix — LINT-007: Scenario id domain prefix "LINT-007" is not in this module's `domains` allow-list
+        fix: add "LINT-007" to module-level `domains` in Spec.pkl, rename the id, or remove the `domains` declaration entirely to opt out of this rule.
+[info]  lint.unknown-domain-prefix — OTHER-001: Scenario id domain prefix "OTHER-001" is not in this module's `domains` allow-list
+        fix: add "OTHER-001" to module-level `domains` in Spec.pkl, rename the id, or remove the `domains` declaration entirely to opt out of this rule.

@@ -1,0 +1,123 @@
+/// Exercises `pkspec lint`: a deliberately malformed spec that trips a broad
+/// spread of the structural lint rules across all three levels (error / warn /
+/// info). Used as a byte-parity fixture for the lint renderer and exit code.
+///
+/// Rules intentionally NOT triggered here:
+///   - `lint.duplicate-id` — its message embeds the *other* scenario's name,
+///     whose ordering is map-iteration dependent in both Go and MoonBit, so it
+///     is not byte-stable.
+///   - the three `implementation-*` rules — unreachable through valid Pkl (the
+///     schema forces `CodeImpl`/`DocImpl`/`TaskImpl.at` non-empty and
+///     `TestImpl.at = null`).
+///   - `lint.broken-ref.contributes`, `lint.broken-ref.milestone-goal`,
+///     `lint.dead-specRef` — the Test.pkl schema THROWS at eval time on an
+///     unknown `contributes` / Milestone goal / `specRef`, so a module that
+///     would trip these never renders. They are ported for completeness but
+///     can only be exercised against hand-built JSON, not a real Pkl module.
+amends "../../pkl/Spec.pkl"
+
+feature = "lint rule coverage"
+
+// `domains` opts into the unknown-domain-prefix rule. "LINT" is allowed;
+// the "OTHER-*" scenario below trips the rule.
+domains { "LINT" }
+
+goals {
+  // approved Goal with empty description -> lint.missing-description (warn)
+  new Goal {
+    id = "GOAL-LINT"
+    name = "lint surfaces authoring mistakes"
+    reviewStatus = "approved"
+  }
+}
+
+scenarios {
+  // Dangling graph references the schema does NOT validate -> four broken-ref.*
+  // errors (dependsOn / supersedes / parent / replacedBy).
+  new {
+    id = "LINT-001"
+    name = "dangling references"
+    description = "trips the un-schema-checked broken-ref rules at once"
+    tags { "spec" }
+    severity = "major"
+    dependsOn { "LINT-NOPE-DEP" }
+    supersedes { "LINT-NOPE-SUP" }
+    parent = "LINT-NOPE-PARENT"
+    replacedBy = "LINT-NOPE-REPL"
+  }
+  // critical + approved + open questions -> critical-approved-with-open-questions (error).
+  new {
+    id = "LINT-002"
+    name = "critical with open questions"
+    description = "a critical approved spec must answer its questions"
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "GOAL-LINT" }
+    openQuestions { "is this threshold right?" }
+  }
+  // major + approved + open questions -> approved-with-open-questions (warn).
+  new {
+    id = "LINT-003"
+    name = "major with open questions"
+    description = "a non-critical approved spec with open questions warns only"
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "approved"
+    contributes { "GOAL-LINT" }
+    openQuestions { "should this slide or reset?" }
+  }
+  // critical, no contributes, not deprecated -> critical-without-contributes (warn).
+  new {
+    id = "LINT-004"
+    name = "critical without a goal"
+    description = "a critical spec anchored to no Goal"
+    tags { "spec" }
+    severity = "critical"
+  }
+  // deprecated with no replacedBy -> deprecated-without-replacedBy (info).
+  new {
+    id = "LINT-005"
+    name = "deprecated dead end"
+    description = "deprecated but no forwarding pointer"
+    tags { "spec" }
+    severity = "minor"
+    deprecated = true
+  }
+  // a future decision date -> future-decision-date (warn). 2099 stays in the
+  // future for the life of this golden.
+  new {
+    id = "LINT-006"
+    name = "decision from the future"
+    description = "a decision dated past today UTC"
+    tags { "spec" }
+    severity = "major"
+    decisions {
+      new Decision {
+        date = "2099-01-01"
+        author = "mizchi"
+        summary = "time traveller note"
+      }
+    }
+  }
+  // deprecated scenario WITH a forwarding pointer — a Test.specRef pointing at
+  // it trips deprecated-specRef (warn). The replacedBy target is LINT-001 so
+  // the rule does not also fire broken-ref.replacedBy here.
+  new {
+    id = "LINT-007"
+    name = "retired but forwarded"
+    description = "deprecated with a live replacedBy"
+    tags { "spec" }
+    severity = "minor"
+    deprecated = true
+    replacedBy = "LINT-001"
+  }
+  // id whose domain prefix ("OTHER") is not in `domains` -> unknown-domain-prefix (info).
+  new {
+    id = "OTHER-001"
+    name = "off-domain id"
+    description = "domain prefix not in the allow-list"
+    tags { "spec" }
+    severity = "minor"
+  }
+}

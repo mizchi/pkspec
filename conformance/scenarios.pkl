@@ -390,4 +390,143 @@ scenarios: Listing<Scenario> = new {
       mustContainStderr { "requires --audience" }
     }
   }
+  // ── P2d: graph / lint / doctor + parity cleanups ────────────────────
+  //
+  // graph on spec-strict-missing: the only fully-deterministic graph fixture.
+  // Its sole implementation is a CodeImpl whose `at` is a repo-relative path
+  // (`examples/.../does-not-exist.go:DoesNotExist`), so the impl node id and
+  // edge carry NO absolute path — unlike a test backlink, whose node id embeds
+  // the abs SourcePath (per-run temp dir) and is therefore not byte-stable.
+  // Gated at byte parity (rankdir/node-style preamble, the red→orange severity
+  // colour, the `component`-shaped blue impl node, the `implements` edge).
+  new {
+    id = "graph-spec-strict-missing"
+    fixture = "conformance/fixtures/spec-strict-missing"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-strict-missing" }
+    argv { "graph"; "--root"; "."; "Spec.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // lint on spec-lint: a deliberately malformed spec that trips a broad spread
+  // of rules across all three levels — four broken-ref.* (dependsOn/supersedes/
+  // parent/replacedBy), critical-approved-with-open-questions,
+  // approved-with-open-questions, critical-without-contributes,
+  // deprecated-specRef, future-decision-date (a 2099 date), missing-description,
+  // deprecated-without-replacedBy, and unknown-domain-prefix. The lint report
+  // is deterministic (subjects are spec ids / `<base>:<name>`), so it is gated
+  // at byte parity, exit 1 (error-level issues present).
+  new {
+    id = "lint-spec-lint"
+    fixture = "conformance/fixtures/spec-lint"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-lint" }
+    argv { "lint"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // lint --scan on spec-lint: same module plus a `--scan .` walk over the
+  // vendored impl.go, which carries one live marker (LINT-001) and two dead
+  // ones (LINT-GONE ×2). Adds the lint.dead-source-specRef row (subject
+  // `impl.go:6`, count 2). Byte parity + exit 1.
+  new {
+    id = "lint-scan-spec-lint"
+    fixture = "conformance/fixtures/spec-lint"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-lint" }
+    argv { "lint"; "--root"; "."; "--scan"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // lint on spec-id: a clean module — the deterministic `lint: clean (0 issues)`
+  // path, exit 0.
+  new {
+    id = "lint-clean-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "lint"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // doctor: ENV-DEPENDENT (which tools are on PATH, their versions, and their
+  // absolute paths all vary by machine), so it is gated STRUCTURALLY, not at
+  // byte parity. The EXIT CODE is also env-dependent (doctor exits 1 when a
+  // required tool like `pkl` is absent — and CI does NOT install pkl, since the
+  // evaluator is embedded), so exit is NOT gated. Assert only non-empty stdout
+  // and the stable shape markers: the report banner, the four tool names, and
+  // the `doctor:` summary. The volatile version/path bytes are never compared.
+  new {
+    id = "doctor-structural"
+    fixture = "conformance/fixtures/empty"
+    argv { "doctor" }
+    contract = new {
+      exit = false
+      stdoutNonEmpty = true
+      mustContain {
+        "pkspec doctor"
+        "environment check"
+        "pkl"
+        "git"
+        "node"
+        "go"
+        "doctor:"
+      }
+    }
+  }
+  // doctor --json: the machine report. ENV-dependent values, so assert only the
+  // stable JSON shape — the `checks` array wrapper and the four tool names plus
+  // the `required` / `level` keys. (A deep-equal `json=true` contract would
+  // break on the volatile path/version fields, so this uses mustContain on the
+  // stable structural tokens instead.)
+  new {
+    id = "doctor-json-structural"
+    fixture = "conformance/fixtures/empty"
+    argv { "doctor"; "--json" }
+    contract = new {
+      exit = false
+      stdoutNonEmpty = true
+      mustContain {
+        "\"checks\""
+        "\"name\""
+        "\"required\""
+        "\"level\""
+        "\"pkl\""
+      }
+    }
+  }
+  // unknown command: Go returns an error from run(), which main() prints and
+  // exits 1 with (NOT 2). The usage banner is MoonBit-native (P0), so assert
+  // only the stable `unknown command` marker on stderr + exit 1 + empty stdout.
+  new {
+    id = "unknown-command"
+    fixture = "conformance/fixtures/empty"
+    argv { "definitely-not-a-command" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      mustContainStderr { "unknown command" }
+    }
+  }
+  // spec --output PATH: write the rendered SPEC.md to a file (atomic tmp+rename)
+  // instead of stdout, print the `pkspec: wrote <path> (N entries)` notice on
+  // STDERR, exit 0. `fsDelta = true` makes the harness assert the created file
+  // set matches the oracle (SPEC.md, and the transient SPEC.md.tmp is renamed
+  // away so it does not appear). stdout stays empty.
+  new {
+    id = "spec-output-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "spec"; "--root"; "."; "--output"; "SPEC.md"; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      fsDelta = true
+      mustContainStderr { "wrote SPEC.md (5 entries)" }
+    }
+  }
 }

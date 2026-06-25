@@ -1,0 +1,9 @@
+digraph specs {
+  rankdir=LR;
+  node [shape=box, style=rounded];
+
+  "STRICT-001" [label="STRICT-001\\ncode pointer resolves on disk", color=orange, style="rounded"];
+  "impl:code:examples/spec-strict-missing/does-not-exist.go:DoesNotExist" [label="code\nexamples/spec-strict-missing/does-not-exist.go:DoesNotExist", shape=component, color=blue, style=filled, fillcolor="#eef6ff"];
+
+  "impl:code:examples/spec-strict-missing/does-not-exist.go:DoesNotExist" -> "STRICT-001" [color=blue, label="implements"];
+}
