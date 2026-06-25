@@ -9,7 +9,7 @@
 /// Categorizes the result of a test, mirroring Go `executor.Outcome`. The
 /// integer order matches Go's `iota` (Passed=0 … Pending=5) and the
 /// `to_string` spellings match Go's `Outcome.String()`.
-pub enum Outcome {
+pub(all) enum Outcome {
   Passed
   Failed
   Errored
@@ -61,6 +61,30 @@ pub struct Result {
   attempts : Int
   mut passed_attempts : Int
   spec_ref : Array[String]
+}
+
+///|
+/// Construct a body-less `Result` with a given outcome + reasons. Used by the
+/// `exec` command for the Pending (auto-pending) and Errored (non-cmd body
+/// deferred / invalid body) cases, where there is no subprocess to run.
+pub fn Result::synthetic(
+  name : String,
+  outcome : Outcome,
+  reasons : Array[String],
+  spec_ref : Array[String],
+) -> Result {
+  Result::{
+    name,
+    outcome,
+    reasons,
+    exit_code: 0,
+    stdout: "",
+    stderr: "",
+    duration_ms: 0,
+    attempts: 1,
+    passed_attempts: 0,
+    spec_ref,
+  }
 }
 
 ///|

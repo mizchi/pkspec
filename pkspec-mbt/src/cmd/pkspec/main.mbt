@@ -21,6 +21,7 @@ fn usage() -> String {
     #|  milestones [opts] <path>... list Milestones with Goal progress rollups
     #|  docs --audience X [opts] <path>...  render audience-specific Markdown
     #|  check [opts] <path>...      verify declared specs have implementations
+    #|  exec [-f Test.pkl] [--only N] [--tag T]  run shell `cmd` tests
   s
 }
 
@@ -469,6 +470,7 @@ async fn main {
     "doctor" => run_doctor_cmd(rest)
     "docs" => run_docs_cmd(rest)
     "check" => run_check_cmd(rest)
+    "exec" => run_exec_cmd(rest)
     other => {
       // Go prints the usage banner and the error to STDERR for an unknown
       // command (cmd/pkspec/main.go: usage(stderr) then the os.Exit(1)
