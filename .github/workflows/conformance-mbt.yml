@@ -17,6 +17,9 @@ jobs:
         run: |
           moon update
           moon build --target native --release
+      - name: Run pkspec-mbt unit gates (evaluator + model)
+        working-directory: pkspec-mbt
+        run: moon test --target native
       - name: Run conformance harness vs frozen goldens
         working-directory: conformance
         env:
