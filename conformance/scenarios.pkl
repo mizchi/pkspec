@@ -331,5 +331,49 @@ scenarios: Listing<Scenario> = new {
   }
   // check on spec-docs: every declared spec has a test backlink, so check
   // PASSES — stdout success line, exit 0.
-
+  new {
+    id = "check-pass-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "check"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // check on spec-id: SIGNUP-003 has no implementing test, so check FAILS —
+  // exit 1, empty stdout, and the grouped unimplemented report on STDERR.
+  new {
+    id = "check-fail-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "check"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      mustContainStderr {
+        "1 unimplemented spec(s) — 0 critical, 1 major, 0 minor"
+        "SIGNUP-003 (major; declared in: rejects invalid email)"
+        "1 unimplemented spec(s), 0 missing impl path(s)"
+      }
+    }
+  }
+  // check --strict on spec-strict-missing: the spec is implemented via a
+  // CodeImpl (bare check would pass), but its `at` file does not exist, so
+  // --strict FAILS — exit 1, empty stdout, the missing-path report on STDERR.
+  new {
+    id = "check-strict-fail-spec-strict-missing"
+    fixture = "conformance/fixtures/spec-strict-missing"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-strict-missing" }
+    argv { "check"; "--strict"; "--root"; "."; "Spec.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      mustContainStderr {
+        "--strict: 1 implementedAt path(s) missing"
+        "STRICT-001 → examples/spec-strict-missing/does-not-exist.go (file not found)"
+        "0 unimplemented spec(s), 1 missing impl path(s)"
+      }
+    }
+  }
 }

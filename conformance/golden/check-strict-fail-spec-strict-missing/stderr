@@ -1,0 +1,3 @@
+pkspec: --strict: 1 implementedAt path(s) missing:
+  STRICT-001 → examples/spec-strict-missing/does-not-exist.go (file not found)
+pkspec: 0 unimplemented spec(s), 1 missing impl path(s)

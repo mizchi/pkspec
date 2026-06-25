@@ -1,0 +1,3 @@
+pkspec: 1 unimplemented spec(s) — 0 critical, 1 major, 0 minor:
+  SIGNUP-003 (major; declared in: rejects invalid email)
+pkspec: 1 unimplemented spec(s), 0 missing impl path(s)

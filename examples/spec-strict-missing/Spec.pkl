@@ -1,0 +1,25 @@
+/// Exercises `pkspec check --strict` failure path: a Scenario whose
+/// `CodeImpl.at` points at a file that does not exist on disk. The bare
+/// `pkspec check` passes (a non-empty code Implementation marks the spec
+/// implemented, exit 0), but `--strict` resolves the `at` file portion
+/// against the repo root, finds it missing, and exits 1 with a
+/// `--strict: N implementedAt path(s) missing` report.
+amends "../../pkl/Spec.pkl"
+
+feature = "strict path verification"
+
+scenarios {
+  new {
+    id = "STRICT-001"
+    name = "code pointer resolves on disk"
+    description = "The CodeImpl.at file portion must exist when --strict is set."
+    tags { "spec" }
+    reviewStatus = "approved"
+    severity = "major"
+    implementations {
+      new CodeImpl {
+        at = "examples/spec-strict-missing/does-not-exist.go:DoesNotExist"
+      }
+    }
+  }
+}
