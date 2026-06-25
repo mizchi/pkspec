@@ -87,7 +87,7 @@ pub struct Result {
   mut stderr : String
   steps : Array[StepResult]
   mut duration_ms : Int64
-  attempts : Int
+  mut attempts : Int
   mut passed_attempts : Int
   spec_ref : Array[String]
 }
@@ -150,6 +150,31 @@ pub fn Tally::total(self : Tally) -> Int {
 /// skipped. Flaky and pending are surfaced but stay green.
 pub fn Tally::is_green(self : Tally) -> Bool {
   self.failed == 0 && self.errored == 0 && self.skipped == 0
+}
+
+///|
+/// Map `(lastOutcome, attempts, passed, flakyOK)` to a final outcome, mirroring
+/// Go `classify` (internal/executor/executor.go) byte-for-byte:
+///   - 0 passes        -> the last attempt's failed/errored outcome.
+///   - 1 pass on first  -> Passed (clean run).
+///   - 1+ passes after >=1 failure -> Flaky if `flaky_ok`, else Failed.
+pub fn classify(
+  last_outcome : Outcome,
+  attempts : Int,
+  passed : Int,
+  flaky_ok : Bool,
+) -> Outcome {
+  if passed == 0 {
+    return last_outcome
+  }
+  if attempts == 1 {
+    return Passed
+  }
+  if flaky_ok {
+    Flaky
+  } else {
+    Failed
+  }
 }
 
 ///|

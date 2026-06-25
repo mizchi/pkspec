@@ -39,6 +39,7 @@ pub async fn run_one(
   workdir : String,
   state : Map[String, String],
   spec_ref : Array[String],
+  refresh_snapshots? : Bool = false,
 ) -> Result {
   let start = @async.now()
   let mode = t.mode()
@@ -52,14 +53,50 @@ pub async fn run_one(
     res.duration_ms = @async.now() - start
     return res
   }
+  // Retry loop, mirroring Go `runOne`: run up to `1 + Test.retries` attempts,
+  // break on the first Pass, then `classify(lastOutcome, attempts, passed,
+  // flakyAcceptable)`. `passed` is at most 1 (we break on the first pass).
+  let max_attempts = 1 + t.retries
+  let mut attempts = 0
+  let mut passed = 0
+  let mut last : Result = Result::synthetic(name, Passed, [], spec_ref)
+  while attempts < max_attempts {
+    attempts = attempts + 1
+    last = run_attempt(name, t, defaults, workdir, state, spec_ref, mode, refresh_snapshots)
+    if last.outcome is Passed {
+      passed = passed + 1
+      break
+    }
+  }
+  last.attempts = attempts
+  last.passed_attempts = passed
+  last.outcome = classify(last.outcome, attempts, passed, t.flaky_acceptable)
+  last.duration_ms = @async.now() - start
+  last
+}
+
+///|
+/// Run one attempt of a test body (Go `runAttempt`): dispatch on the mode with
+/// the backgrounds started around it. Returns a fresh Result for this attempt
+/// (the retry loop in `run_one` owns the attempt accounting + classification).
+async fn run_attempt(
+  name : String,
+  t : @model.Test,
+  defaults : Defaults,
+  workdir : String,
+  state : Map[String, String],
+  spec_ref : Array[String],
+  mode : @model.Mode,
+  refresh_snapshots : Bool,
+) -> Result {
   let res = Result::synthetic(name, Passed, [], spec_ref)
   run_with_backgrounds(res, t, defaults, workdir, () => match mode {
-    @model.Cmd => run_cmd_into(res, name, t, defaults, workdir, state)
+    @model.Cmd =>
+      run_cmd_into(res, name, t, defaults, workdir, state, refresh_snapshots~)
     @model.Steps => run_steps(res, t, defaults, workdir, state)
     @model.ParallelSteps => run_parallel(res, t, defaults, workdir, state)
     @model.Invalid => ()
   })
-  res.duration_ms = @async.now() - start
   res
 }
 

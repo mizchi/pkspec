@@ -61,6 +61,12 @@
     "hooks.mbt": [
       "native"
     ],
+    "snapshot.mbt": [
+      "native"
+    ],
+    "junit.mbt": [
+      "native"
+    ],
     "executor_wbtest.mbt": [
       "native"
     ]

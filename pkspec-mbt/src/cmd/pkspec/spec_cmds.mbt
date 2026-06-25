@@ -1380,12 +1380,12 @@ fn expectations(t : @model.Test) -> Array[String] {
         Some(v) => out.push("inline: stderr = \{quote_inline(v)}")
         None => ()
       }
-      match t.expect_stdout_snapshot_name {
-        Some(n) => out.push("snapshot (bytes): stdout → `\{n}`")
+      match t.expect_stdout_snapshot {
+        Some(s) => out.push("snapshot (bytes): stdout → `\{s.name}`")
         None => ()
       }
-      match t.expect_stderr_snapshot_name {
-        Some(n) => out.push("snapshot (bytes): stderr → `\{n}`")
+      match t.expect_stderr_snapshot {
+        Some(s) => out.push("snapshot (bytes): stderr → `\{s.name}`")
         None => ()
       }
     }
