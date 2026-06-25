@@ -1,0 +1,138 @@
+amends "../../pkl/Spec.pkl"
+
+// Phase 32 + 33 demo: spec knowledge graph, lifecycle, decision log,
+// shared prelude, sub-specs, and user-value Goals.
+
+feature = "user authentication"
+
+// User-facing Goals — pieces of value the system should deliver.
+// Each Scenario contributes to one or more Goals. Priority ranks
+// "which Goal matters most"; the runner uses it for pkspec next.
+goals {
+  new Goal {
+    id = "GOAL-SECURE-AUTH"
+    name = "users can authenticate securely"
+    priority = 90
+    reviewStatus = "approved"
+    description =
+      "End users can sign in with credentials and have the session protected against common attacks."
+    rationale = "Without secure auth, every downstream feature is unusable for any real workload."
+  }
+  new Goal {
+    id = "GOAL-FRICTIONLESS-LOGIN"
+    name = "auth flow is fast and low-friction"
+    priority = 60
+    reviewStatus = "review"
+    description = "Most users get in on the first try; recoverable mistakes don't dead-end."
+  }
+  new Goal {
+    id = "GOAL-AUDIT-TRAIL"
+    name = "auth events are auditable"
+    priority = 30
+    reviewStatus = "draft"
+    description = "Security review can reconstruct who tried to log in when."
+  }
+}
+
+// Background steps applied before every scenario's Given.
+prelude {
+  new SpecStep {
+    description = "the database is seeded with a known user"
+    impl = new Step { body = new ShellBody { cmd = "true" } }
+  }
+}
+
+scenarios {
+  new {
+    id = "AUTH-001"
+    name = "valid credentials"
+    description = "a known user with the right password logs in"
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    contributes { "GOAL-SECURE-AUTH"; "GOAL-FRICTIONLESS-LOGIN" }
+    decisions {
+      new Decision {
+        date = "2026-03-01"
+        author = "mizchi"
+        summary = "lock the spec to require 200 + Set-Cookie"
+        rationale =
+          "earlier draft accepted bearer-token responses; security review chose cookies for SSR compatibility"
+      }
+    }
+  }
+  new {
+    id = "AUTH-001a"
+    name = "valid credentials happy path"
+    description = "exact body shape on the happy path"
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    parent = "AUTH-001"
+    contributes { "GOAL-SECURE-AUTH" }
+  }
+  new {
+    id = "AUTH-001b"
+    name = "valid credentials sets secure cookie"
+    description = "the Set-Cookie response has HttpOnly + Secure flags"
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    parent = "AUTH-001"
+    contributes { "GOAL-SECURE-AUTH" }
+  }
+  new {
+    id = "AUTH-002"
+    name = "rejects wrong password"
+    description = "a known user with a wrong password gets 401"
+    tags { "spec" }
+    severity = "critical"
+    reviewStatus = "approved"
+    dependsOn { "AUTH-001" }
+    contributes { "GOAL-SECURE-AUTH"; "GOAL-AUDIT-TRAIL" }
+  }
+  new {
+    id = "AUTH-003"
+    name = "rate-limits brute-force"
+    description = "5 wrong attempts in 1 minute returns 429"
+    tags { "spec" }
+    severity = "major"
+    reviewStatus = "review"
+    dependsOn { "AUTH-002" }
+    contributes { "GOAL-SECURE-AUTH" }
+    openQuestions {
+      "is 5 attempts the right threshold?"
+      "should the window slide or reset hard?"
+    }
+  }
+  new {
+    id = "AUTH-004"
+    name = "passwordless_magic_link"
+    description = "click email link → logged in without password"
+    tags { "spec" }
+    severity = "minor"
+    reviewStatus = "draft"
+    contributes { "GOAL-FRICTIONLESS-LOGIN" }
+    openQuestions { "should this replace AUTH-001 or coexist?" }
+  }
+  new {
+    id = "AUTH-005"
+    name = "bearer_token_auth"
+    description = "Authorization: Bearer <jwt>"
+    tags { "spec" }
+    deprecated = true
+    deprecatedReason = "security review on 2026-03-01 ruled cookies over JWTs for SSR compat"
+    replacedBy = "AUTH-001"
+    severity = "minor"
+    reviewStatus = "approved"
+    decisions {
+      new Decision {
+        date = "2026-03-01"
+        author = "mizchi"
+        summary = "retired in favour of cookie-based AUTH-001"
+        rationale =
+          "JWT validation logic doubled the auth-middleware footprint; cookie path covers the same SSR + CSRF surface"
+      }
+    }
+  }
+}

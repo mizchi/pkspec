@@ -1,0 +1,17 @@
+Coverage: 2 / 6 specs implemented (33%)
+
+By severity:
+  critical: 2 / 4 (50%)
+  major:    0 / 1 (0%)
+  minor:    0 / 1 (0%)
+
+By review status:
+  draft:    0 / 1 (0%)
+  review:   0 / 1 (0%)
+  approved: 2 / 4 (50%)
+
+Unimplemented (4):
+  AUTH-001a
+  AUTH-001b
+  AUTH-003
+  AUTH-004

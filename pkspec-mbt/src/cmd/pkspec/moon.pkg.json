@@ -1,9 +1,18 @@
 {
   "is-main": true,
   "import": [
-    { "path": "moonbitlang/x/sys", "alias": "sys" }
+    { "path": "mizchi/pkspec-mbt/src/config", "alias": "config" },
+    { "path": "mizchi/pkspec-mbt/src/model", "alias": "model" },
+    { "path": "mizchi/x/fs", "alias": "xfs" },
+    { "path": "moonbitlang/async", "alias": "async" },
+    { "path": "moonbitlang/async/stdio", "alias": "stdio" },
+    { "path": "moonbitlang/x/sys", "alias": "sys" },
+    { "path": "moonbitlang/core/json", "alias": "json" },
+    { "path": "moonbitlang/core/env", "alias": "env" }
   ],
+  "warn-list": "-29-20",
   "targets": {
-    "main.mbt": ["native"]
+    "main.mbt": ["native"],
+    "spec_cmds.mbt": ["native"]
   }
 }

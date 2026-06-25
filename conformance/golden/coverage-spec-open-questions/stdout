@@ -1,0 +1,14 @@
+Coverage: 0 / 3 specs implemented (0%)
+
+By severity:
+  critical: 0 / 2 (0%)
+  major:    0 / 1 (0%)
+
+By review status:
+  review:   0 / 2 (0%)
+  approved: 0 / 1 (0%)
+
+Unimplemented (3):
+  auth.refresh-token-rotation
+  auth.session-fixation
+  auth.session-id-is-opaque

@@ -1,0 +1,28 @@
+amends "../../pkl/Test.pkl"
+
+// Spec-driven authoring: write the expectations first, fill in the
+// bodies later. tag = "spec" + body empty = auto-pending.
+tests {
+  new {
+    name = "rejects_duplicate_email"
+    description = "POST /users with an already-registered email returns 409"
+    tags { "spec" }
+    // no cmd / steps — auto-pending
+  }
+  new {
+    name = "rejects_invalid_email"
+    description = "RFC 5322 violations return 422 with errors[].field"
+    tags { "spec" }
+  }
+  new {
+    name = "creates_user"
+    description = "POST /users returns 201 + Location header"
+    tags { "spec" }
+    specRef { "spec.auto-pending" }
+    // Body has been implemented; this one is no longer pending.
+    body = new CmdTest {
+      cmd = "echo 201"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "201\n" }
+    }
+  }
+}

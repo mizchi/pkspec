@@ -1,0 +1,32 @@
+amends "../../pkl/Spec.pkl"
+
+// Spec module: declare scenarios with stable ids that tests in
+// Test.pkl can reference via specRef. `pkspec spec` will render the
+// SPEC.md with id anchors; `pkspec check` warns when a
+// declared spec has no implementing test.
+
+feature = "user signup"
+
+scenarios {
+  new {
+    id = "SIGNUP-001"
+    name = "creates user"
+    description = "POST /users with a fresh email returns 201"
+    tags { "spec"; "audience:pm"; "audience:end-user"; "audience:developer" }
+    reviewStatus = "approved"
+  }
+  new {
+    id = "SIGNUP-002"
+    name = "rejects duplicate email"
+    description = "POST /users with an existing email returns 409"
+    tags { "spec"; "audience:pm"; "audience:end-user"; "audience:developer" }
+    reviewStatus = "approved"
+  }
+  new {
+    id = "SIGNUP-003"
+    name = "rejects invalid email"
+    description = "RFC 5322 violations return 422"
+    tags { "spec"; "audience:pm"; "audience:developer" }
+    reviewStatus = "approved"
+  }
+}

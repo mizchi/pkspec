@@ -15,6 +15,7 @@ pub struct Contract {
   must_contain_stderr : Array[String]
   stdout_empty : Bool
   stdout_non_empty : Bool
+  exact_stdout : Bool
 }
 
 ///|
@@ -102,6 +103,7 @@ fn parse_scenario(j : Json) -> Scenario raise {
       must_contain_stderr: get_string_array(cj, "mustContainStderr"),
       stdout_empty: get_bool(cj, "stdoutEmpty"),
       stdout_non_empty: get_bool(cj, "stdoutNonEmpty"),
+      exact_stdout: get_bool(cj, "exactStdout"),
     },
   }
 }

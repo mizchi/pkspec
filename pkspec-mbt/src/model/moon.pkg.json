@@ -1,0 +1,32 @@
+{
+  "import": [
+    {
+      "path": "mizchi/pkspec-mbt/src/config",
+      "alias": "config"
+    },
+    {
+      "path": "moonbitlang/core/json",
+      "alias": "json"
+    },
+    {
+      "path": "moonbitlang/async",
+      "alias": "async"
+    },
+    {
+      "path": "moonbitlang/core/env",
+      "alias": "env"
+    }
+  ],
+  "warn-list": "-29-20",
+  "targets": {
+    "model.mbt": [
+      "native"
+    ],
+    "parse.mbt": [
+      "native"
+    ],
+    "model_wbtest.mbt": [
+      "native"
+    ]
+  }
+}

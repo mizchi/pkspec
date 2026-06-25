@@ -1,0 +1,25 @@
+/// Pending test stubs paired with Spec.pkl scenarios in this example.
+///
+/// Every entry is auto-pending (no cmd, just `tags { "spec" }`) so the
+/// example does not require a runtime. The point of this directory is
+/// to demonstrate the openQuestions lint policy via `pkspec lint`, not
+/// to exercise the executor.
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "session_id_rotates_on_login"
+    specRef { "auth.session-fixation" }
+    tags { "spec" }
+  }
+  new {
+    name = "refresh_token_rotates_per_use"
+    specRef { "auth.refresh-token-rotation" }
+    tags { "spec" }
+  }
+  new {
+    name = "session_id_is_opaque_to_clients"
+    specRef { "auth.session-id-is-opaque" }
+    tags { "spec" }
+  }
+}
