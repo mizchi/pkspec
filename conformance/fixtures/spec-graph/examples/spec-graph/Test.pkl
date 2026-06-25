@@ -1,0 +1,23 @@
+amends "../../pkl/Test.pkl"
+
+// Implementing tests for AUTH-001 / AUTH-002. AUTH-003 is in review
+// status with open questions — no impl yet. AUTH-004 is draft (ignored
+// by pkspec check). AUTH-005 is deprecated (ignored).
+tests {
+  new {
+    name = "login_happy_path"
+    specRef { "AUTH-001" }
+    body = new CmdTest {
+      cmd = "echo 200"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "200\n" }
+    }
+  }
+  new {
+    name = "login_wrong_password"
+    specRef { "AUTH-002" }
+    body = new CmdTest {
+      cmd = "echo 401"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "401\n" }
+    }
+  }
+}

@@ -50,4 +50,52 @@ scenarios: Listing<Scenario> = new {
       mustContain { "pkspec" }
     }
   }
+  // coverage is a deterministic pure function of the input Pkl, so its
+  // Markdown is gated at byte parity (normalized) vs the Go oracle.
+  //
+  // The fixtures are self-contained: they vendor the pkl/ schema tree
+  // alongside the example two levels deep (examples/<name>/), and the binary
+  // runs from that subdir (PKF_CONFORMANCE_SUBDIR), so the example's verbatim
+  // `amends "../../pkl/Spec.pkl"` resolves inside the copied temp tree. The
+  // example .pkl files are copied UNMODIFIED from examples/<name>/. See
+  // conformance/fixtures/README.md.
+  //
+  // spec-id: a 3-scenario / 2-implemented fixture (67%).
+  new {
+    id = "coverage-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "coverage"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // spec-graph: richer coverage — all three severities + all three review
+  // statuses + four unimplemented ids.
+  new {
+    id = "coverage-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "coverage"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // orphans on spec-id: every active test references a spec id, so the
+  // listing is empty — exercising the deterministic "(0)" path. (A
+  // non-empty orphans listing prints the absolute SourcePath, which is the
+  // per-run temp dir, so it is intentionally not gated as a committed
+  // golden; that path is byte-diffed locally in Task 3 Step 5 instead.)
+  new {
+    id = "orphans-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "orphans"; "--root"; "."; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
 }
