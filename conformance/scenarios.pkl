@@ -17,6 +17,13 @@ class Contract {
   stdoutEmpty: Boolean = false
   stdoutNonEmpty: Boolean = false
   exactStdout: Boolean = false
+  // exactStderr gates the normalized STDERR stream at byte parity. Used by the
+  // `exec` executor scenarios, whose progress + summary lines go to stderr.
+  exactStderr: Boolean = false
+  // normalizeDurations replaces every `(<num><unit>)` duration token with
+  // `(DUR)` on BOTH sides before the exact compare, so the otherwise-volatile
+  // wall-clock in `exec`'s progress / summary output does not break parity.
+  normalizeDurations: Boolean = false
 }
 
 class Scenario {

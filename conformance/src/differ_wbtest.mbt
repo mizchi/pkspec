@@ -16,6 +16,8 @@ fn default_contract() -> Contract {
     stdout_empty: false,
     stdout_non_empty: false,
     exact_stdout: false,
+    exact_stderr: false,
+    normalize_durations: false,
   }
 }
 
@@ -220,6 +222,51 @@ test "lex compare matches go sort.Strings" {
   assert_true(lex_compare("ab", "b") < 0)
   assert_eq(lex_compare("abc", "abc"), 0)
   assert_true(lex_compare("ab", "abc") < 0)
+}
+
+///|
+test "normalize durations replaces duration tokens only" {
+  // The duration token gets DUR; the (verifies ...) / (of N) parens stay.
+  assert_eq(
+    normalize_durations("[pkspec] t: passed (verifies a) (5ms)"),
+    "[pkspec] t: passed (verifies a) (DUR)",
+  )
+  assert_eq(
+    normalize_durations("pkspec: 2 passed (of 2)"),
+    "pkspec: 2 passed (of 2)",
+  )
+  // Various Go Duration.String() forms.
+  assert_eq(normalize_durations("(400ms)"), "(DUR)")
+  assert_eq(normalize_durations("(1.234s)"), "(DUR)")
+  assert_eq(normalize_durations("(500µs)"), "(DUR)")
+  assert_eq(normalize_durations("(1m2.3s)"), "(DUR)")
+  assert_eq(normalize_durations("(0s)"), "(DUR)")
+}
+
+///|
+test "exactStderr gates normalized progress modulo durations" {
+  let c = default_contract()
+  let c = Contract::{ ..c, exit: true, exact_stderr: true, normalize_durations: true }
+  let s = scen(c)
+  let want = Golden::{
+    stdout: "",
+    stderr: "[pkspec] t: passed (5ms)\npkspec: 1 passed (of 1)\n",
+    exit: 0,
+    fs_delta: [],
+    fs_deleted: [],
+  }
+  // Different duration -> still matches after normalization.
+  let got = result(
+    stderr="[pkspec] t: passed (7ms)\npkspec: 1 passed (of 1)\n",
+    exit=0,
+  )
+  assert_eq(compare(s, want, got), "")
+  // Different content -> mismatch.
+  let got2 = result(
+    stderr="[pkspec] t: failed (7ms)\npkspec: 1 passed (of 1)\n",
+    exit=0,
+  )
+  assert_true(compare(s, want, got2) != "")
 }
 
 ///|

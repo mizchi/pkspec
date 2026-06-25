@@ -353,6 +353,67 @@ pub fn normalize_text(s : String) -> String {
 }
 
 ///|
+/// Replace every parenthesized duration token `(<num><unit>)` with `(DUR)`,
+/// on both the golden and the candidate, so `exec`'s volatile wall-clock does
+/// not break parity. Matches the sweep's sed
+/// `s/\([0-9.]+(ms|s|µs|m[0-9][^)]*)\)/(DUR)/g`: a `(` followed by a
+/// digit/`.` run, then a recognized time unit, up to the closing `)`. A
+/// `(...)` whose inner text is NOT a duration (e.g. `(verifies ...)`,
+/// `(of 2)`) is left untouched.
+pub fn normalize_durations(s : String) -> String {
+  let chars = s.to_array()
+  let out = StringBuilder::new()
+  let mut i = 0
+  while i < chars.length() {
+    if chars[i] == '(' {
+      // Find the matching ')'.
+      let mut j = i + 1
+      while j < chars.length() && chars[j] != ')' {
+        j = j + 1
+      }
+      if j < chars.length() && is_duration_token(chars, i + 1, j) {
+        out.write_string("(DUR)")
+        i = j + 1
+        continue
+      }
+    }
+    out.write_char(chars[i])
+    i = i + 1
+  }
+  out.to_string()
+}
+
+///|
+/// Whether `chars[start:end]` (the text inside a `(...)`) looks like a Go
+/// duration: a leading `[0-9.]+` run, then a time unit (`ns` / `µs` / `us` /
+/// `ms` / `s` / `m<digit>...` / `h<digit>...`). Mirrors the sweep sed's
+/// `[0-9.]+(ms|s|µs|m[0-9]...)` shape, generalized to the other units
+/// `time.Duration.String()` can emit.
+fn is_duration_token(chars : Array[Char], start : Int, end : Int) -> Bool {
+  if start >= end {
+    return false
+  }
+  // Leading numeric run.
+  let mut k = start
+  let mut saw_digit = false
+  while k < end && ((chars[k] >= '0' && chars[k] <= '9') || chars[k] == '.') {
+    if chars[k] >= '0' && chars[k] <= '9' {
+      saw_digit = true
+    }
+    k = k + 1
+  }
+  if not(saw_digit) || k >= end {
+    return false
+  }
+  // Remaining text must be a known unit (optionally followed by more
+  // number+unit groups, e.g. `1m2.3s`). We only require the immediate next
+  // unit char(s) to be a recognized time unit; the rest of the inner text up
+  // to ')' is consumed as part of the duration.
+  let u = chars[k]
+  u == 'n' || u == 'µ' || u == 'u' || u == 'm' || u == 's' || u == 'h'
+}
+
+///|
 /// Normalized-substring containment, matching Go's `containsNormalized`.
 pub fn contains_normalized(haystack : String, sub : String) -> Bool {
   normalize_text(haystack).contains(normalize_text(sub))
@@ -388,10 +449,41 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
     }
   }
   if s.contract.exact_stdout {
-    let w = normalize_text(want.stdout)
-    let g = normalize_text(got.stdout)
+    let ws = if s.contract.normalize_durations {
+      normalize_durations(want.stdout)
+    } else {
+      want.stdout
+    }
+    let gs = if s.contract.normalize_durations {
+      normalize_durations(got.stdout)
+    } else {
+      got.stdout
+    }
+    let w = normalize_text(ws)
+    let g = normalize_text(gs)
     if w != g {
       return "exactStdout: normalized stdout differs\n  want: \"\{w}\"\n  got:  \"\{g}\""
+    }
+  }
+  // exactStderr: gate the normalized STDERR stream (where `exec`'s progress +
+  // summary lines go). Duration tokens are normalized first when
+  // normalizeDurations is set, then the same whitespace-collapse as
+  // exactStdout is applied before the exact compare.
+  if s.contract.exact_stderr {
+    let we = if s.contract.normalize_durations {
+      normalize_durations(want.stderr)
+    } else {
+      want.stderr
+    }
+    let ge = if s.contract.normalize_durations {
+      normalize_durations(got.stderr)
+    } else {
+      got.stderr
+    }
+    let w = normalize_text(we)
+    let g = normalize_text(ge)
+    if w != g {
+      return "exactStderr: normalized stderr differs\n  want: \"\{w}\"\n  got:  \"\{g}\""
     }
   }
   for sub in s.contract.must_contain {
