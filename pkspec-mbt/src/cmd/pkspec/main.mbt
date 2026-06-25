@@ -5,11 +5,13 @@ fn pkspec_version() -> String {
 
 ///|
 fn usage() -> String {
-  #|usage: pkspec <command> [args...]
-  #|
-  #|commands:
-  #|  version              print pkspec version
-  #|  help                 show this help
+  let s =
+    #|usage: pkspec <command> [args...]
+    #|
+    #|commands:
+    #|  version              print pkspec version
+    #|  help                 show this help
+  s
 }
 
 ///|
