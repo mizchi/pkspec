@@ -132,4 +132,30 @@ scenarios: Listing<Scenario> = new {
       exactStdout = true
     }
   }
+  // decisions on spec-graph: two scenarios (AUTH-001, AUTH-005) carry
+  // append-only Decision entries dated 2026-03-01. The flattened log is
+  // newest-first (date DESC, spec-id ASC), entirely deterministic (no abs
+  // paths), so it is gated at byte parity.
+  new {
+    id = "decisions-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "decisions"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // decisions on spec-id: no scenario declares a Decision, so the log is the
+  // deterministic "_No decisions recorded._" empty state.
+  new {
+    id = "decisions-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "decisions"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
 }

@@ -265,6 +265,133 @@ pub fn render_coverage(plans : Array[@model.Plan]) -> String {
   b.to_string()
 }
 
+// ---- decisions ----
+
+///|
+priv struct DecisionEntry {
+  date : String
+  author : String
+  summary : String
+  rationale : String
+  spec_id : String
+  spec_name : String
+}
+
+///|
+/// Render the `decisions` log, byte-mirroring Go `spec.DecisionLog` +
+/// `spec.FormatDecisions`. Every Scenario.decisions entry is flattened into
+/// one newest-first list: sort by date DESC then spec-id ASC.
+pub fn render_decisions(plans : Array[@model.Plan]) -> String {
+  let entries : Array[DecisionEntry] = []
+  for p in plans {
+    for _, sc in p.scenarios {
+      for d in sc.decisions {
+        entries.push(DecisionEntry::{
+          date: d.date,
+          author: match d.author {
+            Some(a) => a
+            None => ""
+          },
+          summary: d.summary,
+          rationale: match d.rationale {
+            Some(r) => r
+            None => ""
+          },
+          spec_id: match sc.id {
+            Some(id) => id
+            None => ""
+          },
+          spec_name: sc.name,
+        })
+      }
+    }
+  }
+  // Go sorts by date DESC then spec-id ASC (sort.Slice, not stable). Use a
+  // stable sort on the same key so output is deterministic across runs.
+  stable_sort(entries, (a, c) => {
+    if a.date != c.date {
+      // date descending
+      lex_cmp(c.date, a.date)
+    } else {
+      lex_cmp(a.spec_id, c.spec_id)
+    }
+  })
+  let b = StringBuilder::new()
+  b.write_string("# Decision log\n\n")
+  if entries.length() == 0 {
+    b.write_string("_No decisions recorded._\n")
+    return b.to_string()
+  }
+  for e in entries {
+    let ref_ = if e.spec_id != "" {
+      e.spec_id + " — " + e.spec_name
+    } else {
+      e.spec_name
+    }
+    b.write_string("## \{e.date} — \{ref_}\n\n")
+    b.write_string("\{e.summary}\n\n")
+    if e.author != "" {
+      b.write_string("_by: \{e.author}_\n\n")
+    }
+    if e.rationale != "" {
+      for line in split_lines(trim_right_newlines(e.rationale)) {
+        b.write_string("> \{line}\n")
+      }
+      b.write_string("\n")
+    }
+  }
+  b.to_string()
+}
+
+///|
+/// Stable insertion-order-preserving sort by `cmp` (`< 0` means a before b).
+/// Go's `sort.Slice` is not stable, but the spec renderers only collide on
+/// keys where input order is itself deterministic (per-scenario decision
+/// order, etc.), so a stable sort reproduces the oracle while staying
+/// reproducible across runs.
+fn[T] stable_sort(arr : Array[T], cmp : (T, T) -> Int) -> Unit {
+  // Simple insertion sort: stable, fine for the small slices these
+  // renderers produce.
+  for i in 1..<arr.length() {
+    let key = arr[i]
+    let mut j = i - 1
+    while j >= 0 && cmp(arr[j], key) > 0 {
+      arr[j + 1] = arr[j]
+      j = j - 1
+    }
+    arr[j + 1] = key
+  }
+}
+
+///|
+/// Strip trailing '\n' characters (Go `strings.TrimRight(s, "\n")`).
+fn trim_right_newlines(s : String) -> String {
+  let chars = s.to_array()
+  let mut end = chars.length()
+  while end > 0 && chars[end - 1] == '\n' {
+    end = end - 1
+  }
+  s.substring(start=0, end=end)
+}
+
+///|
+/// Split `s` on '\n' into lines (Go `strings.Split(s, "\n")`). An empty
+/// string yields a single empty line, matching Go.
+fn split_lines(s : String) -> Array[String] {
+  let out : Array[String] = []
+  let cur = StringBuilder::new()
+  for c in s {
+    if c == '\n' {
+      out.push(cur.to_string())
+      cur.reset()
+    } else {
+      cur.write_char(c)
+    }
+  }
+  out.push(cur.to_string())
+  out
+}
+
 // ---- orphans ----
 
 ///|

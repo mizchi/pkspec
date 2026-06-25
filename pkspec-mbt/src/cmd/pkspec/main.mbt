@@ -13,6 +13,7 @@ fn usage() -> String {
     #|  help                 show this help
     #|  coverage [opts] <path>...   print declared-vs-implemented coverage
     #|  orphans  [opts] <path>...   list active tests with no specRef
+    #|  decisions [opts] <path>...  print newest-first Markdown decision log
   s
 }
 
@@ -343,6 +344,7 @@ async fn main {
     }
     "coverage" => run_spec_cmd(rest, plans => render_coverage(plans))
     "orphans" => run_spec_cmd(rest, plans => render_orphans(plans))
+    "decisions" => run_spec_cmd(rest, plans => render_decisions(plans))
     other => {
       println("pkspec: unknown command: \{other}")
       println(usage())
