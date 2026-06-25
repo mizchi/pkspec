@@ -121,10 +121,68 @@ pub struct Test {
   inline_stderr : String?
   expect_stdout_snapshot_name : String?
   expect_stderr_snapshot_name : String?
+  // cmd-body stream assertions the executor (P3a) needs. Mirrors Go
+  // `Test.ExpectStdoutContains` / `ExpectStdoutMatches` / `ExpectStdoutJsonPath`
+  // (and the stderr counterparts). The JSONPath maps carry the raw expected
+  // `Json` value per dotted path, compared JSON-normalized against the captured
+  // stream (Go's `jsonValuesEqual`).
+  expect_stdout_contains : Array[String]
+  expect_stderr_contains : Array[String]
+  expect_stdout_matches : Array[String]
+  expect_stderr_matches : Array[String]
+  expect_stdout_json_path : Map[String, Json]
+  expect_stderr_json_path : Map[String, Json]
+  // execution context (Go `Test.Shell` / `Env` / `Workdir` / `Stdin` /
+  // `TimeoutSec`). The executor composes `<shell> -c <cmd>` with these.
+  shell : String
+  env : Map[String, String]
+  workdir : String?
+  stdin : String?
+  timeout_sec : Int
   // test-level
   retries : Int
   flaky_acceptable : Bool
   background_count : Int
+}
+
+///|
+/// The body discriminant of a Test, mirroring Go `config.Mode`. `Invalid`
+/// covers zero-or-multiple bodies (an authoring error, also the auto-pending
+/// trigger for `tags`-has-"spec" tests).
+pub enum Mode {
+  Invalid
+  Cmd
+  Steps
+  ParallelSteps
+} derive(Eq)
+
+///|
+/// Classify the test body, mirroring Go `(*Test).Mode()`: exactly one of
+/// non-empty `cmd` / `steps` / `parallelSteps` must be set, else `Invalid`.
+pub fn Test::mode(self : Test) -> Mode {
+  let mut count = 0
+  let mut mode = Mode::Invalid
+  match self.cmd {
+    Some(c) =>
+      if c != "" {
+        count = count + 1
+        mode = Cmd
+      }
+    None => ()
+  }
+  if self.steps.length() > 0 {
+    count = count + 1
+    mode = Steps
+  }
+  if self.parallel_steps.length() > 0 {
+    count = count + 1
+    mode = ParallelSteps
+  }
+  if count != 1 {
+    Invalid
+  } else {
+    mode
+  }
 }
 
 ///|

@@ -61,6 +61,17 @@ fn parse_tests(j : Json?) -> Map[String, Test] {
               inline_stderr: opt_str(t.get("inlineStderr")),
               expect_stdout_snapshot_name: snapshot_name(t.get("expectStdoutSnapshot")),
               expect_stderr_snapshot_name: snapshot_name(t.get("expectStderrSnapshot")),
+              expect_stdout_contains: arr_str(t.get("expectStdoutContains")),
+              expect_stderr_contains: arr_str(t.get("expectStderrContains")),
+              expect_stdout_matches: arr_str(t.get("expectStdoutMatches")),
+              expect_stderr_matches: arr_str(t.get("expectStderrMatches")),
+              expect_stdout_json_path: json_map(t.get("expectStdoutJsonPath")),
+              expect_stderr_json_path: json_map(t.get("expectStderrJsonPath")),
+              shell: str_val(t.get("shell")),
+              env: str_map(t.get("env")),
+              workdir: opt_str(t.get("workdir")),
+              stdin: opt_str(t.get("stdin")),
+              timeout_sec: int_val(t.get("timeoutSec")),
               retries: int_val(t.get("retries")),
               flaky_acceptable: bool_val(t.get("flakyAcceptable")),
               background_count: arr_len(t.get("background")),
@@ -367,6 +378,23 @@ fn str_map(j : Json?) -> Map[String, String] {
           String(s) => out[k] = s
           _ => ()
         }
+      }
+    _ => ()
+  }
+  out
+}
+
+///|
+/// Decode a JSON object into a `Map[String, Json]`, preserving the raw value
+/// per key (Go `map[string]any`). Used for the `expectStdoutJsonPath` /
+/// `expectStderrJsonPath` mappings, where the expected value is compared
+/// JSON-normalized against the captured stream. Missing key / null => empty.
+fn json_map(j : Json?) -> Map[String, Json] {
+  let out : Map[String, Json] = Map::new()
+  match j {
+    Some(Object(m)) =>
+      for k, v in m {
+        out[k] = v
       }
     _ => ()
   }
