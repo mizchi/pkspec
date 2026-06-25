@@ -50,6 +50,9 @@ pub struct Scenario {
   implementations : Array[Implementation]
   open_questions : Array[String]
   decisions : Array[Decision]
+  // audience-specific prose (Go `config.Scenario.AudienceNotes`,
+  // `map[string]string`). Feeds `pkspec docs` description selection.
+  audience_notes : Map[String, String]
 }
 
 ///|

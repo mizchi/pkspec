@@ -173,6 +173,7 @@ fn parse_scenarios(j : Json?) -> Map[String, Scenario] {
               implementations: parse_implementations(s.get("implementations")),
               open_questions: arr_str(s.get("openQuestions")),
               decisions: parse_decisions(s.get("decisions")),
+              audience_notes: str_map(s.get("audienceNotes")),
             }
           _ => ()
         }
@@ -352,6 +353,24 @@ fn arr_len(j : Json?) -> Int {
     Some(Array(a)) => a.length()
     _ => 0
   }
+}
+
+///|
+/// Decode a JSON object of string values into a `Map[String, String]`
+/// (Go `map[string]string`). Non-string values and missing key => empty map.
+fn str_map(j : Json?) -> Map[String, String] {
+  let out : Map[String, String] = Map::new()
+  match j {
+    Some(Object(m)) =>
+      for k, v in m {
+        match v {
+          String(s) => out[k] = s
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+  out
 }
 
 ///|

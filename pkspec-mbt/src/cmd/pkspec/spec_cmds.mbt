@@ -106,11 +106,23 @@ fn round_half_even(x : Double) -> Int {
 
 ///|
 /// Percent as Go's `%.0f` of `100 * impl / total`. Returns 0 when total == 0.
+/// Used by `coverage` (Go formats the float with `%.0f`, round-half-even).
 fn pct(impl_ : Int, total : Int) -> Int {
   if total == 0 {
     return 0
   }
   round_half_even(100.0 * impl_.to_double() / total.to_double())
+}
+
+///|
+/// Percent as Go's `progressPercent`: `int(100 * impl / total)`, which
+/// TRUNCATES toward zero (NOT round-half-even). Used by `goals` /
+/// `milestones`, which diverge from coverage's `%.0f` rounding.
+fn pct_trunc(impl_ : Int, total : Int) -> Int {
+  if total == 0 {
+    return 0
+  }
+  (100.0 * impl_.to_double() / total.to_double()).to_int()
 }
 
 ///|
@@ -1398,6 +1410,1409 @@ fn split_lines(s : String) -> Array[String] {
   }
   out.push(cur.to_string())
   out
+}
+
+// ---- goals ----
+
+///|
+/// One contributing scenario row in a GoalReport (Go `ContributingScenario`).
+priv struct ContributingScenario {
+  spec_id : String
+  name : String
+  implemented : Bool
+  severity : String
+  status : String
+}
+
+///|
+/// A normalized progress ratio (Go `ProgressReport`).
+priv struct ProgressReport {
+  meth : String
+  implemented : Int
+  total : Int
+  percent : Int
+}
+
+///|
+/// Per-Goal report (Go `GoalReport`).
+priv struct GoalReport {
+  goal : @model.Goal
+  contributing : Array[ContributingScenario]
+  implemented : Int
+  total : Int
+  progress : ProgressReport
+}
+
+///|
+/// Normalize a Goal progressMethod (Go `normalizeGoalProgressMethod`):
+/// "severity-weighted" stays, everything else maps to "scenario-count".
+fn normalize_goal_progress_method(meth : String) -> String {
+  if meth == "severity-weighted" {
+    "severity-weighted"
+  } else {
+    "scenario-count"
+  }
+}
+
+///|
+/// Severity weight (Go `severityWeight`): critical 5, minor 1, else 3.
+fn severity_weight(severity : String) -> Int {
+  match severity {
+    "critical" => 5
+    "minor" => 1
+    _ => 3
+  }
+}
+
+///|
+/// Compute a Goal's progress (Go `goalProgress`).
+fn goal_progress(
+  meth : String,
+  scenarios : Array[ContributingScenario],
+) -> ProgressReport {
+  let m = normalize_goal_progress_method(meth)
+  if m == "severity-weighted" {
+    let mut total = 0
+    let mut implemented = 0
+    for sc in scenarios {
+      let w = severity_weight(sc.severity)
+      total = total + w
+      if sc.implemented {
+        implemented = implemented + w
+      }
+    }
+    ProgressReport::{
+      meth: m,
+      implemented,
+      total,
+      percent: pct_trunc(implemented, total),
+    }
+  } else {
+    let mut implemented = 0
+    for sc in scenarios {
+      if sc.implemented {
+        implemented = implemented + 1
+      }
+    }
+    ProgressReport::{
+      meth: "scenario-count",
+      implemented,
+      total: scenarios.length(),
+      percent: pct_trunc(implemented, scenarios.length()),
+    }
+  }
+}
+
+///|
+/// Inline goal-progress fragment (Go `formatGoalProgressInline`).
+fn format_goal_progress_inline(r : GoalReport) -> String {
+  if normalize_goal_progress_method(r.progress.meth) == "severity-weighted" {
+    "\{r.progress.implemented} / \{r.progress.total} severity points (\{r.progress.percent}%)"
+  } else {
+    "\{r.implemented} / \{r.total} specs (\{r.progress.percent}%)"
+  }
+}
+
+///|
+/// Build per-Goal reports across plans (Go `spec.Goals`). Deprecated Goals
+/// are dropped; reports are sorted by priority DESC then id ASC.
+fn build_goals(plans : Array[@model.Plan]) -> Array[GoalReport] {
+  let goals : Map[String, @model.Goal] = Map::new()
+  let goal_order : Array[String] = []
+  for p in plans {
+    for id, g in p.goals {
+      if g.deprecated {
+        continue
+      }
+      if goals.get(id) is None {
+        goal_order.push(id)
+      }
+      goals[id] = g
+    }
+  }
+  let impls = collect_impls(plans)
+  let contribs : Map[String, Array[ContributingScenario]] = Map::new()
+  for p in plans {
+    for _, sc in p.scenarios {
+      let id = match sc.id {
+        Some(x) => x
+        None => continue
+      }
+      let implemented = scenario_is_implemented(sc, impls)
+      for gid in sc.contributes {
+        let cs = match contribs.get(gid) {
+          Some(arr) => arr
+          None => {
+            let arr : Array[ContributingScenario] = []
+            contribs[gid] = arr
+            arr
+          }
+        }
+        cs.push(ContributingScenario::{
+          spec_id: id,
+          name: sc.name,
+          implemented,
+          severity: sc.severity,
+          status: sc.review_status,
+        })
+      }
+    }
+  }
+  let out : Array[GoalReport] = []
+  for id in goal_order {
+    let g = goals.get(id).unwrap()
+    let cs = match contribs.get(id) {
+      Some(arr) => arr
+      None => []
+    }
+    // Sort: unimplemented first, then spec-id ASC.
+    stable_sort(cs, (a, c) => {
+      if a.implemented != c.implemented {
+        if a.implemented {
+          1
+        } else {
+          -1
+        }
+      } else {
+        lex_cmp(a.spec_id, c.spec_id)
+      }
+    })
+    let mut impl_ = 0
+    for c in cs {
+      if c.implemented {
+        impl_ = impl_ + 1
+      }
+    }
+    let progress = goal_progress(g.progress_method, cs)
+    out.push(GoalReport::{
+      goal: g,
+      contributing: cs,
+      implemented: impl_,
+      total: cs.length(),
+      progress,
+    })
+  }
+  stable_sort(out, (a, c) => {
+    if a.goal.priority != c.goal.priority {
+      c.goal.priority - a.goal.priority // priority desc
+    } else {
+      lex_cmp(a.goal.id, c.goal.id)
+    }
+  })
+  out
+}
+
+///|
+/// Render the `goals` command, byte-mirroring Go `spec.Goals` +
+/// `spec.FormatGoals`.
+pub fn render_goals(plans : Array[@model.Plan]) -> String {
+  let reports = build_goals(plans)
+  let b = StringBuilder::new()
+  b.write_string("# Goals\n\n")
+  if reports.length() == 0 {
+    b.write_string("_No Goals declared._\n")
+    return b.to_string()
+  }
+  for r in reports {
+    b.write_string("## \{r.goal.id} — \{r.goal.name}\n\n")
+    if normalize_goal_progress_method(r.progress.meth) == "severity-weighted" {
+      b.write_string(
+        "_priority \{r.goal.priority} · \{r.progress.implemented} / \{r.progress.total} severity points implemented (\{r.progress.percent}%)_\n\n",
+      )
+    } else {
+      b.write_string(
+        "_priority \{r.goal.priority} · \{r.implemented} / \{r.total} contributing specs implemented (\{r.progress.percent}%)_\n\n",
+      )
+    }
+    match r.goal.description {
+      Some(d) => if d != "" { b.write_string("\{d}\n\n") }
+      None => ()
+    }
+    match r.goal.rationale {
+      Some(rt) => if rt != "" { b.write_string("> \{rt}\n\n") }
+      None => ()
+    }
+    if r.contributing.length() == 0 {
+      b.write_string("_No contributing scenarios yet._\n\n")
+      continue
+    }
+    for c in r.contributing {
+      let mark = if c.implemented { "[x]" } else { "[ ]" }
+      b.write_string("- \{mark} **\{c.spec_id}** — \{c.name}")
+      if c.severity != "" && c.severity != "major" {
+        b.write_string(" (\{c.severity})")
+      }
+      if c.status != "" && c.status != "approved" {
+        b.write_string(" [\{c.status}]")
+      }
+      b.write_string("\n")
+    }
+    b.write_string("\n")
+  }
+  b.to_string()
+}
+
+// ---- milestones ----
+
+///|
+priv struct MilestoneReport {
+  milestone : @model.Milestone
+  goals : Array[GoalReport]
+  missing_goals : Array[String]
+  progress : ProgressReport
+}
+
+///|
+/// Normalize a Milestone progressMethod (Go `normalizeMilestoneProgressMethod`):
+/// "scenario-count"/"severity-weighted" stay, else "goal-average".
+fn normalize_milestone_progress_method(meth : String) -> String {
+  match meth {
+    "scenario-count" | "severity-weighted" => meth
+    _ => "goal-average"
+  }
+}
+
+///|
+/// Flatten distinct contributing scenarios across goals, spec-id ASC
+/// (Go `flattenMilestoneScenarios`).
+fn flatten_milestone_scenarios(
+  goals : Array[GoalReport],
+) -> Array[ContributingScenario] {
+  let seen : Map[String, ContributingScenario] = Map::new()
+  let order : Array[String] = []
+  for g in goals {
+    for sc in g.contributing {
+      if seen.get(sc.spec_id) is None {
+        seen[sc.spec_id] = sc
+        order.push(sc.spec_id)
+      }
+    }
+  }
+  let out : Array[ContributingScenario] = []
+  for id in order {
+    out.push(seen.get(id).unwrap())
+  }
+  stable_sort(out, (a, c) => lex_cmp(a.spec_id, c.spec_id))
+  out
+}
+
+///|
+/// Compute a Milestone's progress (Go `milestoneProgress`).
+fn milestone_progress(meth : String, goals : Array[GoalReport]) -> ProgressReport {
+  let m = normalize_milestone_progress_method(meth)
+  match m {
+    "scenario-count" | "severity-weighted" =>
+      goal_progress(m, flatten_milestone_scenarios(goals))
+    _ => {
+      let mut implemented = 0
+      for g in goals {
+        implemented = implemented + g.progress.percent
+      }
+      let total = 100 * goals.length()
+      ProgressReport::{
+        meth: "goal-average",
+        implemented,
+        total,
+        percent: pct_trunc(implemented, total),
+      }
+    }
+  }
+}
+
+///|
+/// Target-date sort key (Go `milestoneTargetDate`): empty/None => "~".
+fn milestone_target_date(m : @model.Milestone) -> String {
+  match m.target_date {
+    Some(d) => if d == "" { "~" } else { d }
+    None => "~"
+  }
+}
+
+///|
+/// Render the `milestones` command, byte-mirroring Go `spec.Milestones` +
+/// `spec.FormatMilestones`.
+pub fn render_milestones(plans : Array[@model.Plan]) -> String {
+  let active : Map[String, @model.Milestone] = Map::new()
+  let order : Array[String] = []
+  for p in plans {
+    for id, m in p.milestones {
+      if m.deprecated {
+        continue
+      }
+      if active.get(id) is None {
+        order.push(id)
+      }
+      active[id] = m
+    }
+  }
+  let goal_reports = build_goals(plans)
+  let by_goal_id : Map[String, GoalReport] = Map::new()
+  for r in goal_reports {
+    by_goal_id[r.goal.id] = r
+  }
+  let out : Array[MilestoneReport] = []
+  for id in order {
+    let m = active.get(id).unwrap()
+    let refs : Array[GoalReport] = []
+    let missing : Array[String] = []
+    for gid in m.goals {
+      match by_goal_id.get(gid) {
+        Some(r) => refs.push(r)
+        None => missing.push(gid)
+      }
+    }
+    out.push(MilestoneReport::{
+      milestone: m,
+      goals: refs,
+      missing_goals: missing,
+      progress: milestone_progress(m.progress_method, refs),
+    })
+  }
+  stable_sort(out, (a, c) => {
+    let di = milestone_target_date(a.milestone)
+    let dj = milestone_target_date(c.milestone)
+    if di != dj {
+      lex_cmp(di, dj)
+    } else {
+      lex_cmp(a.milestone.id, c.milestone.id)
+    }
+  })
+  let b = StringBuilder::new()
+  b.write_string("# Milestones\n\n")
+  if out.length() == 0 {
+    b.write_string("_No Milestones declared._\n")
+    return b.to_string()
+  }
+  for r in out {
+    b.write_string("## \{r.milestone.id} — \{r.milestone.name}\n\n")
+    let meta : Array[String] = []
+    match r.milestone.target_date {
+      Some(d) => if d != "" { meta.push("due " + d) }
+      None => ()
+    }
+    if r.milestone.review_status != "" {
+      meta.push(r.milestone.review_status)
+    }
+    meta.push(
+      "\{r.progress.percent}% complete via \{normalize_milestone_progress_method(r.progress.meth)}",
+    )
+    b.write_string("_\{join(meta, " · ")}_\n\n")
+    match r.milestone.description {
+      Some(d) => if d != "" { b.write_string("\{d}\n\n") }
+      None => ()
+    }
+    if r.goals.length() == 0 && r.missing_goals.length() == 0 {
+      b.write_string("_No Goals linked yet._\n\n")
+      continue
+    }
+    for g in r.goals {
+      let mark = if g.progress.total > 0 && g.progress.percent == 100 {
+        "[x]"
+      } else {
+        "[ ]"
+      }
+      b.write_string(
+        "- \{mark} **\{g.goal.id}** — \{g.goal.name}: \{format_goal_progress_inline(g)}\n",
+      )
+    }
+    r.missing_goals.sort_by((x, y) => lex_cmp(x, y))
+    for gid in r.missing_goals {
+      b.write_string("- [!] missing Goal: `\{gid}`\n")
+    }
+    b.write_string("\n")
+  }
+  b.to_string()
+}
+
+// ---- docs ----
+
+///|
+priv struct DocsOptions {
+  audience : String
+  tags : Array[String]
+  hide_implementation : Bool
+}
+
+///|
+priv struct DocsProfile {
+  include_lifecycle : Bool
+  include_graph : Bool
+  include_questions : Bool
+  include_decisions : Bool
+  include_goal_rationale : Bool
+  include_tags : Bool
+}
+
+///|
+/// Audience-specific rendering profile (Go `profileForAudience`).
+fn profile_for_audience(audience : String) -> DocsProfile {
+  match audience {
+    "end-user" | "non-engineer" =>
+      DocsProfile::{
+        include_lifecycle: false,
+        include_graph: false,
+        include_questions: false,
+        include_decisions: false,
+        include_goal_rationale: false,
+        include_tags: false,
+      }
+    "developer" | "api" | "operator" =>
+      DocsProfile::{
+        include_lifecycle: true,
+        include_graph: true,
+        include_questions: true,
+        include_decisions: true,
+        include_goal_rationale: false,
+        include_tags: true,
+      }
+    "pm" =>
+      DocsProfile::{
+        include_lifecycle: true,
+        include_graph: true,
+        include_questions: true,
+        include_decisions: true,
+        include_goal_rationale: true,
+        include_tags: false,
+      }
+    _ =>
+      DocsProfile::{
+        include_lifecycle: true,
+        include_graph: true,
+        include_questions: true,
+        include_decisions: true,
+        include_goal_rationale: false,
+        include_tags: false,
+      }
+  }
+}
+
+///|
+/// Audience title casing (Go `docsAudienceTitle`). "" => "Audience";
+/// "pm" => "PM"; "api" => "API"; otherwise title-case each hyphen/space
+/// separated word.
+fn docs_audience_title(audience : String) -> String {
+  match audience {
+    "" => "Audience"
+    "pm" => "PM"
+    "api" => "API"
+    _ => {
+      // Split on spaces after replacing '-' with ' ' (Go strings.Fields),
+      // upper-case the first letter of each non-empty word.
+      let spaced = replace_all(audience, "-", " ")
+      let words : Array[String] = []
+      let cur = StringBuilder::new()
+      for c in spaced {
+        if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+          let w = cur.to_string()
+          if w != "" {
+            words.push(w)
+          }
+          cur.reset()
+        } else {
+          cur.write_char(c)
+        }
+      }
+      let w = cur.to_string()
+      if w != "" {
+        words.push(w)
+      }
+      let out : Array[String] = []
+      for word in words {
+        let chars = word.to_array()
+        if chars.length() == 0 {
+          continue
+        }
+        let head = chars[0].to_string().to_upper()
+        let tail = word.substring(start=1, end=word.length())
+        out.push(head + tail)
+      }
+      join(out, " ")
+    }
+  }
+}
+
+///|
+/// True iff `tags` contains the exact value `t` (Go `hasTag`).
+fn has_tag(tags : Array[String], t : String) -> Bool {
+  for x in tags {
+    if x == t {
+      return true
+    }
+  }
+  false
+}
+
+///|
+/// Audience match (Go `matchesDocsAudience`): the scenario's `audience`
+/// array contains `audience`, OR `tags` contains `audience:<name>`.
+fn matches_docs_audience(
+  tags : Array[String],
+  sc : @model.Scenario?,
+  audience : String,
+) -> Bool {
+  match sc {
+    Some(s) =>
+      for a in s.audience {
+        if a == audience {
+          return true
+        }
+      }
+    None => ()
+  }
+  has_tag(tags, "audience:" + audience)
+}
+
+///|
+/// docs entry filter (Go `matchesDocsFilter`): audience AND (when --tag is
+/// given) at least one requested tag.
+fn matches_docs_filter(
+  tags : Array[String],
+  sc : @model.Scenario?,
+  opts : DocsOptions,
+) -> Bool {
+  let all_tags : Array[String] = []
+  for t in tags {
+    all_tags.push(t)
+  }
+  match sc {
+    Some(s) =>
+      for t in s.tags {
+        all_tags.push(t)
+      }
+    None => ()
+  }
+  if opts.audience != "" && not(matches_docs_audience(all_tags, sc, opts.audience)) {
+    return false
+  }
+  if opts.tags.length() > 0 && not(matches_any_tag(all_tags, opts.tags)) {
+    return false
+  }
+  true
+}
+
+///|
+/// Flatten plans into docs entries (Go `CollectDocs`).
+fn collect_docs(
+  plans : Array[@model.Plan],
+  opts : DocsOptions,
+) -> Array[Entry] {
+  let out : Array[Entry] = []
+  for p in plans {
+    for name, t in p.tests {
+      let sc = p.scenarios.get(name)
+      if not(matches_docs_filter(t.tags, sc, opts)) {
+        continue
+      }
+      out.push(Entry::{ source_path: p.source_path, name, tst: t, scenario: sc })
+    }
+  }
+  stable_sort(out, (a, c) => {
+    if a.source_path != c.source_path {
+      lex_cmp(a.source_path, c.source_path)
+    } else {
+      lex_cmp(a.name, c.name)
+    }
+  })
+  out
+}
+
+///|
+/// Look up an audienceNotes key (Go `get` closure in
+/// `docsDescriptionCandidates`): present and non-empty => Some, else None.
+fn audience_note(sc : @model.Scenario, key : String) -> String? {
+  match sc.audience_notes.get(key) {
+    Some(v) => if v == "" { None } else { Some(v) }
+    None => None
+  }
+}
+
+///|
+/// Ordered description candidates for an audience (Go
+/// `docsDescriptionCandidates`).
+fn docs_description_candidates(
+  sc : @model.Scenario,
+  audience : String,
+) -> Array[String?] {
+  match audience {
+    "end-user" | "non-engineer" =>
+      [audience_note(sc, "end-user"), sc.description]
+    "pm" =>
+      [audience_note(sc, "pm"), audience_note(sc, "end-user"), sc.description]
+    "api" => [audience_note(sc, "api"), sc.description]
+    "operator" => [audience_note(sc, "operator"), sc.description]
+    _ =>
+      match audience_note(sc, audience) {
+        Some(n) => [Some(n), sc.description]
+        None => [sc.description]
+      }
+  }
+}
+
+///|
+/// Resolve the description to render for a docs entry (Go `docsDescription`).
+fn docs_description(e : Entry, audience : String) -> String {
+  match e.scenario {
+    Some(sc) =>
+      for p in docs_description_candidates(sc, audience) {
+        match p {
+          Some(s) => if trim_space(s) != "" { return trim_space(s) }
+          None => ()
+        }
+      }
+    None => ()
+  }
+  match e.tst.description {
+    Some(d) => trim_space(d)
+    None => ""
+  }
+}
+
+///|
+/// Trim ASCII whitespace from both ends (Go `strings.TrimSpace`, restricted
+/// to the whitespace set the oracle's content uses).
+fn trim_space(s : String) -> String {
+  let chars = s.to_array()
+  let mut start = 0
+  let mut end = chars.length()
+  fn is_ws(c : Char) -> Bool {
+    c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\u{0B}' || c == '\u{0C}'
+  }
+
+  while start < end && is_ws(chars[start]) {
+    start = start + 1
+  }
+  while end > start && is_ws(chars[end - 1]) {
+    end = end - 1
+  }
+  s.substring(start~, end~)
+}
+
+///|
+/// Write `text` with each line prefixed by `indent` (Go
+/// `writeIndentedMarkdown`): trailing newlines are trimmed first.
+fn write_indented_markdown(
+  b : StringBuilder,
+  text : String,
+  indent : String,
+) -> Unit {
+  for line in split_lines(trim_right_newlines(text)) {
+    b.write_string("\{indent}\{line}\n")
+  }
+}
+
+///|
+/// Goals relevant to the rendered docs entries (Go `docsGoals`): every
+/// non-deprecated Goal that at least one entry's scenario contributes to,
+/// sorted priority DESC then id ASC.
+fn docs_goals(
+  entries : Array[Entry],
+  plans : Array[@model.Plan],
+) -> Array[@model.Goal] {
+  let wanted : Map[String, Bool] = Map::new()
+  for e in entries {
+    match e.scenario {
+      Some(sc) =>
+        for id in sc.contributes {
+          wanted[id] = true
+        }
+      None => ()
+    }
+  }
+  let seen : Map[String, @model.Goal] = Map::new()
+  let order : Array[String] = []
+  for p in plans {
+    for id, g in p.goals {
+      if wanted.get(id) is Some(true) && not(g.deprecated) {
+        if seen.get(id) is None {
+          order.push(id)
+        }
+        seen[id] = g
+      }
+    }
+  }
+  let out : Array[@model.Goal] = []
+  for id in order {
+    out.push(seen.get(id).unwrap())
+  }
+  stable_sort(out, (a, c) => {
+    if a.priority != c.priority {
+      c.priority - a.priority
+    } else {
+      lex_cmp(a.id, c.id)
+    }
+  })
+  out
+}
+
+///|
+/// Behavior-section step names (Go `docsStepNames`): named steps then named
+/// parallelSteps.
+fn docs_step_names(t : @model.Test) -> Array[String] {
+  let out : Array[String] = []
+  for s in t.steps {
+    match s.name {
+      Some(n) => if n != "" { out.push(n) }
+      None => ()
+    }
+  }
+  for s in t.parallel_steps {
+    match s.name {
+      Some(n) => if n != "" { out.push(n) }
+      None => ()
+    }
+  }
+  out
+}
+
+///|
+/// Per-scenario meta bullets for docs (Go `writeDocsMeta`).
+fn write_docs_meta(b : StringBuilder, e : Entry, profile : DocsProfile) -> Unit {
+  let sc = match e.scenario {
+    Some(s) => s
+    None => return
+  }
+  let lines : Array[String] = []
+  if sc.contributes.length() > 0 {
+    lines.push("contributes to: " + join(sc.contributes, ", "))
+  }
+  if profile.include_lifecycle {
+    let status = if sc.review_status == "" { "draft" } else { sc.review_status }
+    lines.push("status: \{status}, severity: \{sc.severity}")
+  }
+  if profile.include_graph {
+    match sc.parent {
+      Some(p) => lines.push("sub-spec of: " + p)
+      None => ()
+    }
+    if sc.depends_on.length() > 0 {
+      lines.push("depends on: " + join(sc.depends_on, ", "))
+    }
+    if sc.supersedes.length() > 0 {
+      lines.push("supersedes: " + join(sc.supersedes, ", "))
+    }
+    match sc.replaced_by {
+      Some(r) => lines.push("replaced by: " + r)
+      None => ()
+    }
+    if sc.deprecated {
+      match sc.deprecated_reason {
+        Some(r) => lines.push("deprecated: " + r)
+        None => ()
+      }
+    }
+  }
+  if profile.include_tags && sc.tags.length() > 0 {
+    lines.push("tags: " + join(sc.tags, ", "))
+  }
+  if lines.length() == 0 {
+    return
+  }
+  for line in lines {
+    b.write_string("- \{line}\n")
+  }
+  b.write_string("\n")
+}
+
+///|
+/// Render the `docs` command, byte-mirroring Go `spec.CollectDocs` +
+/// `spec.RenderDocs`.
+pub fn render_docs(
+  plans : Array[@model.Plan],
+  audience : String,
+  tags : Array[String],
+  hide_implementation : Bool,
+) -> String {
+  let opts = DocsOptions::{ audience, tags, hide_implementation }
+  let entries = collect_docs(plans, opts)
+  let profile = profile_for_audience(audience)
+  let b = StringBuilder::new()
+  b.write_string("# \{docs_audience_title(audience)} docs\n\n")
+  if entries.length() == 0 {
+    b.write_string("_No scenarios matched the filter._\n")
+    return b.to_string()
+  }
+  b.write_string("\{entries.length()} scenario(s)")
+  if audience != "" {
+    b.write_string(" for `audience:\{audience}`")
+  }
+  if tags.length() > 0 {
+    b.write_string(" matching tag(s): \{join(tags, ", ")}")
+  }
+  b.write_string("\n\n")
+  let goals = docs_goals(entries, plans)
+  if goals.length() > 0 {
+    b.write_string("## Goals\n\n")
+    for g in goals {
+      b.write_string("- **\{g.name}**")
+      if g.id != "" {
+        b.write_string(" (`\{g.id}`)")
+      }
+      if profile.include_lifecycle {
+        b.write_string(" — priority \{g.priority}, \{g.review_status}")
+      }
+      b.write_string("\n")
+      match g.description {
+        Some(d) => if d != "" { write_indented_markdown(b, d, "  ") }
+        None => ()
+      }
+      if profile.include_goal_rationale {
+        match g.rationale {
+          Some(rt) =>
+            if rt != "" {
+              write_indented_markdown(b, "Rationale: " + rt, "  ")
+            }
+          None => ()
+        }
+      }
+    }
+    b.write_string("\n")
+  }
+  b.write_string("## Scenarios\n\n")
+  for e in entries {
+    b.write_string("### \{e.name}")
+    match e.scenario {
+      Some(sc) =>
+        match sc.id {
+          Some(id) => b.write_string(" (`\{id}`)")
+          None => ()
+        }
+      None => ()
+    }
+    b.write_string("\n\n")
+    let desc = docs_description(e, audience)
+    if desc != "" {
+      write_indented_markdown(b, desc, "")
+      b.write_string("\n")
+    }
+    write_docs_meta(b, e, profile)
+    // Behavior
+    let steps = docs_step_names(e.tst)
+    if steps.length() > 0 {
+      b.write_string("#### Behavior\n\n")
+      for s in steps {
+        b.write_string("- \{s}\n")
+      }
+      b.write_string("\n")
+    }
+    // Implementation
+    if not(opts.hide_implementation) {
+      let expects = expectations(e.tst)
+      if expects.length() > 0 {
+        b.write_string("#### Implementation\n\n")
+        for ex in expects {
+          b.write_string("- \{ex}\n")
+        }
+        b.write_string("\n")
+      }
+    }
+    // Open questions
+    if profile.include_questions {
+      match e.scenario {
+        Some(sc) =>
+          if sc.open_questions.length() > 0 {
+            b.write_string("#### Open questions\n\n")
+            for q in sc.open_questions {
+              b.write_string("- \{q}\n")
+            }
+            b.write_string("\n")
+          }
+        None => ()
+      }
+    }
+    // Decisions
+    if profile.include_decisions {
+      match e.scenario {
+        Some(sc) =>
+          if sc.decisions.length() > 0 {
+            let decisions : Array[@model.Decision] = []
+            for d in sc.decisions {
+              decisions.push(d)
+            }
+            stable_sort(decisions, (a, c) => {
+              if a.date != c.date {
+                lex_cmp(c.date, a.date) // date desc
+              } else {
+                lex_cmp(a.summary, c.summary)
+              }
+            })
+            b.write_string("#### Decisions\n\n")
+            for d in decisions {
+              b.write_string("- \{d.date} — \{d.summary}\n")
+            }
+            b.write_string("\n")
+          }
+        None => ()
+      }
+    }
+    b.write_string("\n")
+  }
+  b.to_string()
+}
+
+// ---- check ----
+
+///|
+/// One unimplemented-spec issue (Go `SpecIssue`, the subset check reports).
+priv struct CheckIssue {
+  spec_id : String
+  declared_in : Array[String]
+  implemented : Array[String]
+}
+
+///|
+/// One strict file/task issue (Go `ImplIssue`).
+priv struct ImplIssue {
+  spec_id : String
+  path : String
+  reason : String
+}
+
+///|
+/// True iff any plan declares scenarios (Go `hasScenarios`).
+fn has_scenarios(plans : Array[@model.Plan]) -> Bool {
+  for p in plans {
+    if p.scenarios.size() > 0 {
+      return true
+    }
+  }
+  false
+}
+
+///|
+/// Active (non-pending) test names referencing each spec id, sorted
+/// (Go `collectImpls` — full names, not just membership).
+fn collect_impl_names(plans : Array[@model.Plan]) -> Map[String, Array[String]] {
+  let out : Map[String, Array[String]] = Map::new()
+  for p in plans {
+    for name, t in p.tests {
+      if is_pending(t) {
+        continue
+      }
+      for id in t.spec_ref {
+        let arr = match out.get(id) {
+          Some(a) => a
+          None => {
+            let a : Array[String] = []
+            out[id] = a
+            a
+          }
+        }
+        arr.push(name)
+      }
+    }
+  }
+  for _, v in out {
+    v.sort_by((a, c) => lex_cmp(a, c))
+  }
+  out
+}
+
+///|
+/// `scenarioIsImplemented` against the names-map view (membership only).
+fn scenario_is_implemented_names(
+  sc : @model.Scenario,
+  impls : Map[String, Array[String]],
+) -> Bool {
+  for im in sc.implementations {
+    match im.kind {
+      "code" | "doc" | "task" =>
+        match im.at {
+          Some(a) => if a != "" { return true }
+          None => ()
+        }
+      "test" => return true
+      _ => ()
+    }
+  }
+  match sc.id {
+    Some(id) =>
+      match impls.get(id) {
+        Some(arr) => arr.length() > 0
+        None => false
+      }
+    None => false
+  }
+}
+
+///|
+/// Per-spec-id check summary (Go `CheckUnimplemented`).
+fn check_unimplemented(plans : Array[@model.Plan]) -> Array[CheckIssue] {
+  if has_scenarios(plans) {
+    let decls : Map[String, @model.Scenario] = Map::new()
+    for p in plans {
+      for _, sc in p.scenarios {
+        let id = match sc.id {
+          Some(x) => x
+          None => continue
+        }
+        if sc.deprecated || sc.review_status == "draft" {
+          continue
+        }
+        decls[id] = sc
+      }
+    }
+    let impls = collect_impl_names(plans)
+    let out : Array[CheckIssue] = []
+    for id, sc in decls {
+      if scenario_is_implemented_names(sc, impls) {
+        continue
+      }
+      out.push(CheckIssue::{
+        spec_id: id,
+        declared_in: [sc.name],
+        implemented: [],
+      })
+    }
+    out.sort_by((a, c) => lex_cmp(a.spec_id, c.spec_id))
+    return out
+  }
+  // legacy path: pending tests declare, active tests implement.
+  let decl : Map[String, Array[String]] = Map::new()
+  let impl_names : Map[String, Array[String]] = Map::new()
+  for p in plans {
+    for name, t in p.tests {
+      let pending = is_pending(t)
+      for id in t.spec_ref {
+        let m = if pending { decl } else { impl_names }
+        let arr = match m.get(id) {
+          Some(a) => a
+          None => {
+            let a : Array[String] = []
+            m[id] = a
+            a
+          }
+        }
+        arr.push(name)
+      }
+    }
+  }
+  let ids : Map[String, Bool] = Map::new()
+  for id, _ in decl {
+    ids[id] = true
+  }
+  for id, _ in impl_names {
+    ids[id] = true
+  }
+  let out : Array[CheckIssue] = []
+  for id, _ in ids {
+    let d = match decl.get(id) {
+      Some(a) => a
+      None => []
+    }
+    let i = match impl_names.get(id) {
+      Some(a) => a
+      None => []
+    }
+    d.sort_by((a, c) => lex_cmp(a, c))
+    i.sort_by((a, c) => lex_cmp(a, c))
+    out.push(CheckIssue::{ spec_id: id, declared_in: d, implemented: i })
+  }
+  out.sort_by((a, c) => lex_cmp(a.spec_id, c.spec_id))
+  out
+}
+
+///|
+/// Number of unique active declared spec ids (Go `DeclaredSpecCount`).
+fn declared_spec_count(plans : Array[@model.Plan]) -> Int {
+  let ids : Map[String, Bool] = Map::new()
+  if has_scenarios(plans) {
+    for p in plans {
+      for _, sc in p.scenarios {
+        match sc.id {
+          Some(id) =>
+            if not(sc.deprecated) && sc.review_status != "draft" {
+              ids[id] = true
+            }
+          None => ()
+        }
+      }
+    }
+    return ids.size()
+  }
+  for p in plans {
+    for _, t in p.tests {
+      if not(is_pending(t)) {
+        continue
+      }
+      for id in t.spec_ref {
+        ids[id] = true
+      }
+    }
+  }
+  ids.size()
+}
+
+///|
+/// First-match scenario lookup helpers (Go `severityFor` / `contributesFor`
+/// / `reviewStatusFor`). They scan every scenario, returning the first whose
+/// id matches.
+fn severity_for(plans : Array[@model.Plan], id : String) -> String {
+  for p in plans {
+    for _, sc in p.scenarios {
+      if sc.id is Some(x) && x == id {
+        return if sc.severity == "" { "major" } else { sc.severity }
+      }
+    }
+  }
+  "major"
+}
+
+///|
+fn contributes_for(plans : Array[@model.Plan], id : String) -> Array[String] {
+  for p in plans {
+    for _, sc in p.scenarios {
+      if sc.id is Some(x) && x == id {
+        return sc.contributes
+      }
+    }
+  }
+  []
+}
+
+///|
+fn review_status_for(plans : Array[@model.Plan], id : String) -> String {
+  for p in plans {
+    for _, sc in p.scenarios {
+      if sc.id is Some(x) && x == id {
+        return sc.review_status
+      }
+    }
+  }
+  ""
+}
+
+///|
+/// Split an Implementation.at into its (path, name) parts (Go `splitImplAt`).
+fn split_impl_at(at : String, kind : String) -> (String, String) {
+  let mut path = at
+  let mut name = ""
+  // Prefer '#', then ':'.
+  let chars = at.to_array()
+  let mut hash = -1
+  let mut colon = -1
+  for i in 0..<chars.length() {
+    if chars[i] == '#' && hash < 0 {
+      hash = i
+    }
+    if chars[i] == ':' && colon < 0 {
+      colon = i
+    }
+  }
+  if hash >= 0 {
+    name = at.substring(start=hash + 1, end=at.length())
+    path = at.substring(start=0, end=hash)
+  } else if colon >= 0 {
+    name = at.substring(start=colon + 1, end=at.length())
+    path = at.substring(start=0, end=colon)
+  }
+  if kind == "task" && path != "" && not(path.has_suffix(".pkl")) && name == "" {
+    name = path
+    path = "Taskfile.pkl"
+  }
+  (path, name)
+}
+
+///|
+/// Shell out to `pkf list --json -f <taskfile>` and return the declared task
+/// names (Go `listPkfireTasks`). Returns None when pkf is unavailable or the
+/// call/parse fails — strict then degrades to the file-existence check only,
+/// exactly like Go.
+async fn list_pkfire_tasks(taskfile : String) -> Map[String, Bool]? {
+  // `pkf` may be absent; the process layer surfaces that as a non-zero exit
+  // (or an error we swallow), and we degrade to the file-existence check —
+  // matching Go's `exec.LookPath` / `cmd.Output()` nil-on-failure path.
+  let (code, out_data, _) = @process.collect_output(
+    "pkf",
+    ["list", "--json", "-f", taskfile],
+  )
+  if code != 0 {
+    return None
+  }
+  let text = @utf8.decode_lossy(out_data.binary()[:])
+  let parsed = try? @json.parse(text)
+  match parsed {
+    Ok(Object(o)) =>
+      match o.get("tasks") {
+        Some(Array(a)) => {
+          let names : Map[String, Bool] = Map::new()
+          for e in a {
+            match e {
+              Object(t) =>
+                match t.get("name") {
+                  Some(String(n)) => names[n] = true
+                  _ => ()
+                }
+              _ => ()
+            }
+          }
+          Some(names)
+        }
+        _ => None
+      }
+    _ => None
+  }
+}
+
+///|
+/// Verify on-disk that every code/doc/task Implementation.at resolves
+/// (Go `VerifyImplementedAt`). `repo_root` resolves relative paths.
+async fn verify_implemented_at(
+  plans : Array[@model.Plan],
+  repo_root : String,
+) -> Array[ImplIssue] {
+  let out : Array[ImplIssue] = []
+  let seen : Map[String, Bool] = Map::new()
+  let task_cache : Map[String, Map[String, Bool]?] = Map::new()
+  for p in plans {
+    for _, sc in p.scenarios {
+      for im in sc.implementations {
+        if im.kind != "code" && im.kind != "doc" && im.kind != "task" {
+          continue
+        }
+        let at = match im.at {
+          Some(a) => if a == "" { continue } else { a }
+          None => continue
+        }
+        let id = match sc.id {
+          Some(x) => x
+          None => sc.name
+        }
+        let (path_part, task_name) = split_impl_at(at, im.kind)
+        let abs = if path_part.has_prefix("/") {
+          path_part
+        } else {
+          clean_path(repo_root + "/" + path_part)
+        }
+        if not(@xfs.exists(abs)) {
+          let key = id + "|" + path_part
+          if seen.get(key) is None {
+            seen[key] = true
+            out.push(ImplIssue::{
+              spec_id: id,
+              path: path_part,
+              reason: "file not found",
+            })
+          }
+          continue
+        }
+        if im.kind == "task" && task_name != "" && path_part.has_suffix("Taskfile.pkl") {
+          let names = match task_cache.get(abs) {
+            Some(v) => v
+            None => {
+              let v = list_pkfire_tasks(abs)
+              task_cache[abs] = v
+              v
+            }
+          }
+          match names {
+            Some(nm) =>
+              if nm.get(task_name) is None {
+                let key = id + "|" + path_part + "#" + task_name
+                if seen.get(key) is None {
+                  seen[key] = true
+                  out.push(ImplIssue::{
+                    spec_id: id,
+                    path: path_part + "#" + task_name,
+                    reason: "task \"\{task_name}\" not declared in \{path_part}",
+                  })
+                }
+              }
+            None => ()
+          }
+        }
+      }
+    }
+  }
+  out.sort_by((a, c) => lex_cmp(a.spec_id, c.spec_id))
+  out
+}
+
+///|
+/// The result of running `check`: separate stdout / stderr buffers and an
+/// exit code (Go writes success to stdout, failure detail to stderr +
+/// exit 1).
+pub struct CheckResult {
+  stdout : String
+  stderr : String
+  exit : Int
+}
+
+///|
+/// Run the `check` command, byte-mirroring Go `cmdSpec`'s check branch.
+/// `strict` enables on-disk Implementation.at verification; `repo_root`
+/// is the directory relative paths resolve against (Go `findRepoRoot`).
+pub async fn run_check(
+  plans : Array[@model.Plan],
+  strict : Bool,
+  repo_root : String,
+) -> CheckResult {
+  let issues = check_unimplemented(plans)
+  let unimplemented : Array[CheckIssue] = []
+  for iss in issues {
+    if iss.implemented.length() == 0 && iss.declared_in.length() > 0 {
+      unimplemented.push(iss)
+    }
+  }
+  let strict_issues = if strict {
+    verify_implemented_at(plans, repo_root)
+  } else {
+    []
+  }
+  let out = StringBuilder::new()
+  let err = StringBuilder::new()
+  if unimplemented.length() == 0 && strict_issues.length() == 0 {
+    out.write_string(
+      "pkspec: all \{declared_spec_count(plans)} declared spec(s) have an implementation\n",
+    )
+    if strict {
+      out.write_string(
+        "pkspec: --strict: every implementedAt path resolves on disk\n",
+      )
+    }
+    return CheckResult::{ stdout: out.to_string(), stderr: err.to_string(), exit: 0 }
+  }
+  if unimplemented.length() > 0 {
+    let mut crit = 0
+    let mut maj = 0
+    let mut mnr = 0
+    for iss in unimplemented {
+      match severity_for(plans, iss.spec_id) {
+        "critical" => crit = crit + 1
+        "minor" => mnr = mnr + 1
+        _ => maj = maj + 1
+      }
+    }
+    err.write_string(
+      "pkspec: \{unimplemented.length()} unimplemented spec(s) — \{crit} critical, \{maj} major, \{mnr} minor:\n",
+    )
+    for iss in unimplemented {
+      let contribs = contributes_for(plans, iss.spec_id)
+      let goal_suffix = if contribs.length() > 0 {
+        " → " + join(contribs, ", ")
+      } else {
+        ""
+      }
+      let rs = review_status_for(plans, iss.spec_id)
+      let sev = severity_for(plans, iss.spec_id)
+      let meta = if rs != "" && rs != "approved" { sev + ", " + rs } else { sev }
+      err.write_string(
+        "  \{iss.spec_id} (\{meta}; declared in: \{join(iss.declared_in, ", ")})\{goal_suffix}\n",
+      )
+    }
+  }
+  if strict_issues.length() > 0 {
+    err.write_string(
+      "pkspec: --strict: \{strict_issues.length()} implementedAt path(s) missing:\n",
+    )
+    for iss in strict_issues {
+      err.write_string("  \{iss.spec_id} → \{iss.path} (\{iss.reason})\n")
+    }
+  }
+  // Go's main() prints the returned error as "pkspec: <err>\n" on stderr.
+  err.write_string(
+    "pkspec: \{unimplemented.length()} unimplemented spec(s), \{strict_issues.length()} missing impl path(s)\n",
+  )
+  CheckResult::{ stdout: out.to_string(), stderr: err.to_string(), exit: 1 }
 }
 
 // ---- orphans ----

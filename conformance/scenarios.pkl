@@ -238,4 +238,48 @@ scenarios: Listing<Scenario> = new {
       exactStdout = true
     }
   }
+  // ── P2c: goals / milestones / docs / check ──────────────────────────
+  //
+  // goals on spec-graph: three non-deprecated Goals ranked priority DESC,
+  // each with its contributing-spec checklist (unimplemented first, id ASC),
+  // severity/status badges, blockquoted rationale, and the scenario-count
+  // progress line. The truncating `progressPercent` (int()) — NOT coverage's
+  // round-half-even — is load-bearing here (66% not 67%, 95% not 96%).
+  new {
+    id = "goals-spec-graph"
+    fixture = "conformance/fixtures/spec-graph"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-graph" }
+    argv { "goals"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // goals on spec-id: no Goals declared — the deterministic empty state.
+  new {
+    id = "goals-spec-id"
+    fixture = "conformance/fixtures/spec-id"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-id" }
+    argv { "goals"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // goals on spec-docs: a single approved Goal with a rationale and a fully
+  // implemented contributing-spec list (severity-major rows omit the badge).
+  new {
+    id = "goals-spec-docs"
+    fixture = "conformance/fixtures/spec-docs"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/spec-docs" }
+    argv { "goals"; "--root"; "."; "Spec.pkl"; "Test.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // milestones on spec-docs: one Milestone with a due date, approved status,
+  // and a goal rollup at 100% via goal-average — exercises the `[x]` mark and
+  // the per-Goal inline progress fragment.
+
 }

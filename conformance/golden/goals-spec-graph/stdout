@@ -1,0 +1,33 @@
+# Goals
+
+## GOAL-SECURE-AUTH — users can authenticate securely
+
+_priority 90 · 2 / 5 contributing specs implemented (40%)_
+
+End users can sign in with credentials and have the session protected against common attacks.
+
+> Without secure auth, every downstream feature is unusable for any real workload.
+
+- [ ] **AUTH-001a** — valid credentials happy path (critical)
+- [ ] **AUTH-001b** — valid credentials sets secure cookie (critical)
+- [ ] **AUTH-003** — rate-limits brute-force [review]
+- [x] **AUTH-001** — valid credentials (critical)
+- [x] **AUTH-002** — rejects wrong password (critical)
+
+## GOAL-FRICTIONLESS-LOGIN — auth flow is fast and low-friction
+
+_priority 60 · 1 / 2 contributing specs implemented (50%)_
+
+Most users get in on the first try; recoverable mistakes don't dead-end.
+
+- [ ] **AUTH-004** — passwordless_magic_link (minor) [draft]
+- [x] **AUTH-001** — valid credentials (critical)
+
+## GOAL-AUDIT-TRAIL — auth events are auditable
+
+_priority 30 · 1 / 1 contributing specs implemented (100%)_
+
+Security review can reconstruct who tried to log in when.
+
+- [x] **AUTH-002** — rejects wrong password (critical)
+

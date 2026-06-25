@@ -17,6 +17,10 @@ fn usage() -> String {
     #|  implementations [opts] <path>...  list spec ids with active implementers
     #|  next [opts] <path>...       rank unimplemented specs by Goal priority
     #|  spec [opts] <path>...       render a Markdown SPEC.md from Test.pkl modules
+    #|  goals [opts] <path>...      list Goals with contributing-spec coverage
+    #|  milestones [opts] <path>... list Milestones with Goal progress rollups
+    #|  docs --audience X [opts] <path>...  render audience-specific Markdown
+    #|  check [opts] <path>...      verify declared specs have implementations
   s
 }
 
@@ -106,6 +110,18 @@ fn resolve_root(sa : SpecArgs) -> String {
 
 ///|
 suberror SpecCliError { SpecCliError(String) } derive(Debug)
+
+///|
+/// Render an error as the bare message Go prints after `pkspec: `. For a
+/// `SpecCliError` this is its payload string (so a flag-parse error reads
+/// `flag provided but not defined: -root`, matching the Go oracle); other
+/// errors fall back to their Show form.
+fn err_message(e : Error) -> String {
+  match e {
+    SpecCliError(msg) => msg
+    _ => e.to_string()
+  }
+}
 
 ///|
 /// Resolve the input Pkl paths and load each into a `@model.Plan`, merging
@@ -386,6 +402,10 @@ async fn main {
       run_spec_cmd_ctx(rest, (plans, root, tags) => render_spec(
         plans, root, tags,
       ))
+    "goals" => run_spec_cmd(rest, plans => render_goals(plans))
+    "milestones" => run_spec_cmd(rest, plans => render_milestones(plans))
+    "docs" => run_docs_cmd(rest)
+    "check" => run_check_cmd(rest)
     other => {
       println("pkspec: unknown command: \{other}")
       println(usage())
@@ -449,4 +469,257 @@ async fn run_spec_cmd_ctx(
   }
   @stdio.stdout.write(render(plans, root, sa.tags))
   0
+}
+
+///|
+/// Parsed `docs` flags + positional paths. `docs` does NOT accept `--root`
+/// (Go's cmdDocs has no root flag and errors on it); it adds `--audience`,
+/// `--hide-implementation`, `--output` (ignored here — stdout only), and the
+/// shared `--tag` / `--goal` / `--severity` / `--discover` flags.
+priv struct DocsArgs {
+  paths : Array[String]
+  audience : String
+  tags : Array[String]
+  goal : String
+  severity : String
+  discover : Bool
+  hide_implementation : Bool
+}
+
+///|
+fn parse_docs_args(args : ArrayView[String]) -> DocsArgs raise {
+  let paths : Array[String] = []
+  let mut audience = ""
+  let tags : Array[String] = []
+  let mut goal = ""
+  let mut severity = ""
+  let mut discover = false
+  // Go's flag default for --hide-implementation is true.
+  let mut hide_implementation = true
+  let mut i = 0
+  // Pull the value for a value-taking flag: prefer the `--flag=value`
+  // inline form, else consume the next argv token (Go's flag package
+  // accepts both).
+  fn take(flag : String, inline : String?) -> String {
+    match inline {
+      Some(v) => v
+      None => {
+        i = i + 1
+        if i < args.length() {
+          args[i]
+        } else {
+          let _ = flag
+          ""
+        }
+      }
+    }
+  }
+
+  while i < args.length() {
+    let a = args[i]
+    // Split `--flag=value` into (name, Some(value)); otherwise (a, None).
+    let (name, inline) = split_eq(a)
+    match name {
+      "--audience" => audience = take(name, inline)
+      "--tag" => tags.push(take(name, inline))
+      "--goal" => goal = take(name, inline)
+      "--severity" => severity = take(name, inline)
+      "--output" =>
+        // stdout-only port: consume the value but ignore it.
+        take(name, inline) |> ignore
+      "--hide-implementation" =>
+        match inline {
+          Some(v) => hide_implementation = parse_go_bool(v)
+          None => hide_implementation = true
+        }
+      "--discover" => discover = true
+      _ =>
+        if a.has_prefix("--") {
+          raise SpecCliError(
+            "flag provided but not defined: -\{strip_dashes(name)}",
+          )
+        } else {
+          paths.push(a)
+        }
+    }
+    i = i + 1
+  }
+  DocsArgs::{
+    paths,
+    audience,
+    tags,
+    goal,
+    severity,
+    discover,
+    hide_implementation,
+  }
+}
+
+///|
+/// Run `docs`: parse flags, require --audience, load plans (goal/severity
+/// filtered), render the audience projection to stdout.
+async fn run_docs_cmd(rest : ArrayView[String]) -> Int {
+  let da = match (try? parse_docs_args(rest)) {
+    Ok(v) => v
+    Err(e) => {
+      println("pkspec: \{err_message(e)}")
+      return 1
+    }
+  }
+  if trim_space(da.audience) == "" {
+    println("pkspec: docs requires --audience")
+    return 1
+  }
+  let sa = SpecArgs::{
+    paths: da.paths,
+    goal: da.goal,
+    severity: da.severity,
+    discover: da.discover,
+    root: "",
+    tags: [],
+  }
+  let plans = match (try? load_plans(sa)) {
+    Ok(v) => v
+    Err(e) => {
+      println("pkspec: \{e}")
+      return 1
+    }
+  }
+  @stdio.stdout.write(
+    render_docs(plans, trim_space(da.audience), da.tags, da.hide_implementation),
+  )
+  0
+}
+
+///|
+/// Parsed `check` flags: the shared spec flags plus `--strict`.
+priv struct CheckArgs {
+  spec : SpecArgs
+  strict : Bool
+}
+
+///|
+fn parse_check_args(args : ArrayView[String]) -> CheckArgs raise {
+  // Strip `--strict` then reuse the shared spec-flag parser for the rest.
+  let rest : Array[String] = []
+  let mut strict = false
+  for a in args {
+    if a == "--strict" {
+      strict = true
+    } else {
+      rest.push(a)
+    }
+  }
+  CheckArgs::{ spec: parse_spec_args(rest[:]), strict }
+}
+
+///|
+/// Run `check`: load plans (goal/severity filtered), cross-reference declared
+/// specs vs implementations, optionally verify Implementation.at on disk, and
+/// write success to stdout / failure detail to stderr with exit 0/1.
+async fn run_check_cmd(rest : ArrayView[String]) -> Int {
+  let ca = match (try? parse_check_args(rest)) {
+    Ok(v) => v
+    Err(e) => {
+      println("pkspec: \{err_message(e)}")
+      return 1
+    }
+  }
+  let plans = match (try? load_plans(ca.spec)) {
+    Ok(v) => v
+    Err(e) => {
+      println("pkspec: \{e}")
+      return 1
+    }
+  }
+  let repo_root = find_repo_root()
+  let res = run_check(plans, ca.strict, repo_root)
+  if res.stdout != "" {
+    @stdio.stdout.write(res.stdout)
+  }
+  if res.stderr != "" {
+    @stdio.stderr.write(res.stderr)
+  }
+  res.exit
+}
+
+///|
+/// Walk up from the current directory to the nearest `.git` or `go.mod`,
+/// falling back to cwd (Go `findRepoRoot`). Resolves relative
+/// Implementation.at paths under `check --strict`.
+async fn find_repo_root() -> String {
+  let cwd = match @env.current_dir() {
+    Some(d) => d
+    None => "."
+  }
+  let mut dir = cwd
+  while true {
+    if @xfs.exists(dir + "/.git") || @xfs.exists(dir + "/go.mod") {
+      return dir
+    }
+    let parent = parent_path(dir)
+    if parent == dir {
+      return cwd
+    }
+    dir = parent
+  }
+  cwd
+}
+
+///|
+/// Split a `--flag=value` token into `("--flag", Some("value"))`; a token
+/// with no `=` returns `(token, None)`. Mirrors Go's flag-package handling
+/// of the inline `=` form.
+fn split_eq(a : String) -> (String, String?) {
+  let chars = a.to_array()
+  for i in 0..<chars.length() {
+    if chars[i] == '=' {
+      return (
+        a.substring(start=0, end=i),
+        Some(a.substring(start=i + 1, end=a.length())),
+      )
+    }
+  }
+  (a, None)
+}
+
+///|
+/// Strip leading `-` characters from a flag token (Go reports the bare flag
+/// name in "flag provided but not defined: -<name>").
+fn strip_dashes(s : String) -> String {
+  let chars = s.to_array()
+  let mut start = 0
+  while start < chars.length() && chars[start] == '-' {
+    start = start + 1
+  }
+  s.substring(start~, end=s.length())
+}
+
+///|
+/// Parse a Go `strconv.ParseBool` value (the set the flag package accepts:
+/// 1/t/T/TRUE/true/True and 0/f/F/FALSE/false/False). Unrecognized values
+/// default to true (the flag's own default) — this CLI never passes one.
+fn parse_go_bool(v : String) -> Bool {
+  match v {
+    "1" | "t" | "T" | "TRUE" | "true" | "True" => true
+    "0" | "f" | "F" | "FALSE" | "false" | "False" => false
+    _ => true
+  }
+}
+
+///|
+/// Parent directory of an absolute path (drop the last `/segment`).
+fn parent_path(path : String) -> String {
+  let chars = path.to_array()
+  let mut last = -1
+  for i in 0..<chars.length() {
+    if chars[i] == '/' {
+      last = i
+    }
+  }
+  if last <= 0 {
+    "/"
+  } else {
+    path.substring(start=0, end=last)
+  }
 }
