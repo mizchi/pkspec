@@ -28,6 +28,8 @@ priv struct ExecArgs {
   junit_reports : String
   refresh_snapshots : Bool
   update_inline : Bool
+  refresh_http : Bool
+  http_replay_only : Bool
 }
 
 ///|
@@ -38,6 +40,8 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
   let mut junit_reports = ""
   let mut refresh_snapshots = false
   let mut update_inline = false
+  let mut refresh_http = false
+  let mut http_replay_only = false
   let mut i = 0
   while i < args.length() {
     let a = args[i]
@@ -66,15 +70,14 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
       "--refresh-snapshots" => refresh_snapshots = true
       // P3d: on inline-snapshot mismatch, rewrite the Test.pkl source in place.
       "--update-inline-snapshots" => update_inline = true
+      // P4a: HTTP cassette record/replay controls.
+      "--refresh-http" => refresh_http = true
+      "--http-replay-only" => http_replay_only = true
       // Deferred value-flags: consume the value so it is not mistaken for a
       // positional arg, but ignore it (no effect this phase).
       "--shard" | "--total-timeout" | "--timings-file" => take() |> ignore
       // Deferred boolean-flags: accept and ignore.
-      "--refresh-ai"
-      | "--refresh-http"
-      | "--http-replay-only"
-      | "--no-record-timings"
-      | "--rerun-failed" => ()
+      "--refresh-ai" | "--no-record-timings" | "--rerun-failed" => ()
       _ =>
         if a.has_prefix("-") {
           raise SpecCliError("flag provided but not defined: -\{strip_dashes(name)}")
@@ -85,7 +88,16 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
     }
     i = i + 1
   }
-  ExecArgs::{ file, only, tags, junit_reports, refresh_snapshots, update_inline }
+  ExecArgs::{
+    file,
+    only,
+    tags,
+    junit_reports,
+    refresh_snapshots,
+    update_inline,
+    refresh_http,
+    http_replay_only,
+  }
 }
 
 ///|
@@ -339,7 +351,7 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
     } else {
       run_exec_one(
         name, t, defaults, workdir, test_state, ea.refresh_snapshots, abs,
-        ea.update_inline,
+        ea.update_inline, ea.refresh_http, ea.http_replay_only,
       )
     }
 
@@ -438,10 +450,12 @@ async fn run_exec_one(
   refresh_snapshots : Bool,
   source_path : String,
   update_inline : Bool,
+  refresh_http : Bool,
+  http_replay_only : Bool,
 ) -> @executor.Result {
   @executor.run_one(
     name, t, defaults, workdir, state, t.spec_ref, refresh_snapshots~,
-    source_path~, update_inline~,
+    source_path~, update_inline~, refresh_http~, http_replay_only~,
   )
 }
 

@@ -92,3 +92,21 @@ for id in $p3c_fixtures; do
   fi
   echo "regenerated $fx (from examples/$id)"
 done
+
+# P4a exec http fixture: the `http` step kind + cassette replay. Unlike the
+# vendored P3 fixtures, exec-http-cassette is HAND-AUTHORED (the real
+# examples/http-cassette uses a background python server, which is non-hermetic
+# / non-deterministic for conformance). The fixture has NO background and ships
+# a COMMITTED cassette under examples/exec-http-cassette/.pkspec/http/ whose
+# body is `{"call": 1}` and whose hash = sha256("GET\n<url>\n"); `exec
+# --http-replay-only` replays it with no network. Regen only re-vendors the
+# pkl/Test.pkl schema and NEVER overwrites the hand-authored example module +
+# cassette (deleting them would lose the deterministic recorded response).
+http_fx="$here/exec-http-cassette"
+if [ -f "$http_fx/examples/exec-http-cassette/Test.pkl" ]; then
+  mkdir -p "$http_fx/pkl"
+  cp "$repo/pkl/Test.pkl" "$http_fx/pkl/"
+  echo "re-vendored schema for $http_fx (hand-authored example + cassette preserved)"
+else
+  echo "skip $http_fx (hand-authored example missing)" >&2
+fi

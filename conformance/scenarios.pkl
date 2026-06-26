@@ -846,4 +846,37 @@ scenarios: Listing<Scenario> = new {
       normalizeDurations = true
     }
   }
+  // ── P4a: exec http step + cassette record/replay ─────────────────────
+  //
+  // Same oracle CLASS 2 gating as the other exec scenarios. The HERMETIC path
+  // is a cassette REPLAY with `--http-replay-only`: NO live server (the
+  // examples/http-basic + examples/background-server live-server fixtures are
+  // EXCLUDED — non-deterministic ports + network). The fixture is hand-authored
+  // (not vendored from examples/http-cassette, which has a background server):
+  // a single GET HttpBody step + a COMMITTED cassette `.pkspec/http/
+  // counter_first.json` whose body is `{"call": 1}` and whose hash =
+  // sha256("GET\n<url>\n") (empty request body), so the step PASSES
+  // deterministically with no network. The committed cassette was obtained by
+  // hand-authoring it to match what the example expects (the live
+  // examples/http-cassette counter increments per request, so a recorded value
+  // is volatile); the Go oracle replays the SAME committed cassette
+  // byte-identically (verified in the P4a parity diff). Gate exit 0 + empty
+  // stdout + the normalized stderr (passing progress line + green summary).
+  //
+  // EXCLUDED (live server / non-deterministic, NOT gated here):
+  //   - http-basic         (background python server + free-ish fixed port)
+  //   - background-server  (live server lifecycle)
+  // DEFERRED (later sub-phases, error loudly): sql / playwright / quickcheck.
+  new {
+    id = "exec-http-cassette"
+    fixture = "conformance/fixtures/exec-http-cassette"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-http-cassette" }
+    argv { "exec"; "-f"; "Test.pkl"; "--http-replay-only"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
 }

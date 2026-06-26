@@ -1300,8 +1300,8 @@ fn step_expectations(s : @model.Step) -> Array[String] {
     Some(_) => out.push("body~contains")
     None => ()
   }
-  if s.expect_body_json_path_count > 0 {
-    out.push("jsonpath(\{s.expect_body_json_path_count})")
+  if s.expect_body_json_path.size() > 0 {
+    out.push("jsonpath(\{s.expect_body_json_path.size()})")
   }
   match s.inline_stdout {
     Some(v) => out.push("inline: stdout = \{quote_inline(v)}")

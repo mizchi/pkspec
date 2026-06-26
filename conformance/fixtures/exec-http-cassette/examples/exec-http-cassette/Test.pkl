@@ -1,0 +1,35 @@
+amends "../../pkl/Test.pkl"
+
+// Hermetic HTTP cassette replay. No background server: the committed cassette
+// under .pkspec/http/counter_first.json supplies the recorded response, so
+// `exec --http-replay-only` is fully deterministic (no network, no port). The
+// cassette body is `{"call": 1}` and the assertions expect `call == 1` +
+// status 200, so the test PASSES. The cassette hash is
+// sha256("GET\n<url>\n") (empty request body), matching the Go oracle's
+// `httpDigest`.
+tests {
+  new {
+    name = "replay_counter"
+    description = "record/replay HTTP, hermetic: the committed cassette is replayed with no live server"
+    tags { "unit" }
+    specRef { "kind.http"; "diff.cross-language" }
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "call"
+          body = new HttpBody {
+            http = new HttpRequest {
+              method = "GET"
+              url = "http://127.0.0.1:19011/counter"
+            }
+            cassette = "counter_first"
+            expectStatus = 200
+            expectBodyJsonPath {
+              ["call"] = 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

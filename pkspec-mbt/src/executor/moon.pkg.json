@@ -43,6 +43,14 @@
     {
       "path": "moonbitlang/regexp",
       "alias": "regexp"
+    },
+    {
+      "path": "mizchi/x/http",
+      "alias": "http"
+    },
+    {
+      "path": "moonbitlang/x/crypto",
+      "alias": "crypto"
     }
   ],
   "warn-list": "-29-20-6-1",
@@ -57,6 +65,12 @@
       "native"
     ],
     "steps.mbt": [
+      "native"
+    ],
+    "http.mbt": [
+      "native"
+    ],
+    "httpenv.mbt": [
       "native"
     ],
     "background.mbt": [
@@ -75,6 +89,9 @@
       "native"
     ],
     "executor_wbtest.mbt": [
+      "native"
+    ],
+    "http_wbtest.mbt": [
       "native"
     ]
   }
