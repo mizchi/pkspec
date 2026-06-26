@@ -4,6 +4,7 @@
     { "path": "mizchi/pkspec-mbt/src/config", "alias": "config" },
     { "path": "mizchi/pkspec-mbt/src/model", "alias": "model" },
     { "path": "mizchi/pkspec-mbt/src/executor", "alias": "executor" },
+    { "path": "mizchi/pkspec-mbt/src/migrate", "alias": "migrate" },
     { "path": "mizchi/x/fs", "alias": "xfs" },
     { "path": "mizchi/x/process", "alias": "process" },
     { "path": "moonbitlang/async", "alias": "async" },
@@ -21,6 +22,7 @@
     "spec_cmds.mbt": ["native"],
     "exec_cmd.mbt": ["native"],
     "run_cmd.mbt": ["native"],
+    "migrate_cmd.mbt": ["native"],
     "doctor.mbt": ["native"],
     "timings.mbt": ["native"],
     "timings_wbtest.mbt": ["native"]
