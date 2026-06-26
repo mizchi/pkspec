@@ -22,6 +22,7 @@ fn usage() -> String {
     #|  docs --audience X [opts] <path>...  render audience-specific Markdown
     #|  check [opts] <path>...      verify declared specs have implementations
     #|  exec [-f Test.pkl] [--only N] [--tag T]  run shell `cmd` tests
+    #|  run [--allow-cmd] <files>   wrap `pkl test`, translate its exit code
   s
 }
 
@@ -474,6 +475,7 @@ async fn main {
     "docs" => run_docs_cmd(rest)
     "check" => run_check_cmd(rest)
     "exec" => run_exec_cmd(rest)
+    "run" => run_run_cmd(rest)
     other => {
       // Go prints the usage banner and the error to STDERR for an unknown
       // command (cmd/pkspec/main.go: usage(stderr) then the os.Exit(1)

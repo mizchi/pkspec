@@ -18,6 +18,7 @@ pub struct Contract {
   exact_stdout : Bool
   exact_stderr : Bool
   normalize_durations : Bool
+  normalize_date : Bool
 }
 
 ///|
@@ -31,7 +32,13 @@ pub struct Scenario {
 }
 
 ///|
-suberror ScenarioError String derive(Show)
+suberror ScenarioError { ScenarioError(String) }
+
+///|
+impl Show for ScenarioError with output(self, logger) {
+  let ScenarioError(msg) = self
+  logger.write_string(msg)
+}
 
 ///|
 /// Evaluate the scenarios module at `path` (relative to cwd) and return the
@@ -59,9 +66,8 @@ pub async fn load_scenarios(path : String) -> Array[Scenario] raise {
     }
   }
   let rendered = @pkl.render_value_as_json(value)
-  let root = match (try? @json.parse(rendered)) {
-    Ok(v) => v
-    Err(e) => raise ScenarioError("decode scenarios json: \{e}")
+  let root = try @json.parse(rendered) catch {
+    e => raise ScenarioError("decode scenarios json: \{e}")
   }
   let scenarios_json = match root {
     Object(o) =>
@@ -108,6 +114,7 @@ fn parse_scenario(j : Json) -> Scenario raise {
       exact_stdout: get_bool(cj, "exactStdout"),
       exact_stderr: get_bool(cj, "exactStderr"),
       normalize_durations: get_bool(cj, "normalizeDurations"),
+      normalize_date: get_bool(cj, "normalizeDate"),
     },
   }
 }
@@ -146,7 +153,7 @@ fn get_string_array(o : Map[String, Json], k : String) -> Array[String] {
 
 ///|
 fn get_string_map(o : Map[String, Json], k : String) -> Map[String, String] {
-  let out : Map[String, String] = Map::new()
+  let out : Map[String, String] = {}
   match o.get(k) {
     Some(Object(m)) =>
       for mk, mv in m {

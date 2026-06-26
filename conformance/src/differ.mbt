@@ -14,17 +14,13 @@
 /// `reflect.TypeOf` does, so a stringified number/bool ("1" vs 1) is a type
 /// mismatch, not equality.
 pub fn diff_json(want : String, got : String, unordered : Array[String]) -> String {
-  let wv = try? @json.parse(want)
-  let wv = match wv {
-    Ok(v) => v
-    Err(e) => return "golden is not valid JSON: \{e}"
+  let wv = try @json.parse(want) catch {
+    e => return "golden is not valid JSON: \{e}"
   }
-  let gv = try? @json.parse(got)
-  let gv = match gv {
-    Ok(v) => v
-    Err(e) => return "candidate stdout is not valid JSON: \{e}"
+  let gv = try @json.parse(got) catch {
+    e => return "candidate stdout is not valid JSON: \{e}"
   }
-  let set : Map[String, Bool] = Map::new()
+  let set : Map[String, Bool] = {}
   for p in unordered {
     set[p] = true
   }
@@ -95,7 +91,7 @@ fn json_diff(
       if scalar_type(want) != scalar_type(got) {
         return "\{path_or_root(path)}: type \{type_name(want)} != \{type_name(got)}"
       }
-      if not(scalar_eq(want, got)) {
+      if !scalar_eq(want, got) {
         return "\{path_or_root(path)}: \{scalar_show(want)} != \{scalar_show(got)}"
       }
       ""
@@ -128,7 +124,7 @@ fn scalar_eq(a : Json, b : Json) -> Bool {
     (True, False) => false
     (False, True) => false
     // Compare numbers by value, not repr: Go parses to float64 so 1 == 1.0.
-    (Number(x), Number(y)) => x == y
+    (Number(x, ..), Number(y, ..)) => x == y
     (String(x), String(y)) => x == y
     _ => false
   }
@@ -152,7 +148,7 @@ fn scalar_show(j : Json) -> String {
     Null => "<nil>"
     True => "true"
     False => "false"
-    Number(x) => {
+    Number(x, ..) => {
       // Go prints float64 with %v; integers come out without a decimal point.
       let n = x.to_int()
       if n.to_double() == x {
@@ -187,7 +183,7 @@ fn canon_json(j : Json) -> String {
     Null => "null"
     True => "true"
     False => "false"
-    Number(x) => {
+    Number(x, ..) => {
       let n = x.to_int()
       if n.to_double() == x {
         "\{n}"
@@ -284,11 +280,10 @@ pub fn strip_json_keys(raw : String, keys : Array[String]) -> String {
   if keys.length() == 0 {
     return raw
   }
-  let v = match (try? @json.parse(raw)) {
-    Ok(v) => v
-    Err(_) => return raw
+  let v = try @json.parse(raw) catch {
+    _ => return raw
   }
-  let set : Map[String, Bool] = Map::new()
+  let set : Map[String, Bool] = {}
   for k in keys {
     set[k] = true
   }
@@ -300,7 +295,7 @@ pub fn strip_json_keys(raw : String, keys : Array[String]) -> String {
 fn strip_walk(n : Json, set : Map[String, Bool]) -> Json {
   match n {
     Object(o) => {
-      let out : Map[String, Json] = Map::new()
+      let out : Map[String, Json] = {}
       for k, v in o {
         if set.get(k) is Some(true) {
           continue
@@ -402,7 +397,7 @@ fn is_duration_token(chars : Array[Char], start : Int, end : Int) -> Bool {
     }
     k = k + 1
   }
-  if not(saw_digit) || k >= end {
+  if !saw_digit || k >= end {
     return false
   }
   // Remaining text must be a known unit (optionally followed by more
@@ -411,6 +406,68 @@ fn is_duration_token(chars : Array[Char], start : Int, end : Int) -> Bool {
   // to ')' is consumed as part of the duration.
   let u = chars[k]
   u == 'n' || u == 'µ' || u == 'u' || u == 'm' || u == 's' || u == 'h'
+}
+
+///|
+/// Replace the volatile CURRENT-date token the `lint.future-decision-date`
+/// rule emits — the `YYYY-MM-DD` immediately following the literal
+/// `today UTC: ` — with the stable placeholder `<DATE>`. This is deliberately
+/// anchored to the `today UTC: ` prefix so it normalizes ONLY the runtime
+/// "today" value and never the INPUT decision date (e.g. the `2099-01-01` that
+/// is part of the lint contract). Applied to both golden and candidate before
+/// the exactStdout compare when `normalizeDate` is set, so a golden captured on
+/// 2026-06-25 matches a candidate run on any later day.
+pub fn normalize_dates(s : String) -> String {
+  let anchor = "today UTC: "
+  let chars = s.to_array()
+  let aa = anchor.to_array()
+  let out = StringBuilder::new()
+  let mut i = 0
+  while i < chars.length() {
+    // Try to match the anchor at i.
+    let mut hit = i + aa.length() <= chars.length()
+    if hit {
+      for k in 0..<aa.length() {
+        if chars[i + k] != aa[k] {
+          hit = false
+          break
+        }
+      }
+    }
+    if hit && is_iso_date(chars, i + aa.length()) {
+      out.write_string(anchor)
+      out.write_string("<DATE>")
+      // Skip the anchor + the 10-char `YYYY-MM-DD` token.
+      i = i + aa.length() + 10
+      continue
+    }
+    out.write_char(chars[i])
+    i = i + 1
+  }
+  out.to_string()
+}
+
+///|
+/// Whether `chars[start..start+10]` is exactly `YYYY-MM-DD` (4 digits, `-`, 2
+/// digits, `-`, 2 digits).
+fn is_iso_date(chars : Array[Char], start : Int) -> Bool {
+  if start + 10 > chars.length() {
+    return false
+  }
+  fn dig(p : Int) -> Bool {
+    chars[p] >= '0' && chars[p] <= '9'
+  }
+
+  dig(start) &&
+  dig(start + 1) &&
+  dig(start + 2) &&
+  dig(start + 3) &&
+  chars[start + 4] == '-' &&
+  dig(start + 5) &&
+  dig(start + 6) &&
+  chars[start + 7] == '-' &&
+  dig(start + 8) &&
+  dig(start + 9)
 }
 
 ///|
@@ -432,6 +489,21 @@ pub fn marshal_delta(paths : Array[String]) -> String {
 }
 
 ///|
+/// Compose the contract's enabled volatile-token normalizers over `s` (the
+/// duration token first, then the current-date token), so both the golden and
+/// candidate streams are reduced to their stable form before the exact compare.
+fn normalize_volatile(text : String, c : Contract) -> String {
+  let mut out = text
+  if c.normalize_durations {
+    out = normalize_durations(out)
+  }
+  if c.normalize_date {
+    out = normalize_dates(out)
+  }
+  out
+}
+
+///|
 /// Apply a scenario's contract to a candidate result against a golden.
 /// Returns "" on match or the first failure description. The check ORDER
 /// (exit -> json -> mustContain -> fsDelta/fsDeleted -> mustContainStderr ->
@@ -449,16 +521,8 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
     }
   }
   if s.contract.exact_stdout {
-    let ws = if s.contract.normalize_durations {
-      normalize_durations(want.stdout)
-    } else {
-      want.stdout
-    }
-    let gs = if s.contract.normalize_durations {
-      normalize_durations(got.stdout)
-    } else {
-      got.stdout
-    }
+    let ws = normalize_volatile(want.stdout, s.contract)
+    let gs = normalize_volatile(got.stdout, s.contract)
     let w = normalize_text(ws)
     let g = normalize_text(gs)
     if w != g {
@@ -470,16 +534,8 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
   // normalizeDurations is set, then the same whitespace-collapse as
   // exactStdout is applied before the exact compare.
   if s.contract.exact_stderr {
-    let we = if s.contract.normalize_durations {
-      normalize_durations(want.stderr)
-    } else {
-      want.stderr
-    }
-    let ge = if s.contract.normalize_durations {
-      normalize_durations(got.stderr)
-    } else {
-      got.stderr
-    }
+    let we = normalize_volatile(want.stderr, s.contract)
+    let ge = normalize_volatile(got.stderr, s.contract)
     let w = normalize_text(we)
     let g = normalize_text(ge)
     if w != g {
@@ -487,7 +543,7 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
     }
   }
   for sub in s.contract.must_contain {
-    if not(contains_normalized(got.stdout, sub)) {
+    if !contains_normalized(got.stdout, sub) {
       return "mustContain: \"\{sub}\" not found in normalized stdout"
     }
   }
@@ -510,7 +566,7 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
     }
   }
   for sub in s.contract.must_contain_stderr {
-    if not(contains_normalized(got.stderr, sub)) {
+    if !contains_normalized(got.stderr, sub) {
       return "mustContainStderr: \"\{sub}\" not found in normalized stderr"
     }
   }

@@ -226,3 +226,73 @@ test "build_suite + marshal_suite: pass + fail XML shape" {
   // Passing case is a bare empty testcase (classname present, no time at 0).
   assert_true(xml.contains("name=\"a_passes\"></testcase>"))
 }
+
+///|
+/// Inline-snapshot SOURCE rewrite: single-line value. Locks the exact
+/// `new InlineSnapshot { state = "match"; value = "<encoded>" }` encoding that
+/// the byte-parity sweep verified against the Go oracle.
+test "replace_inline_snapshot_field: single-line value" {
+  let src =
+    #|tests {
+    #|  new {
+    #|    name = "echo_pong"
+    #|    body = new CmdTest {
+    #|      cmd = "echo pong"
+    #|      inlineStdout = new InlineSnapshot { state = "match"; value = "STALE\n" }
+    #|    }
+    #|  }
+    #|}
+  let out = replace_inline_snapshot_field(src, "echo_pong", "inlineStdout", "pong\n")
+  let want =
+    #|tests {
+    #|  new {
+    #|    name = "echo_pong"
+    #|    body = new CmdTest {
+    #|      cmd = "echo pong"
+    #|      inlineStdout = new InlineSnapshot { state = "match"; value = "pong\n" }
+    #|    }
+    #|  }
+    #|}
+  assert_eq(out, want)
+}
+
+///|
+/// Inline-snapshot rewrite: a multi-line value (>= 4 newlines) switches to the
+/// Pkl `"""` triple-quoted block, column-aligned to the field indent. This is
+/// the hard sub-case (text surgery across lines).
+test "replace_inline_snapshot_field: multi-line -> triple-quoted" {
+  let src =
+    #|tests {
+    #|  new {
+    #|    name = "t"
+    #|    body = new CmdTest {
+    #|      inlineStdout = new InlineSnapshot { state = "match"; value = "STALE" }
+    #|    }
+    #|  }
+    #|}
+  let out = replace_inline_snapshot_field(
+    src, "t", "inlineStdout", "a\nb\nc\nd\ne\n",
+  )
+  // Triple-quoted: opening `"""`, each body line at the value indent (6 spaces
+  // = field indent `      ` + 2), the trailing newline yields a blank line, and
+  // the closing `"""`. Matches the Go oracle's encodeTripleQuoted output.
+  assert_true(out.contains("value = \"\"\"\n"))
+  assert_true(out.contains("\n        a\n        b\n        c\n        d\n        e\n        \n        \"\"\""))
+  assert_true(out.contains("inlineStdout = new InlineSnapshot {\n"))
+}
+
+///|
+/// Inline-snapshot rewrite: a missing block name raises Go's exact error text.
+test "replace_inline_snapshot_field: unknown block errors" {
+  let src =
+    #|tests {
+    #|  new { name = "a"; body = new CmdTest { inlineStdout = new InlineSnapshot {} } }
+    #|}
+  let raised = try {
+    replace_inline_snapshot_field(src, "nope", "inlineStdout", "x") |> ignore
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+}

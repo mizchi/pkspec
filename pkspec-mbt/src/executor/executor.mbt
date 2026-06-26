@@ -116,6 +116,8 @@ pub async fn run_cmd(
   spec_ref : Array[String],
   extra_env? : Map[String, String] = Map::new(),
   refresh_snapshots? : Bool = false,
+  source_path? : String = "",
+  update_inline? : Bool = false,
 ) -> Result {
   let res = Result::{
     name,
@@ -216,11 +218,19 @@ pub async fn run_cmd(
       if not(snap_err.ok) {
         res.reasons.push("stderr " + snap_err.reason)
       }
-      match check_inline("inlineStdout", t.inline_stdout, stdout) {
+      match
+        check_inline(
+          name, "inlineStdout", t.inline_stdout, stdout, source_path,
+          update_inline,
+        ) {
         Some(r) => res.reasons.push(r)
         None => ()
       }
-      match check_inline("inlineStderr", t.inline_stderr, stderr) {
+      match
+        check_inline(
+          name, "inlineStderr", t.inline_stderr, stderr, source_path,
+          update_inline,
+        ) {
         Some(r) => res.reasons.push(r)
         None => ()
       }
@@ -244,9 +254,12 @@ pub async fn run_cmd_into(
   workdir : String,
   extra_env : Map[String, String],
   refresh_snapshots? : Bool = false,
+  source_path? : String = "",
+  update_inline? : Bool = false,
 ) -> Unit {
   let r = run_cmd(
     name, t, defaults, workdir, t.spec_ref, extra_env~, refresh_snapshots~,
+    source_path~, update_inline~,
   )
   res.outcome = r.outcome
   for rr in r.reasons {
@@ -258,20 +271,40 @@ pub async fn run_cmd_into(
 }
 
 ///|
-/// The ASSERT side of an inline snapshot (Go `checkInline` minus the
-/// `--update-inline-snapshots` rewrite, which is deferred to P3c). A `None`
-/// field means "no inline assertion"; a populated field that matches yields
-/// no reason; a mismatch yields Go's `"<field> mismatch:\n<diff>"`.
-fn check_inline(
+/// The inline-snapshot check (Go `checkInline`). A `None` field means "no
+/// inline assertion"; a populated field that matches yields no reason. On
+/// mismatch:
+///   - with `update_inline` (`--update-inline-snapshots`): rewrite the Test.pkl
+///     SOURCE at `source_path` to populate the field with the live capture,
+///     emit `[pkspec] <field> for "<block>" updated (<n> bytes)` to stderr, and
+///     return NO reason (Go's overwrite-and-pass branch). A rewrite failure
+///     returns `<field> update failed: <err>`.
+///   - without the flag: return Go's `"<field> mismatch:\n<diff>"`.
+async fn check_inline(
+  block_name : String,
   field_name : String,
   expected : String?,
   actual : String,
+  source_path : String,
+  update_inline : Bool,
 ) -> String? {
   match expected {
     None => None
     Some(want) =>
       if want == actual {
         None
+      } else if update_inline {
+        match (try? rewrite_inline(source_path, block_name, field_name, actual)) {
+          Err(e) => Some("\{field_name} update failed: \{e}")
+          Ok(_) => {
+            // Byte count is Go's `len(value)` = the UTF-8 byte length.
+            let n = str_to_bytes(actual).length()
+            @stdio.stderr.write(
+              "[pkspec] \{field_name} for \{go_quote(block_name)} updated (\{n} bytes)\n",
+            )
+            None
+          }
+        }
       } else {
         Some("\{field_name} mismatch:\n\{diff(want, actual)}")
       }

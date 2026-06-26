@@ -4,7 +4,17 @@
 // and a JSON `null` identically (the zero value), matching pkl-go's decode.
 
 ///|
-pub suberror ModelError { ModelError(String) } derive(Debug)
+/// `Show` writes ONLY the inner message (not the `derive(Debug)` qualified
+/// `mizchi/pkspec-mbt/src/model.ModelError.ModelError` repr), so a malformed-
+/// shape failure routed through `err_message` -> `e.to_string()` prints a clean
+/// `pkspec: <message>` instead of leaking the type path.
+pub suberror ModelError { ModelError(String) }
+
+///|
+impl Show for ModelError with output(self, logger) {
+  let ModelError(msg) = self
+  logger.write_string(msg)
+}
 
 ///|
 /// Parse a rendered-JSON value into a `Plan`. `source_path` is recorded on

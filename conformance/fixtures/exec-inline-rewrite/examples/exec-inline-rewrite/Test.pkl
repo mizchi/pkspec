@@ -1,0 +1,13 @@
+amends "../../pkl/Test.pkl"
+
+tests {
+  new {
+    name = "echo_pong"
+    description = "stale inline snapshot rewritten by --update-inline-snapshots"
+    specRef { "diff.inline-snapshot" }
+    body = new CmdTest {
+      cmd = "echo pong"
+      inlineStdout = new InlineSnapshot { state = "match"; value = "STALE\n" }
+    }
+  }
+}

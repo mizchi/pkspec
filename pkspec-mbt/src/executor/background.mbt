@@ -40,6 +40,8 @@ pub async fn run_one(
   state : Map[String, String],
   spec_ref : Array[String],
   refresh_snapshots? : Bool = false,
+  source_path? : String = "",
+  update_inline? : Bool = false,
 ) -> Result {
   let start = @async.now()
   let mode = t.mode()
@@ -62,7 +64,10 @@ pub async fn run_one(
   let mut last : Result = Result::synthetic(name, Passed, [], spec_ref)
   while attempts < max_attempts {
     attempts = attempts + 1
-    last = run_attempt(name, t, defaults, workdir, state, spec_ref, mode, refresh_snapshots)
+    last = run_attempt(
+      name, t, defaults, workdir, state, spec_ref, mode, refresh_snapshots,
+      source_path, update_inline,
+    )
     if last.outcome is Passed {
       passed = passed + 1
       break
@@ -88,11 +93,16 @@ async fn run_attempt(
   spec_ref : Array[String],
   mode : @model.Mode,
   refresh_snapshots : Bool,
+  source_path : String,
+  update_inline : Bool,
 ) -> Result {
   let res = Result::synthetic(name, Passed, [], spec_ref)
   run_with_backgrounds(res, t, defaults, workdir, () => match mode {
     @model.Cmd =>
-      run_cmd_into(res, name, t, defaults, workdir, state, refresh_snapshots~)
+      run_cmd_into(
+        res, name, t, defaults, workdir, state, refresh_snapshots~, source_path~,
+        update_inline~,
+      )
     @model.Steps => run_steps(res, t, defaults, workdir, state)
     @model.ParallelSteps => run_parallel(res, t, defaults, workdir, state)
     @model.Invalid => ()

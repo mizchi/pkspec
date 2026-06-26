@@ -24,6 +24,12 @@ class Contract {
   // `(DUR)` on BOTH sides before the exact compare, so the otherwise-volatile
   // wall-clock in `exec`'s progress / summary output does not break parity.
   normalizeDurations: Boolean = false
+  // normalizeDate replaces the volatile current-date token the
+  // `lint.future-decision-date` rule emits (`today UTC: YYYY-MM-DD`) with
+  // `today UTC: <DATE>` on BOTH sides before the exactStdout compare, so a
+  // golden captured on one day still matches a candidate run on a later day.
+  // Anchored to `today UTC: ` so it never touches the INPUT decision date.
+  normalizeDate: Boolean = false
 }
 
 class Scenario {
@@ -422,8 +428,11 @@ scenarios: Listing<Scenario> = new {
   // approved-with-open-questions, critical-without-contributes,
   // deprecated-specRef, future-decision-date (a 2099 date), missing-description,
   // deprecated-without-replacedBy, and unknown-domain-prefix. The lint report
-  // is deterministic (subjects are spec ids / `<base>:<name>`), so it is gated
-  // at byte parity, exit 1 (error-level issues present).
+  // is deterministic (subjects are spec ids / `<base>:<name>`) EXCEPT the
+  // future-decision-date row, which embeds the runtime `today UTC: YYYY-MM-DD`;
+  // normalizeDate replaces that token (anchored to `today UTC: `, so the input
+  // 2099 decision date is untouched) so the committed golden stays valid as the
+  // clock advances. Byte parity (post-normalization) + exit 1.
   new {
     id = "lint-spec-lint"
     fixture = "conformance/fixtures/spec-lint"
@@ -432,12 +441,14 @@ scenarios: Listing<Scenario> = new {
     contract = new {
       exit = true
       exactStdout = true
+      normalizeDate = true
     }
   }
   // lint --scan on spec-lint: same module plus a `--scan .` walk over the
   // vendored impl.go, which carries one live marker (LINT-001) and two dead
   // ones (LINT-GONE ×2). Adds the lint.dead-source-specRef row (subject
-  // `impl.go:6`, count 2). Byte parity + exit 1.
+  // `impl.go:6`, count 2). Same future-decision-date / normalizeDate handling
+  // as lint-spec-lint. Byte parity (post-normalization) + exit 1.
   new {
     id = "lint-scan-spec-lint"
     fixture = "conformance/fixtures/spec-lint"
@@ -446,6 +457,7 @@ scenarios: Listing<Scenario> = new {
     contract = new {
       exit = true
       exactStdout = true
+      normalizeDate = true
     }
   }
   // lint on spec-id: a clean module — the deterministic `lint: clean (0 issues)`
@@ -800,6 +812,38 @@ scenarios: Listing<Scenario> = new {
       stdoutEmpty = true
       fsDelta = true
       mustContainStderr { "wrote SPEC.md (5 entries)" }
+    }
+  }
+  // ── P3d: exec --update-inline-snapshots (Test.pkl source rewrite) ─────
+  //
+  // exec-inline-rewrite: the fixture's CmdTest carries a STALE inline snapshot
+  // (`value = "STALE\n"`) that does not match the deterministic `echo pong`
+  // output. With `--update-inline-snapshots`, the runner REWRITES the Test.pkl
+  // SOURCE in place (atomic tmp+rename) — replacing the RHS with
+  // `new InlineSnapshot { state = "match"; value = "pong\n" }` — and the test
+  // then PASSES (exit 0). This is a MODIFICATION of a committed file, not a
+  // creation; the harness's content-hash snapshot registers it in fsDelta. The
+  // transient `Test.pkl.pkspec.tmp` is renamed away, so it never appears.
+  //
+  // The rewrite is fully deterministic (echo pong is fixed), so the normalized
+  // stderr — the `[pkspec] inlineStdout for "echo_pong" updated (5 bytes)`
+  // notice, the passing progress line, and the green summary — is gated at byte
+  // parity (exactStderr + normalizeDurations). fsDelta asserts the rewritten
+  // `examples/exec-inline-rewrite/Test.pkl` is the only changed path, matching
+  // the oracle. The rewritten CONTENT's byte-for-byte parity vs Go is verified
+  // separately by the all-examples sweep (it is identical there); here fsDelta
+  // gates that the SAME file set is touched.
+  new {
+    id = "exec-inline-rewrite"
+    fixture = "conformance/fixtures/exec-inline-rewrite"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-inline-rewrite" }
+    argv { "exec"; "-f"; "Test.pkl"; "--update-inline-snapshots"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      fsDelta = true
+      exactStderr = true
+      normalizeDurations = true
     }
   }
 }
