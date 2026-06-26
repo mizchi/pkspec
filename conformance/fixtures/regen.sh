@@ -215,3 +215,22 @@ if [ -f "$sw_fx/examples/quickcheck-seed-wide/Test.pkl" ]; then
 else
   echo "skip $sw_fx (hand-authored example missing)" >&2
 fi
+
+# P4e expectAi fixtures: AI/LLM-judge assertions, exercised with a DETERMINISTIC
+# MOCK judge (a fixed shell rule over stdin + $PKSPEC_AI_PROMPT). All three are
+# HAND-AUTHORED (there is no live-LLM example to copy — a real judge would be
+# non-hermetic). exec-ai-cache additionally ships a COMMITTED snapshot under
+# .pkspec/ai-snapshots/cached.json whose hash = sha256(prompt + "\n" + body), so
+# the run is a pure cache replay (the judge cmd never fires). Regen only
+# re-vendors the schema and NEVER overwrites the hand-authored example modules
+# or the committed snapshot.
+for id in exec-ai-pass exec-ai-fail exec-ai-cache; do
+  fx="$here/$id"
+  if [ -f "$fx/examples/$id/Test.pkl" ]; then
+    mkdir -p "$fx/pkl"
+    cp "$repo/pkl/Test.pkl" "$fx/pkl/"
+    echo "re-vendored schema for $fx (hand-authored example preserved)"
+  else
+    echo "skip $fx (hand-authored example missing)" >&2
+  fi
+done

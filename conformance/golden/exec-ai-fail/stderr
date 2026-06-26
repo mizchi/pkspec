@@ -1,0 +1,5 @@
+[pkspec] ai_fail: failed (verifies kind.ai, diff.cross-language) (10ms)
+      step "emit": failed
+        ai: no greeting found
+pkspec: 0 passed, 0 flaky, 0 pending, 1 failed, 0 errored, 0 skipped (of 1)
+pkspec: 1 test(s) failed, 0 errored, 0 skipped

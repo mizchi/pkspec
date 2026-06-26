@@ -320,7 +320,12 @@ fn parse_eventually(j : Json?) -> Eventually? {
 fn parse_ai(j : Json?) -> AiAssertion? {
   match j {
     Some(Object(a)) =>
-      Some(AiAssertion::{ snapshot_name: str_val(a.get("snapshotName")) })
+      Some(AiAssertion::{
+        prompt: str_val(a.get("prompt")),
+        cmd: str_val(a.get("cmd")),
+        snapshot_name: str_val(a.get("snapshotName")),
+        prefer_deterministic: bool_val(a.get("preferDeterministic")),
+      })
     _ => None
   }
 }

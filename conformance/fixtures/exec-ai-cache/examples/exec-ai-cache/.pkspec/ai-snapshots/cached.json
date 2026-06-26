@@ -1,0 +1,8 @@
+{
+  "hash": "a5753aa932bb6d360bc927a8beaea2779d055fbab647177f8c08770019154a5b",
+  "verdict": "fail",
+  "explanation": "cached judgement: not a greeting",
+  "cmd": "exit 1",
+  "prompt_preview": "the body greets the world",
+  "updated_at": "1970-01-01T00:00:00Z"
+}

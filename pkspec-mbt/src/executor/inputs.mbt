@@ -186,6 +186,7 @@ async fn run_input_iterated(
   update_inline : Bool,
   refresh_http : Bool,
   http_replay_only : Bool,
+  refresh_ai : Bool,
 ) -> Result {
   let names = sorted_input_names(t.inputs)
   let mut seed = match iteration_seed_uint32(t.iteration_seed) {
@@ -203,7 +204,7 @@ async fn run_input_iterated(
     let iter_env = compose_input_env(state, values, i, seed)
     last = run_attempt(
       name, t, defaults, workdir, iter_env, spec_ref, mode, refresh_snapshots,
-      source_path, update_inline, refresh_http, http_replay_only,
+      source_path, update_inline, refresh_http, http_replay_only, refresh_ai,
     )
     if not(last.outcome is Passed) {
       let mut shrunk = values
@@ -212,7 +213,7 @@ async fn run_input_iterated(
         let (s, tr) = shrink_inputs(
           name, t, defaults, workdir, state, spec_ref, mode, names, values,
           t.shrink_attempts, refresh_snapshots, source_path, update_inline,
-          refresh_http, http_replay_only,
+          refresh_http, http_replay_only, refresh_ai,
         )
         shrunk = s
         shrink_trace = tr
@@ -257,6 +258,7 @@ async fn run_iterated(
   update_inline : Bool,
   refresh_http : Bool,
   http_replay_only : Bool,
+  refresh_ai : Bool,
 ) -> Result {
   let mut seed = match iteration_seed_uint32(t.iteration_seed) {
     Ok(s) => s
@@ -277,7 +279,7 @@ async fn run_iterated(
     iter_env["PKSPEC_SEED"] = "\{seed}"
     last = run_attempt(
       name, t, defaults, workdir, iter_env, spec_ref, mode, refresh_snapshots,
-      source_path, update_inline, refresh_http, http_replay_only,
+      source_path, update_inline, refresh_http, http_replay_only, refresh_ai,
     )
     if not(last.outcome is Passed) {
       let mut min_seed = seed
@@ -286,7 +288,7 @@ async fn run_iterated(
         let (s, tr) = shrink_seed(
           name, t, defaults, workdir, state, spec_ref, mode, seed,
           t.shrink_attempts, refresh_snapshots, source_path, update_inline,
-          refresh_http, http_replay_only,
+          refresh_http, http_replay_only, refresh_ai,
         )
         min_seed = s
         shrink_trace = tr
@@ -333,6 +335,7 @@ async fn shrink_inputs(
   update_inline : Bool,
   refresh_http : Bool,
   http_replay_only : Bool,
+  refresh_ai : Bool,
 ) -> (Map[String, Int], String) {
   let working = copy_int_map(current)
   let trace : Array[String] = []
@@ -354,7 +357,7 @@ async fn shrink_inputs(
         let env = compose_input_env(extra_env, probe, -1, 0)
         let res = run_attempt(
           name, t, defaults, workdir, env, spec_ref, mode, refresh_snapshots,
-          source_path, update_inline, refresh_http, http_replay_only,
+          source_path, update_inline, refresh_http, http_replay_only, refresh_ai,
         )
         if not(res.outcome is Passed) {
           trace.push(
@@ -419,6 +422,7 @@ async fn shrink_seed(
   update_inline : Bool,
   refresh_http : Bool,
   http_replay_only : Bool,
+  refresh_ai : Bool,
 ) -> (UInt, String) {
   let trace : Array[String] = []
   let mut current = fail_seed
@@ -448,7 +452,7 @@ async fn shrink_seed(
       env["PKSPEC_SEED"] = "\{candidate}"
       let res = run_attempt(
         name, t, defaults, workdir, env, spec_ref, mode, refresh_snapshots,
-        source_path, update_inline, refresh_http, http_replay_only,
+        source_path, update_inline, refresh_http, http_replay_only, refresh_ai,
       )
       if not(res.outcome is Passed) {
         trace.push("shrink: seed \{candidate} also fails")

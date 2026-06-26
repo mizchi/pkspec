@@ -1,0 +1,35 @@
+amends "../../pkl/Test.pkl"
+
+// Hermetic AI-judge assertion (PASS). The judge is a DETERMINISTIC mock shell
+// script — `grep -q hello` exits 0 when the step's stdout (piped on stdin)
+// contains "hello" — so no LLM, no network, no nondeterminism. The step emits
+// `hello world`, the judge greps it and exits 0, so the step PASSES.
+// `preferDeterministic = false` forces the judge to run (the step carries no
+// deterministic assertion that would otherwise short-circuit it). A live judge
+// run writes `.pkspec/ai-snapshots/greet.json`; the conformance contract gates
+// only the normalized stderr + exit (NOT fsDelta), and the binary stamps a
+// fixed `updated_at`, so the run stays deterministic.
+tests {
+  new {
+    name = "ai_pass"
+    description = "expectAi judge (deterministic mock) accepts the body: exit 0 -> step passes"
+    tags { "unit" }
+    specRef { "kind.ai"; "diff.cross-language" }
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "emit"
+          body = new ShellBody {
+            cmd = "printf 'hello world'"
+          }
+          expectAi = new AiAssertion {
+            prompt = "the body greets the world"
+            cmd = "grep -q hello"
+            snapshotName = "greet"
+            preferDeterministic = false
+          }
+        }
+      }
+    }
+  }
+}

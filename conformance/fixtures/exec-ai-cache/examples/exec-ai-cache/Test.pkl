@@ -1,0 +1,37 @@
+amends "../../pkl/Test.pkl"
+
+// Hermetic AI-judge assertion (CACHE HIT). The fixture ships a COMMITTED
+// snapshot under .pkspec/ai-snapshots/cached.json whose `hash` is
+// sha256(prompt + "\n" + body) for this exact prompt + the step's stdout
+// (`cached-body`). On a normal run (no --refresh-ai) the runner finds the
+// hash-matching snapshot and returns the cached verdict WITHOUT invoking the
+// judge — so the judge `cmd` here is a tripwire (`exit 1` would FAIL if it ever
+// ran, proving the cache short-circuit). The committed verdict is `fail` with
+// explanation `cached judgement: not a greeting`, so the step fails with
+// `ai (cached): cached judgement: not a greeting` — exercising the cache-hit
+// path AND the `(cached)` indicator. No file is written (pure replay), so the
+// run leaves no fs delta.
+tests {
+  new {
+    name = "ai_cache"
+    description = "expectAi cache hit: committed snapshot supplies the verdict, the judge cmd never runs"
+    tags { "unit" }
+    specRef { "kind.ai"; "diff.cross-language" }
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "emit"
+          body = new ShellBody {
+            cmd = "printf 'cached-body'"
+          }
+          expectAi = new AiAssertion {
+            prompt = "the body greets the world"
+            cmd = "exit 1"
+            snapshotName = "cached"
+            preferDeterministic = false
+          }
+        }
+      }
+    }
+  }
+}
