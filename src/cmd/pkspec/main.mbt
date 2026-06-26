@@ -1,6 +1,6 @@
 ///|
 fn pkspec_version() -> String {
-  "0.4.1"
+  "0.4.2"
 }
 
 ///|

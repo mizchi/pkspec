@@ -3,7 +3,7 @@ amends "package://pkg.pkl-lang.org/github.com/mizchi/pkfire/pkfire@0.9.0#/Taskfi
 /// Released version. Drives the `tag` task (pkspec@<ver> + v<ver>).
 /// Keep in lockstep with moon.mod.json + the
 /// pkspec_version() constant in src/cmd/pkspec/main.mbt.
-local releaseVersion = "0.4.1"
+local releaseVersion = "0.4.2"
 
 /// MoonBit sources for the six pkspec binaries (module at repo root).
 local sources: Listing<String> = new {
