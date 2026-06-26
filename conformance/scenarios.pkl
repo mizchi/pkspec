@@ -24,6 +24,12 @@ class Contract {
   // `(DUR)` on BOTH sides before the exact compare, so the otherwise-volatile
   // wall-clock in `exec`'s progress / summary output does not break parity.
   normalizeDurations: Boolean = false
+  // normalizeDate replaces the volatile current-date token the
+  // `lint.future-decision-date` rule emits (`today UTC: YYYY-MM-DD`) with
+  // `today UTC: <DATE>` on BOTH sides before the exactStdout compare, so a
+  // golden captured on one day still matches a candidate run on a later day.
+  // Anchored to `today UTC: ` so it never touches the INPUT decision date.
+  normalizeDate: Boolean = false
 }
 
 class Scenario {
@@ -422,8 +428,11 @@ scenarios: Listing<Scenario> = new {
   // approved-with-open-questions, critical-without-contributes,
   // deprecated-specRef, future-decision-date (a 2099 date), missing-description,
   // deprecated-without-replacedBy, and unknown-domain-prefix. The lint report
-  // is deterministic (subjects are spec ids / `<base>:<name>`), so it is gated
-  // at byte parity, exit 1 (error-level issues present).
+  // is deterministic (subjects are spec ids / `<base>:<name>`) EXCEPT the
+  // future-decision-date row, which embeds the runtime `today UTC: YYYY-MM-DD`;
+  // normalizeDate replaces that token (anchored to `today UTC: `, so the input
+  // 2099 decision date is untouched) so the committed golden stays valid as the
+  // clock advances. Byte parity (post-normalization) + exit 1.
   new {
     id = "lint-spec-lint"
     fixture = "conformance/fixtures/spec-lint"
@@ -432,12 +441,14 @@ scenarios: Listing<Scenario> = new {
     contract = new {
       exit = true
       exactStdout = true
+      normalizeDate = true
     }
   }
   // lint --scan on spec-lint: same module plus a `--scan .` walk over the
   // vendored impl.go, which carries one live marker (LINT-001) and two dead
   // ones (LINT-GONE ×2). Adds the lint.dead-source-specRef row (subject
-  // `impl.go:6`, count 2). Byte parity + exit 1.
+  // `impl.go:6`, count 2). Same future-decision-date / normalizeDate handling
+  // as lint-spec-lint. Byte parity (post-normalization) + exit 1.
   new {
     id = "lint-scan-spec-lint"
     fixture = "conformance/fixtures/spec-lint"
@@ -446,6 +457,7 @@ scenarios: Listing<Scenario> = new {
     contract = new {
       exit = true
       exactStdout = true
+      normalizeDate = true
     }
   }
   // lint on spec-id: a clean module — the deterministic `lint: clean (0 issues)`

@@ -18,6 +18,7 @@ fn default_contract() -> Contract {
     exact_stdout: false,
     exact_stderr: false,
     normalize_durations: false,
+    normalize_date: false,
   }
 }
 
@@ -278,4 +279,41 @@ test "delta paths lex-sorted like go" {
   let got = delta_paths(before, after)
   assert_eq(got[0], ".git/hooks/pre-commit")
   assert_eq(got[1], ".git/hooks/pre-push")
+}
+
+///|
+test "normalize_dates: replaces the today-UTC token, keeps input date" {
+  let line = "decision dated 2099-01-01 is in the future (today UTC: 2026-06-25)"
+  let want = "decision dated 2099-01-01 is in the future (today UTC: <DATE>)"
+  assert_eq(normalize_dates(line), want)
+  // No `today UTC: ` anchor -> untouched (the bare input date is not a "today").
+  assert_eq(normalize_dates("dated 2099-01-01"), "dated 2099-01-01")
+  // A golden captured on 06-25 and a candidate run on 06-26 normalize equal.
+  let golden = "(today UTC: 2026-06-25)"
+  let candidate = "(today UTC: 2026-06-26)"
+  assert_eq(normalize_dates(golden), normalize_dates(candidate))
+}
+
+///|
+test "compare: normalizeDate makes a stale-date golden match today's candidate" {
+  let c = Contract::{
+    ..default_contract(),
+    exit: true,
+    exact_stdout: true,
+    normalize_date: true,
+  }
+  let s = scen(c)
+  // Golden stdout captured on 2026-06-25; candidate produced 2026-06-26.
+  let want = Golden::{
+    stdout: "[warn] LINT-006: ... (today UTC: 2026-06-25)\n",
+    stderr: "",
+    exit: 1,
+    fs_delta: [],
+    fs_deleted: [],
+  }
+  let got = result(stdout="[warn] LINT-006: ... (today UTC: 2026-06-26)\n", exit=1)
+  assert_eq(compare(s, want, got), "")
+  // WITHOUT normalizeDate the same pair must DIFFER (proves normalization fired).
+  let c2 = Contract::{ ..default_contract(), exit: true, exact_stdout: true }
+  assert_true(compare(scen(c2), want, got) != "")
 }

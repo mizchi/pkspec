@@ -18,6 +18,7 @@ pub struct Contract {
   exact_stdout : Bool
   exact_stderr : Bool
   normalize_durations : Bool
+  normalize_date : Bool
 }
 
 ///|
@@ -113,6 +114,7 @@ fn parse_scenario(j : Json) -> Scenario raise {
       exact_stdout: get_bool(cj, "exactStdout"),
       exact_stderr: get_bool(cj, "exactStderr"),
       normalize_durations: get_bool(cj, "normalizeDurations"),
+      normalize_date: get_bool(cj, "normalizeDate"),
     },
   }
 }

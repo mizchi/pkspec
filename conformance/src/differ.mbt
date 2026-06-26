@@ -409,6 +409,68 @@ fn is_duration_token(chars : Array[Char], start : Int, end : Int) -> Bool {
 }
 
 ///|
+/// Replace the volatile CURRENT-date token the `lint.future-decision-date`
+/// rule emits — the `YYYY-MM-DD` immediately following the literal
+/// `today UTC: ` — with the stable placeholder `<DATE>`. This is deliberately
+/// anchored to the `today UTC: ` prefix so it normalizes ONLY the runtime
+/// "today" value and never the INPUT decision date (e.g. the `2099-01-01` that
+/// is part of the lint contract). Applied to both golden and candidate before
+/// the exactStdout compare when `normalizeDate` is set, so a golden captured on
+/// 2026-06-25 matches a candidate run on any later day.
+pub fn normalize_dates(s : String) -> String {
+  let anchor = "today UTC: "
+  let chars = s.to_array()
+  let aa = anchor.to_array()
+  let out = StringBuilder::new()
+  let mut i = 0
+  while i < chars.length() {
+    // Try to match the anchor at i.
+    let mut hit = i + aa.length() <= chars.length()
+    if hit {
+      for k in 0..<aa.length() {
+        if chars[i + k] != aa[k] {
+          hit = false
+          break
+        }
+      }
+    }
+    if hit && is_iso_date(chars, i + aa.length()) {
+      out.write_string(anchor)
+      out.write_string("<DATE>")
+      // Skip the anchor + the 10-char `YYYY-MM-DD` token.
+      i = i + aa.length() + 10
+      continue
+    }
+    out.write_char(chars[i])
+    i = i + 1
+  }
+  out.to_string()
+}
+
+///|
+/// Whether `chars[start..start+10]` is exactly `YYYY-MM-DD` (4 digits, `-`, 2
+/// digits, `-`, 2 digits).
+fn is_iso_date(chars : Array[Char], start : Int) -> Bool {
+  if start + 10 > chars.length() {
+    return false
+  }
+  fn dig(p : Int) -> Bool {
+    chars[p] >= '0' && chars[p] <= '9'
+  }
+
+  dig(start) &&
+  dig(start + 1) &&
+  dig(start + 2) &&
+  dig(start + 3) &&
+  chars[start + 4] == '-' &&
+  dig(start + 5) &&
+  dig(start + 6) &&
+  chars[start + 7] == '-' &&
+  dig(start + 8) &&
+  dig(start + 9)
+}
+
+///|
 /// Normalized-substring containment, matching Go's `containsNormalized`.
 pub fn contains_normalized(haystack : String, sub : String) -> Bool {
   normalize_text(haystack).contains(normalize_text(sub))
@@ -424,6 +486,21 @@ pub fn marshal_delta(paths : Array[String]) -> String {
     arr.push(Json::string(p))
   }
   Json::array(arr).stringify()
+}
+
+///|
+/// Compose the contract's enabled volatile-token normalizers over `s` (the
+/// duration token first, then the current-date token), so both the golden and
+/// candidate streams are reduced to their stable form before the exact compare.
+fn normalize_volatile(text : String, c : Contract) -> String {
+  let mut out = text
+  if c.normalize_durations {
+    out = normalize_durations(out)
+  }
+  if c.normalize_date {
+    out = normalize_dates(out)
+  }
+  out
 }
 
 ///|
@@ -444,16 +521,8 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
     }
   }
   if s.contract.exact_stdout {
-    let ws = if s.contract.normalize_durations {
-      normalize_durations(want.stdout)
-    } else {
-      want.stdout
-    }
-    let gs = if s.contract.normalize_durations {
-      normalize_durations(got.stdout)
-    } else {
-      got.stdout
-    }
+    let ws = normalize_volatile(want.stdout, s.contract)
+    let gs = normalize_volatile(got.stdout, s.contract)
     let w = normalize_text(ws)
     let g = normalize_text(gs)
     if w != g {
@@ -465,16 +534,8 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
   // normalizeDurations is set, then the same whitespace-collapse as
   // exactStdout is applied before the exact compare.
   if s.contract.exact_stderr {
-    let we = if s.contract.normalize_durations {
-      normalize_durations(want.stderr)
-    } else {
-      want.stderr
-    }
-    let ge = if s.contract.normalize_durations {
-      normalize_durations(got.stderr)
-    } else {
-      got.stderr
-    }
+    let we = normalize_volatile(want.stderr, s.contract)
+    let ge = normalize_volatile(got.stderr, s.contract)
     let w = normalize_text(we)
     let g = normalize_text(ge)
     if w != g {
