@@ -182,7 +182,7 @@ v0.1.x で `implementedBy = "code"` + `implementedAt = "X"` だったのを `imp
 
 ### 6. pkfire との spec ↔ task リンク
 
-main branch (次の patch release で入る) の `new TaskImpl { at = "Taskfile.pkl#release" }` で、 pkfire の task を Scenario の実装先に名指せる。 同じリリースで `Implementation` が abstract 化され、 `TestImpl` / `CodeImpl` / `DocImpl` / `TaskImpl` の 4 つの typed subclass に分かれた。 v0.1.x → v0.2.x の移行と同様、 `pkspec migrate` が flat 形式 → typed subclass の rewrite を担当する。 0.2.1 にはまだ入っていないので、 試すなら `go install github.com/mizchi/pkspec/cmd/...@main` で main を入れる。
+main branch (次の patch release で入る) の `new TaskImpl { at = "Taskfile.pkl#release" }` で、 pkfire の task を Scenario の実装先に名指せる。 同じリリースで `Implementation` が abstract 化され、 `TestImpl` / `CodeImpl` / `DocImpl` / `TaskImpl` の 4 つの typed subclass に分かれた。 v0.1.x → v0.2.x の移行と同様、 `pkspec migrate` が flat 形式 → typed subclass の rewrite を担当する。 試すなら `curl -fsSL https://raw.githubusercontent.com/mizchi/pkspec/main/install.sh | sh` で最新リリースの binary を入れる。
 
 ```pkl
 scenarios {
