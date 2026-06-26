@@ -110,3 +110,25 @@ if [ -f "$http_fx/examples/exec-http-cassette/Test.pkl" ]; then
 else
   echo "skip $http_fx (hand-authored example missing)" >&2
 fi
+
+# P4b exec sql fixtures: the `sql` step kind, run via the `sqlite3` CLI shell-out
+# (the MoonBit binary has no embedded SQLite; the Go oracle uses
+# modernc.org/sqlite). All three are DETERMINISTIC (in-memory / local file db,
+# no network), so they gate exactStderr + normalizeDurations. VERBATIM copies of
+# real examples/<src>/ (the fixture id = exec-<src>):
+#   exec-sql-select        <- sql-select        (:memory: WITH-seed SELECT)
+#   exec-sql-dml           <- sql-dml           (CREATE/INSERT/UPDATE/DELETE on a file db; rowcount via changes())
+#   exec-sql-parameterised <- sql-parameterised (? placeholders + $VAR binding; injection probe)
+p4b_sql_fixtures="exec-sql-select:sql-select \
+exec-sql-dml:sql-dml \
+exec-sql-parameterised:sql-parameterised"
+for pair in $p4b_sql_fixtures; do
+  id="${pair%%:*}"
+  src="${pair##*:}"
+  fx="$here/$id"
+  rm -rf "$fx"
+  mkdir -p "$fx/pkl" "$fx/examples/$id"
+  cp "$repo/pkl/Test.pkl" "$fx/pkl/"
+  cp "$repo/examples/$src/Test.pkl" "$fx/examples/$id/Test.pkl"
+  echo "regenerated $fx (from examples/$src)"
+done
