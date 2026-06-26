@@ -1,16 +1,16 @@
 amends "package://pkg.pkl-lang.org/github.com/mizchi/pkfire/pkfire@0.9.0#/Taskfile.pkl"
 
 /// Released version. Drives the `tag` task (pkspec@<ver> + v<ver>).
-/// Keep in lockstep with pkspec-mbt/moon.mod.json + the
-/// pkspec_version() constant in pkspec-mbt/src/cmd/pkspec/main.mbt.
+/// Keep in lockstep with moon.mod.json + the
+/// pkspec_version() constant in src/cmd/pkspec/main.mbt.
 local releaseVersion = "0.4.1"
 
-/// MoonBit sources for the six pkspec binaries (`pkspec-mbt/`).
+/// MoonBit sources for the six pkspec binaries (module at repo root).
 local sources: Listing<String> = new {
-  "pkspec-mbt/src/**/*.mbt"
-  "pkspec-mbt/src/**/*.c"
-  "pkspec-mbt/src/**/moon.pkg"
-  "pkspec-mbt/moon.mod.json"
+  "src/**/*.mbt"
+  "src/**/*.c"
+  "src/**/moon.pkg"
+  "moon.mod.json"
 }
 
 local schemaSources: Listing<String> = new {
@@ -19,7 +19,7 @@ local schemaSources: Listing<String> = new {
 }
 
 /// Path to the native release pkspec CLI the MoonBit toolchain emits.
-local pkspecBin: String = "pkspec-mbt/_build/native/release/build/src/cmd/pkspec/pkspec.exe"
+local pkspecBin: String = "_build/native/release/build/src/cmd/pkspec/pkspec.exe"
 
 local default: Task = new {
   name = "default"
@@ -33,31 +33,31 @@ local default: Task = new {
 /// and run the built binaries so the gate reflects HEAD, not whatever
 /// happens to be on PATH.
 local build: Task = new {
-  name = "build:pkspec-mbt"
-  description = "Build the six native release binaries from pkspec-mbt/"
-  cmd = "cd pkspec-mbt && moon update && moon build --target native --release"
+  name = "build:pkspec"
+  description = "Build the six native release binaries from the repo-root MoonBit module"
+  cmd = "moon update && moon build --target native --release"
   inputs = sources
   outputs {
     pkspecBin
-    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-vitest/pkspec-adapter-vitest.exe"
-    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-playwright/pkspec-adapter-playwright.exe"
-    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-node-test/pkspec-adapter-node-test.exe"
-    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-go-test/pkspec-adapter-go-test.exe"
-    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-moon-test/pkspec-adapter-moon-test.exe"
+    "_build/native/release/build/src/cmd/pkspec-adapter-vitest/pkspec-adapter-vitest.exe"
+    "_build/native/release/build/src/cmd/pkspec-adapter-playwright/pkspec-adapter-playwright.exe"
+    "_build/native/release/build/src/cmd/pkspec-adapter-node-test/pkspec-adapter-node-test.exe"
+    "_build/native/release/build/src/cmd/pkspec-adapter-go-test/pkspec-adapter-go-test.exe"
+    "_build/native/release/build/src/cmd/pkspec-adapter-moon-test/pkspec-adapter-moon-test.exe"
   }
 }
 
 local moonCheck: Task = new {
   name = "moon:check"
   description = "Type-check the MoonBit sources (native target)"
-  cmd = "cd pkspec-mbt && moon check --target native"
+  cmd = "moon check --target native"
   inputs = sources
 }
 
 local moonTest: Task = new {
   name = "moon:test"
   description = "MoonBit unit tests — evaluator + model gates (native target)"
-  cmd = "cd pkspec-mbt && moon test --target native"
+  cmd = "moon test --target native"
   inputs = sources
 }
 
@@ -90,7 +90,7 @@ local conformance: Task = new {
   cmd =
     #"""
     set -euo pipefail
-    build="$PWD/pkspec-mbt/_build/native/release/build/src/cmd"
+    build="$PWD/_build/native/release/build/src/cmd"
     shimbin="$PWD/.shim-bin"
     mkdir -p "$shimbin"
     for k in go-test moon-test node-test vitest playwright; do

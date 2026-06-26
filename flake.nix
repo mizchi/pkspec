@@ -5,8 +5,9 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
 
-    # MoonBit toolchain for the `nix develop` shell (building pkspec-mbt/
-    # from source). The package itself no longer builds from source — it
+    # MoonBit toolchain for the `nix develop` shell (building the
+    # repo-root MoonBit module from source). The package itself no longer
+    # builds from source — it
     # installs the prebuilt release binaries — so there is no Go input.
     moonbit-overlay.url = "github:moonbit-community/moonbit-overlay";
   };
@@ -163,7 +164,8 @@
         };
 
         # `nix develop` for working on pkspec itself: the MoonBit toolchain
-        # (`moon`, `moonc`, …) to build `pkspec-mbt/` from source, plus the
+        # (`moon`, `moonc`, …) to build the repo-root MoonBit module from
+        # source, plus the
         # native Pkl CLI (needed for `pkl test` / `pkl format`).
         devShells.default = pkgs.mkShell {
           packages = [

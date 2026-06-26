@@ -4,18 +4,16 @@
 // commands (coverage / orphans) build on.
 //
 // Like config_wbtest, the example `amends "../../pkl/Spec.pkl"`, so it only
-// resolves against the real schema tree at the repo root. Under `moon test`
-// the cwd is the MoonBit module root (`pkspec-mbt/`); the pkspec repo root is
-// its parent.
+// resolves against the real schema tree at the repo root. The MoonBit module
+// lives at the repo root, so under `moon test` the cwd IS the pkspec repo root.
 
 ///|
-/// Repo root = `<cwd>/..` (cwd is `pkspec-mbt/`, repo root is `pkspec/`).
+/// Repo root = cwd (the MoonBit module now lives at the repo root).
 fn repo_root() -> String {
-  let cwd = match @env.current_dir() {
+  match @env.current_dir() {
     Some(d) => d
     None => "."
   }
-  cwd + "/.."
 }
 
 ///|

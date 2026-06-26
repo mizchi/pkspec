@@ -1,4 +1,4 @@
-/// Self-contained P0 conformance scenarios for pkspec-mbt. The schema
+/// Self-contained P0 conformance scenarios for pkspec. The schema
 /// classes are inlined (no `amends`) so the harness can evaluate this with
 /// a bare AnalysisSession — the full amends/package:// loader is a P1
 /// concern. P1+ will split the schema back out into Conformance.pkl and

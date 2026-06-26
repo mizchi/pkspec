@@ -489,13 +489,13 @@ Project maintenance tasks are defined in `Taskfile.pkl` and run with
 
 ```sh
 pkf list
-pkf run build:pkspec-mbt   # build the six native release binaries
+pkf run build:pkspec       # build the six native release binaries
 pkf run moon:test          # MoonBit unit gates (evaluator + model)
 pkf run conformance        # candidate vs frozen goldens (71/71 strict)
 pkf run preflight          # pre-commit gate (check/test + pkl + action-lint)
 ```
 
-pkspec is implemented in MoonBit under [`pkspec-mbt/`](./pkspec-mbt);
+pkspec is implemented in MoonBit at the repo root ([`src/`](./src), `moon.mod.json`);
 `nix develop` includes the MoonBit toolchain and the native `pkl` CLI.
 To create the release tags locally (no push):
 

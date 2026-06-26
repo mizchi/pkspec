@@ -1,3 +1,7 @@
+# MoonBit build artifacts (module now lives at repo root).
+_build/
+.mooncakes/
+
 /bin/
 /pkspec
 /result

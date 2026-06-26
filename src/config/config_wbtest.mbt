@@ -6,17 +6,16 @@
 // The examples `amends "../../pkl/<schema>.pkl"`, so they only resolve against
 // the real `pkl/` schemas at the repo root. Rather than copy them (and the
 // whole schema tree) into fixtures, we eval the real files in place by an
-// absolute path computed from the test's cwd. Under `moon test` the cwd is the
-// MoonBit module root (`pkspec-mbt/`); the pkspec repo root is its parent.
+// absolute path computed from the test's cwd. The MoonBit module lives at the
+// repo root, so under `moon test` the cwd IS the pkspec repo root.
 
 ///|
-/// Repo root = `<cwd>/..` (cwd is `pkspec-mbt/`, repo root is `pkspec/`).
+/// Repo root = cwd (the MoonBit module now lives at the repo root).
 fn repo_root() -> String {
-  let cwd = match @env.current_dir() {
+  match @env.current_dir() {
     Some(d) => d
     None => "."
   }
-  cwd + "/.."
 }
 
 ///|

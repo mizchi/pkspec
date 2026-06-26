@@ -1,6 +1,6 @@
 {
   "import": [
-    { "path": "mizchi/pkspec-mbt/src/loader", "alias": "loader" },
+    { "path": "mizchi/pkspec/src/loader", "alias": "loader" },
     { "path": "mizchi/pkl", "alias": "pkl" },
     { "path": "moonbitlang/core/json", "alias": "json" },
     { "path": "moonbitlang/async", "alias": "async" },
