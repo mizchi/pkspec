@@ -21,6 +21,8 @@
     "spec_cmds.mbt": ["native"],
     "exec_cmd.mbt": ["native"],
     "run_cmd.mbt": ["native"],
-    "doctor.mbt": ["native"]
+    "doctor.mbt": ["native"],
+    "timings.mbt": ["native"],
+    "timings_wbtest.mbt": ["native"]
   }
 }

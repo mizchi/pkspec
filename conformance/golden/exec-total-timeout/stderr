@@ -1,0 +1,23 @@
+[pkspec] fast_a: errored (verifies history.timings-jsonl, history.shard-lpt) (2ms)
+      aborted by total-timeout
+[pkspec] fast_b: skipped (verifies history.timings-jsonl, history.shard-lpt) (0s)
+      not executed: context deadline exceeded
+[pkspec] fast_c: skipped (verifies history.timings-jsonl, history.shard-lpt) (0s)
+      not executed: context deadline exceeded
+[pkspec] fast_d: skipped (verifies history.timings-jsonl, history.shard-lpt) (0s)
+      not executed: context deadline exceeded
+[pkspec] mid_a: skipped (verifies history.timings-jsonl, history.shard-lpt) (0s)
+      not executed: context deadline exceeded
+[pkspec] mid_b: skipped (verifies history.timings-jsonl, history.shard-lpt) (0s)
+      not executed: context deadline exceeded
+[pkspec] mid_c: skipped (verifies history.timings-jsonl, history.shard-lpt) (0s)
+      not executed: context deadline exceeded
+[pkspec] slow_a: skipped (verifies history.timings-jsonl, history.shard-lpt) (0s)
+      not executed: context deadline exceeded
+[pkspec] slow_b: skipped (verifies history.timings-jsonl, history.shard-lpt) (0s)
+      not executed: context deadline exceeded
+[pkspec] slow_c: skipped (verifies history.timings-jsonl, history.shard-lpt) (0s)
+      not executed: context deadline exceeded
+pkspec: 0 passed, 0 flaky, 0 pending, 0 failed, 1 errored, 9 skipped (of 10)
+pkspec: [timeout] 9 tests not executed
+pkspec: 0 test(s) failed, 1 errored, 9 skipped

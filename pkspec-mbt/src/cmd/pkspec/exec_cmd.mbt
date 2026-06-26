@@ -1,26 +1,28 @@
-// The `exec` command (P3a + P3b scope). Mirrors the Go `cmdExec`
+// The `exec` command (P3 + P4 scope). Mirrors the Go `cmdExec`
 // (cmd/pkspec/main.go) + `executor.Run`'s test loop: loads the Test.pkl plan,
 // filters by --only / --tag, runs each test in name-sorted order around the
 // before/after hooks, prints the per-test progress line (with per-step detail)
 // and the summary to STDERR byte-for-byte like Go (modulo the volatile
 // duration / ports), and returns 0 iff the tally is green (Go `Tally.IsGreen`).
 //
-// IN SCOPE (P3a + P3b): cmd / steps / parallelSteps bodies, the `shell` step
-// kind, sequential capture propagation + skip-on-failure, background processes
-// (portEnv + readyProbe / readyStdoutMatches + grace-kill), before/after hooks
-// (all / each scopes + captures + alwaysRun).
+// IN SCOPE: cmd / steps / parallelSteps bodies, the shell / http / sql step
+// kinds, sequential capture propagation + skip-on-failure, background processes
+// (portEnv + readyProbe / readyStdoutMatches + grace-kill), before/after hooks,
+// retries / flaky / eventually / repeat, reference + inline snapshots, JUnit
+// reports, and (P4c) the scheduling features: per-test timings.jsonl recording
+// (ON by default; --no-record-timings disables), --shard K/N (LPT bin-packing
+// over history), --rerun-failed (most-recent-failed selection), and
+// --total-timeout (wall-clock cap; remaining tests -> Skipped).
 //
-// DEFERRED vs Go's cmdExec (later phases; consumed-but-unsupported here so the
-// in-scope fixtures still run): retries / flaky / iterations / inputs,
-// http / playwright / sql step kinds (a step that uses them errors loudly),
-// `eventually` / `repeat` step control, snapshots + inline rewrite
-// (--update-inline-snapshots), --junit-reports, --shard / --rerun-failed /
-// --total-timeout, timings recording.
+// DEFERRED vs Go (later phases): playwright / AI / quickcheck step kinds (a step
+// that uses them errors loudly). The --total-timeout in-flight abort is faithful
+// for Cmd-mode bodies; step/sql/parallel bodies do not yet thread a per-step
+// subprocess deadline (the REMAINING-tests -> Skipped contract holds for all
+// modes — see the run loop).
 
 ///|
-/// Parsed `exec` flags (P3a subset). The deferred flags are parsed-and-ignored
-/// (boolean) / parsed-and-ignored-with-value so a fixture that passes them
-/// does not error, but they have no effect this phase.
+/// Parsed `exec` flags. The still-deferred flags (--refresh-ai) are
+/// parsed-and-ignored so a fixture that passes them does not error.
 priv struct ExecArgs {
   file : String
   only : Array[String]
@@ -30,6 +32,12 @@ priv struct ExecArgs {
   update_inline : Bool
   refresh_http : Bool
   http_replay_only : Bool
+  // P4c scheduling.
+  shard_spec : String
+  rerun_failed : Bool
+  no_record_timings : Bool
+  timings_file : String
+  total_timeout : String
 }
 
 ///|
@@ -42,6 +50,11 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
   let mut update_inline = false
   let mut refresh_http = false
   let mut http_replay_only = false
+  let mut shard_spec = ""
+  let mut rerun_failed = false
+  let mut no_record_timings = false
+  let mut timings_file = ""
+  let mut total_timeout = ""
   let mut i = 0
   while i < args.length() {
     let a = args[i]
@@ -73,11 +86,14 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
       // P4a: HTTP cassette record/replay controls.
       "--refresh-http" => refresh_http = true
       "--http-replay-only" => http_replay_only = true
-      // Deferred value-flags: consume the value so it is not mistaken for a
-      // positional arg, but ignore it (no effect this phase).
-      "--shard" | "--total-timeout" | "--timings-file" => take() |> ignore
+      // P4c: scheduling features.
+      "--shard" => shard_spec = take()
+      "--total-timeout" => total_timeout = take()
+      "--timings-file" => timings_file = take()
+      "--no-record-timings" => no_record_timings = true
+      "--rerun-failed" => rerun_failed = true
       // Deferred boolean-flags: accept and ignore.
-      "--refresh-ai" | "--no-record-timings" | "--rerun-failed" => ()
+      "--refresh-ai" => ()
       _ =>
         if a.has_prefix("-") {
           raise SpecCliError("flag provided but not defined: -\{strip_dashes(name)}")
@@ -97,6 +113,11 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
     update_inline,
     refresh_http,
     http_replay_only,
+    shard_spec,
+    rerun_failed,
+    no_record_timings,
+    timings_file,
+    total_timeout,
   }
 }
 
@@ -261,11 +282,81 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
     return 1
   }
   names.sort_by((a, b) => lex_cmp(a, b))
+
+  // P4c: --rerun-failed and --shard pre-filter the candidate name list using
+  // the timings history (Go's cmdExec, applied before the executor sees the
+  // plan). Order mirrors Go: only/tag (done above) -> rerun -> shard. The
+  // timings path defaults to <workdir>/.pkspec/timings.jsonl.
+  let timings_path = if ea.timings_file != "" {
+    ea.timings_file
+  } else {
+    default_timings_path(abs)
+  }
+  let mut shard_k = 0
+  let mut shard_n = 0
+  let mut shard_skipped = 0
+  if ea.rerun_failed {
+    let kept = pick_rerun_failed(names, timings_path, env_tag())
+    names.clear()
+    for n in kept {
+      names.push(n)
+    }
+    if names.length() == 0 {
+      eprintln_pkspec(
+        "--rerun-failed: no failed tests in history (matching --only/--tag and env)",
+      )
+      return 0
+    }
+  }
+  if ea.shard_spec != "" {
+    let (k, n) = match (try? parse_shard_spec(ea.shard_spec)) {
+      Ok(v) => v
+      Err(e) => {
+        eprintln_pkspec(err_message(e))
+        return 1
+      }
+    }
+    shard_k = k
+    shard_n = n
+    let before = names.length()
+    let picked = apply_shard(names, timings_path, k, n)
+    names.clear()
+    for nm in picked {
+      names.push(nm)
+    }
+    shard_skipped = before - names.length()
+    // Shard pick is name-keyed; preserve the name-sorted run order.
+    names.sort_by((a, b) => lex_cmp(a, b))
+  }
+  if (ea.rerun_failed || ea.shard_spec != "") && names.length() == 0 {
+    eprintln_pkspec("filter combination matched no tests")
+    return 0
+  }
+
+  // P4c: --total-timeout wall-clock cap. Go installs a context deadline; here
+  // we record an absolute deadline (ms) and check it at the top of each test
+  // iteration, marking the current + every remaining test Skipped on expiry.
+  // total_timeout="" or a parse failure leaves the deadline unset (no cap).
+  let total_timeout_ms = parse_go_duration_ms(ea.total_timeout)
+  let run_start = @async.now()
+
   let defaults = @executor.Defaults::from_model(plan.defaults)
   let tally = @executor.Tally::new()
   // Collect every test's Result (in run order = name order) so a JUnit report
   // can be emitted after the run (Go's cmdExec passes `results` to buildSuite).
   let results : Array[@executor.Result] = []
+
+  // Pre-run banner (Go cmdExec): announce shard / rerun scope before the loop.
+  if ea.shard_spec != "" {
+    @stdio.stderr.write(
+      "pkspec: shard \{shard_k}/\{shard_n}: running \{names.length()} of \{names.length() + shard_skipped} tests\n",
+    )
+  }
+  if ea.rerun_failed {
+    @stdio.stderr.write(
+      "pkspec: --rerun-failed: \{names.length()} tests selected from history\n",
+    )
+  }
 
   // Hook state. scope="all" captures live for the whole Run (Go's runState).
   let run_state : Map[String, String] = Map::new()
@@ -288,8 +379,28 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
   }
 
   let mut any_test_failed = false
+  let mut timed_out = false
   for name in names {
     let t = plan.tests.get(name).unwrap()
+    // P4c --total-timeout: once the wall-clock cap fires, this test and every
+    // test after it are marked Skipped with no verification (Go's ctx.Err()
+    // branch at the top of the per-test loop). after-hooks still run with
+    // suiteFailed=true. The deadline is sticky: once tripped it stays tripped.
+    if total_timeout_ms > 0L &&
+      (timed_out || @async.now() - run_start >= total_timeout_ms) {
+      timed_out = true
+      let res = @executor.Result::synthetic(
+        name,
+        @executor.Skipped,
+        ["not executed: context deadline exceeded"],
+        t.spec_ref,
+      )
+      tally.record(res.outcome)
+      results.push(res)
+      any_test_failed = true
+      @stdio.stderr.write(format_result(res))
+      continue
+    }
     // A failed before-all errors every test (Go's beforeAllErr branch).
     if before_all_err != "" {
       let res = @executor.Result::synthetic(
@@ -348,6 +459,45 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
         [before_each_err],
         t.spec_ref,
       )
+    } else if total_timeout_ms > 0L && t.mode() is @model.Cmd {
+      // P4c --total-timeout, in-flight test: when the wall-clock cap is active
+      // and this is a single-`cmd` body, Go's shared ctx kills the subprocess
+      // the instant the deadline trips (the body ctx derives from the expired
+      // total-timeout ctx), so the test errors and cmdExec overrides the reason
+      // to "aborted by total-timeout" (executor.go:472). Replicate by running
+      // the body under `with_timeout_opt(remaining)`: a `None` (cap tripped)
+      // yields an Errored result with that exact reason. `remaining` is >0 here
+      // (the top-of-loop deadline check already skipped tests with no budget).
+      //
+      // SCOPE NOTE: this in-flight abort is gated to Cmd mode. For step / sql /
+      // parallelSteps bodies Go enforces the deadline at the per-STEP subprocess
+      // (a step errors mid-run, the test classifies as `failed` with the
+      // remaining steps skipped — NOT a whole-test "aborted" error). The MoonBit
+      // executor does not yet thread a subprocess-level deadline into the step
+      // runners (it also does not enforce per-test/step `timeoutSec`), so a
+      // faithful step-mode in-flight abort is deferred with that work. The
+      // deterministic, contract-bearing behavior — REMAINING tests → Skipped —
+      // is handled uniformly at the top of the loop above and matches Go for
+      // every body mode.
+      let elapsed = @async.now() - run_start
+      let remaining = total_timeout_ms - elapsed
+      let budget = if remaining > 0L { remaining } else { 1L }
+      match
+        (@async.with_timeout_opt(budget.to_int(), () => run_exec_one(
+          name, t, defaults, workdir, test_state, ea.refresh_snapshots, abs,
+          ea.update_inline, ea.refresh_http, ea.http_replay_only,
+        )) catch {
+          _ => None
+        }) {
+        Some(r) => r
+        // The duration on the aborted body is volatile and is normalized away
+        // (the conformance gate uses normalizeDurations); 0 renders as `(0ms)`,
+        // which normalizes identically to Go's measured value.
+        None =>
+          @executor.Result::synthetic(
+            name, @executor.Errored, ["aborted by total-timeout"], t.spec_ref,
+          )
+      }
     } else {
       run_exec_one(
         name, t, defaults, workdir, test_state, ea.refresh_snapshots, abs,
@@ -405,6 +555,16 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
     }
   }
 
+  // P4c: record one timings.jsonl line per result (Go cmdExec, after Run).
+  // ON by default; --no-record-timings disables. A write failure is a
+  // non-fatal warning to stderr (does not change the exit code).
+  if not(ea.no_record_timings) {
+    match (try? record_timings(timings_path, plan, results)) {
+      Ok(_) => ()
+      Err(e) => @stdio.stderr.write("pkspec: warning: record timings: \{e}\n")
+    }
+  }
+
   // JUnit XML report (Go cmdExec lines 453-459): write
   // <junitDir>/<module-basename-without-ext>.xml. A write failure is a
   // non-fatal warning to stderr (does not change the exit code).
@@ -423,6 +583,13 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
   @stdio.stderr.write(
     "pkspec: \{tally.passed} passed, \{tally.flaky} flaky, \{tally.pending} pending, \{tally.failed} failed, \{tally.errored} errored, \{tally.skipped} skipped (of \{tally.total()})\n",
   )
+  // P4c --total-timeout: when any test was skipped, Go prints the timeout
+  // count line (cmdExec: `if tally.Skipped > 0`).
+  if tally.skipped > 0 {
+    @stdio.stderr.write(
+      "pkspec: [timeout] \{tally.skipped} tests not executed\n",
+    )
+  }
   // Exit code: Go's cmdExec returns an error when !IsGreen, which main()
   // prints as `pkspec: N test(s) failed, M errored, K skipped` to stderr and
   // exits 1. Replicate both the message and the exit code.

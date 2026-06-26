@@ -547,7 +547,7 @@ scenarios: Listing<Scenario> = new {
     id = "exec-shell-smoke"
     fixture = "conformance/fixtures/exec-shell-smoke"
     env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-shell-smoke" }
-    argv { "exec"; "-f"; "Test.pkl" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
     contract = new {
       exit = true
       stdoutEmpty = true
@@ -563,7 +563,7 @@ scenarios: Listing<Scenario> = new {
     id = "exec-stdout-contract"
     fixture = "conformance/fixtures/exec-stdout-contract"
     env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-stdout-contract" }
-    argv { "exec"; "-f"; "Test.pkl" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
     contract = new {
       exit = true
       stdoutEmpty = true
@@ -579,7 +579,7 @@ scenarios: Listing<Scenario> = new {
     id = "exec-fail"
     fixture = "conformance/fixtures/exec-fail"
     env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-fail" }
-    argv { "exec"; "-f"; "Test.pkl" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
     contract = new {
       exit = true
       stdoutEmpty = true
@@ -605,7 +605,7 @@ scenarios: Listing<Scenario> = new {
     id = "exec-steps-contract"
     fixture = "conformance/fixtures/exec-steps-contract"
     env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-steps-contract" }
-    argv { "exec"; "-f"; "Test.pkl" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
     contract = new {
       exit = true
       stdoutEmpty = true
@@ -623,7 +623,7 @@ scenarios: Listing<Scenario> = new {
     id = "exec-steps-capture"
     fixture = "conformance/fixtures/exec-steps-capture"
     env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-steps-capture" }
-    argv { "exec"; "-f"; "Test.pkl" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
     contract = new {
       exit = true
       stdoutEmpty = true
@@ -640,7 +640,7 @@ scenarios: Listing<Scenario> = new {
     id = "exec-parallel-steps"
     fixture = "conformance/fixtures/exec-parallel-steps"
     env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-parallel-steps" }
-    argv { "exec"; "-f"; "Test.pkl" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
     contract = new {
       exit = true
       stdoutEmpty = true
@@ -659,7 +659,7 @@ scenarios: Listing<Scenario> = new {
     id = "exec-hooks-lifecycle"
     fixture = "conformance/fixtures/exec-hooks-lifecycle"
     env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-hooks-lifecycle" }
-    argv { "exec"; "-f"; "Test.pkl" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
     contract = new {
       exit = true
       stdoutEmpty = true
@@ -685,7 +685,7 @@ scenarios: Listing<Scenario> = new {
     id = "exec-background-shell"
     fixture = "conformance/fixtures/exec-background-shell"
     env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-background-shell" }
-    argv { "exec"; "-f"; "Test.pkl" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
     contract = new {
       exit = true
       stdoutEmpty = true
@@ -936,6 +936,92 @@ scenarios: Listing<Scenario> = new {
     contract = new {
       exit = true
       stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // P4c exec-shard-balanced: `exec --shard 1/4` over the 10-test shard-balanced
+  // example, with a COMMITTED .pkspec/timings.jsonl (fixed per-test durations:
+  // fast=50ms, mid=150ms, slow=400ms). LPT bin-packing of those durations is
+  // deterministic, so shard 1/4 always selects EXACTLY {fast_a, fast_d, slow_a}
+  // and only those three run. Gates the LPT selection + the shard banner +
+  // per-test progress + summary (exactStderr + normalizeDurations). Both
+  // binaries pick the identical subset (LPT parity). PASSES, exit 0.
+  new {
+    id = "exec-shard-balanced"
+    fixture = "conformance/fixtures/exec-shard-balanced"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/shard-balanced" }
+    argv { "exec"; "-f"; "Test.pkl"; "--shard"; "1/4"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // P4c exec-rerun-failed: `exec --rerun-failed` over shard-balanced with a
+  // COMMITTED timings.jsonl whose MOST-RECENT (ts-desc) local records are:
+  // fast_a=fail, mid_c=skip, slow_b=error (selected); fast_b=pass (excluded);
+  // slow_c=pass but env=ci (excluded by env filter); all other tests have no
+  // history (excluded). So exactly {fast_a, mid_c, slow_b} re-run — a stable
+  // set proving the most-recent + env-filter + isFailedOutcome (fail/error/skip)
+  // logic. Gates the rerun banner + selection + summary (exactStderr +
+  // normalizeDurations). PASSES (the bodies are sleeps), exit 0.
+  new {
+    id = "exec-rerun-failed"
+    fixture = "conformance/fixtures/exec-rerun-failed"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/shard-balanced" }
+    argv { "exec"; "-f"; "Test.pkl"; "--rerun-failed"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // P4c exec-total-timeout: `exec --total-timeout 1ms` over shard-balanced.
+  // The first test (fast_a, `sleep 0.05` = 50ms) cannot finish inside a 1ms
+  // wall-clock cap, so the shared deadline aborts it mid-body — Go's ctx kills
+  // the subprocess and cmdExec overrides the reason to "aborted by
+  // total-timeout" (Errored); every subsequent test is marked Skipped with
+  // "not executed: context deadline exceeded". Deterministic because 50ms >> 1ms
+  // always. Gates the per-test errored/skipped lines + the [timeout] line +
+  // summary (exactStderr + normalizeDurations) + exit 1 (skipped → red).
+  new {
+    id = "exec-total-timeout"
+    fixture = "conformance/fixtures/exec-total-timeout"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/shard-balanced" }
+    argv {
+      "exec"
+      "-f"
+      "Test.pkl"
+      "--total-timeout"
+      "1ms"
+      "--no-record-timings"
+    }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // P4c exec-timings-record: a DEFAULT `exec` run (recording ON) over two fast
+  // `true` shell tests appends two pass records to a freshly-created
+  // .pkspec/timings.jsonl. The record content (ts + duration_ms are volatile)
+  // is gated byte-for-byte by the all-examples sweep, NOT here; this scenario
+  // gates that the FILE is created (fsDelta on .pkspec/timings.jsonl) + the
+  // run's exit 0 + the normalized progress/summary (exactStderr +
+  // normalizeDurations). PASSES, exit 0.
+  new {
+    id = "exec-timings-record"
+    fixture = "conformance/fixtures/exec-timings-record"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-timings-record" }
+    argv { "exec"; "-f"; "Test.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      fsDelta = true
       exactStderr = true
       normalizeDurations = true
     }

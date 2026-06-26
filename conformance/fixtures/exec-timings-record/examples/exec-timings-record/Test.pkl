@@ -1,0 +1,17 @@
+amends "../../pkl/Test.pkl"
+
+// P4c timings.jsonl recording fixture: two fast deterministic shell tests so a
+// default `exec` run appends two pass records to .pkspec/timings.jsonl. The
+// record content is gated with the ts/duration normalized away.
+tests {
+  new {
+    name = "rec_one"
+    body = new CmdTest { cmd = "true" }
+    specRef { "history.timings-jsonl" }
+  }
+  new {
+    name = "rec_two"
+    body = new CmdTest { cmd = "true" }
+    specRef { "history.timings-jsonl" }
+  }
+}

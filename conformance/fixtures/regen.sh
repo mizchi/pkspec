@@ -132,3 +132,48 @@ for pair in $p4b_sql_fixtures; do
   cp "$repo/examples/$src/Test.pkl" "$fx/examples/$id/Test.pkl"
   echo "regenerated $fx (from examples/$src)"
 done
+
+# P4c exec scheduling fixtures: --shard / --rerun-failed / --total-timeout +
+# timings.jsonl recording.
+#
+# exec-shard-balanced and exec-rerun-failed re-vendor the real
+# examples/shard-balanced/Test.pkl (10 mixed-duration sleep tests) but ALSO ship
+# a HAND-AUTHORED, COMMITTED examples/shard-balanced/.pkspec/timings.jsonl. That
+# history is the deterministic input to LPT bin-packing (shard) and the
+# most-recent-outcome lookup (rerun-failed): the durations / outcomes / env tags
+# are chosen so the selected test SET is fixed. Regen must NEVER overwrite the
+# committed timings.jsonl (regenerating it from a live run would make the value
+# volatile + break determinism), so only the schema + example body are re-vendored.
+for id in exec-shard-balanced exec-rerun-failed; do
+  fx="$here/$id"
+  if [ ! -f "$fx/examples/shard-balanced/.pkspec/timings.jsonl" ]; then
+    echo "skip $fx (committed timings.jsonl missing)" >&2
+    continue
+  fi
+  mkdir -p "$fx/pkl" "$fx/examples/shard-balanced"
+  cp "$repo/pkl/Test.pkl" "$fx/pkl/"
+  cp "$repo/examples/shard-balanced/Test.pkl" "$fx/examples/shard-balanced/Test.pkl"
+  echo "re-vendored schema + example for $fx (committed timings.jsonl preserved)"
+done
+
+# exec-total-timeout: a VERBATIM copy of examples/shard-balanced (no committed
+# .pkspec). The 1ms wall-clock cap deterministically aborts the first sleep and
+# skips the rest, so no history is needed.
+tt_fx="$here/exec-total-timeout"
+rm -rf "$tt_fx"
+mkdir -p "$tt_fx/pkl" "$tt_fx/examples/shard-balanced"
+cp "$repo/pkl/Test.pkl" "$tt_fx/pkl/"
+cp "$repo/examples/shard-balanced/Test.pkl" "$tt_fx/examples/shard-balanced/Test.pkl"
+echo "regenerated $tt_fx (from examples/shard-balanced)"
+
+# exec-timings-record: HAND-AUTHORED two-test (`true`) example with NO committed
+# .pkspec — a default `exec` run creates .pkspec/timings.jsonl (gated via
+# fsDelta). Regen only re-vendors the schema, never the hand-authored example.
+rec_fx="$here/exec-timings-record"
+if [ -f "$rec_fx/examples/exec-timings-record/Test.pkl" ]; then
+  mkdir -p "$rec_fx/pkl"
+  cp "$repo/pkl/Test.pkl" "$rec_fx/pkl/"
+  echo "re-vendored schema for $rec_fx (hand-authored example preserved)"
+else
+  echo "skip $rec_fx (hand-authored example missing)" >&2
+fi

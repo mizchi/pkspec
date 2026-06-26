@@ -1,0 +1,5 @@
+pkspec: shard 1/4: running 3 of 10 tests
+[pkspec] fast_a: passed (verifies history.timings-jsonl, history.shard-lpt) (70ms)
+[pkspec] fast_d: passed (verifies history.timings-jsonl, history.shard-lpt) (70ms)
+[pkspec] slow_a: passed (verifies history.timings-jsonl, history.shard-lpt) (420ms)
+pkspec: 3 passed, 0 flaky, 0 pending, 0 failed, 0 errored, 0 skipped (of 3)
