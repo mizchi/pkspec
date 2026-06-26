@@ -21,8 +21,7 @@
 // modes — see the run loop).
 
 ///|
-/// Parsed `exec` flags. The still-deferred flags (--refresh-ai) are
-/// parsed-and-ignored so a fixture that passes them does not error.
+/// Parsed `exec` flags.
 priv struct ExecArgs {
   file : String
   only : Array[String]
@@ -32,6 +31,9 @@ priv struct ExecArgs {
   update_inline : Bool
   refresh_http : Bool
   http_replay_only : Bool
+  // P4e: force every Step.expectAi to re-invoke its judge cmd, ignoring the
+  // cached verdict (Go `--refresh-ai`).
+  refresh_ai : Bool
   // P4c scheduling.
   shard_spec : String
   rerun_failed : Bool
@@ -50,6 +52,7 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
   let mut update_inline = false
   let mut refresh_http = false
   let mut http_replay_only = false
+  let mut refresh_ai = false
   let mut shard_spec = ""
   let mut rerun_failed = false
   let mut no_record_timings = false
@@ -86,14 +89,14 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
       // P4a: HTTP cassette record/replay controls.
       "--refresh-http" => refresh_http = true
       "--http-replay-only" => http_replay_only = true
+      // P4e: re-evaluate every expectAi judge, ignoring the cached verdict.
+      "--refresh-ai" => refresh_ai = true
       // P4c: scheduling features.
       "--shard" => shard_spec = take()
       "--total-timeout" => total_timeout = take()
       "--timings-file" => timings_file = take()
       "--no-record-timings" => no_record_timings = true
       "--rerun-failed" => rerun_failed = true
-      // Deferred boolean-flags: accept and ignore.
-      "--refresh-ai" => ()
       _ =>
         if a.has_prefix("-") {
           raise SpecCliError("flag provided but not defined: -\{strip_dashes(name)}")
@@ -113,6 +116,7 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
     update_inline,
     refresh_http,
     http_replay_only,
+    refresh_ai,
     shard_spec,
     rerun_failed,
     no_record_timings,
@@ -485,7 +489,7 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
       match
         (@async.with_timeout_opt(budget.to_int(), () => run_exec_one(
           name, t, defaults, workdir, test_state, ea.refresh_snapshots, abs,
-          ea.update_inline, ea.refresh_http, ea.http_replay_only,
+          ea.update_inline, ea.refresh_http, ea.http_replay_only, ea.refresh_ai,
         )) catch {
           _ => None
         }) {
@@ -501,7 +505,7 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
     } else {
       run_exec_one(
         name, t, defaults, workdir, test_state, ea.refresh_snapshots, abs,
-        ea.update_inline, ea.refresh_http, ea.http_replay_only,
+        ea.update_inline, ea.refresh_http, ea.http_replay_only, ea.refresh_ai,
       )
     }
 
@@ -619,10 +623,11 @@ async fn run_exec_one(
   update_inline : Bool,
   refresh_http : Bool,
   http_replay_only : Bool,
+  refresh_ai : Bool,
 ) -> @executor.Result {
   @executor.run_one(
     name, t, defaults, workdir, state, t.spec_ref, refresh_snapshots~,
-    source_path~, update_inline~, refresh_http~, http_replay_only~,
+    source_path~, update_inline~, refresh_http~, http_replay_only~, refresh_ai~,
   )
 }
 

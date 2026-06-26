@@ -44,6 +44,7 @@ pub async fn run_one(
   update_inline? : Bool = false,
   refresh_http? : Bool = false,
   http_replay_only? : Bool = false,
+  refresh_ai? : Bool = false,
 ) -> Result {
   let start = @async.now()
   let mode = t.mode()
@@ -68,13 +69,13 @@ pub async fn run_one(
       run_input_iterated(
         name, t, defaults, workdir, state, spec_ref, mode, start,
         refresh_snapshots, source_path, update_inline, refresh_http,
-        http_replay_only,
+        http_replay_only, refresh_ai,
       )
     } else {
       run_iterated(
         name, t, defaults, workdir, state, spec_ref, mode, start,
         refresh_snapshots, source_path, update_inline, refresh_http,
-        http_replay_only,
+        http_replay_only, refresh_ai,
       )
     }
     return last
@@ -90,7 +91,7 @@ pub async fn run_one(
     attempts = attempts + 1
     last = run_attempt(
       name, t, defaults, workdir, state, spec_ref, mode, refresh_snapshots,
-      source_path, update_inline, refresh_http, http_replay_only,
+      source_path, update_inline, refresh_http, http_replay_only, refresh_ai,
     )
     if last.outcome is Passed {
       passed = passed + 1
@@ -121,6 +122,7 @@ async fn run_attempt(
   update_inline : Bool,
   refresh_http : Bool,
   http_replay_only : Bool,
+  refresh_ai : Bool,
 ) -> Result {
   let res = Result::synthetic(name, Passed, [], spec_ref)
   run_with_backgrounds(res, t, defaults, workdir, () => match mode {
@@ -132,6 +134,7 @@ async fn run_attempt(
     @model.Steps =>
       run_steps(
         res, t, defaults, workdir, state, refresh_http~, http_replay_only~,
+        refresh_ai~,
       )
     @model.ParallelSteps =>
       run_parallel(

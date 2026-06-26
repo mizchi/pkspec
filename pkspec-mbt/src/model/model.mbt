@@ -133,10 +133,17 @@ pub struct Eventually {
 }
 
 ///|
-/// An `expectAi` assertion on a Step. Mirrors the spec-relevant subset of
-/// Go `config.AiAssertion`.
+/// An `expectAi` assertion on a Step (Go `config.AiAssertion` /
+/// `RenderedAiAssertion`). The judge `cmd` receives the step's stdout on
+/// stdin + the `prompt` via `$PKSPEC_AI_PROMPT`, exits 0 (pass) / non-0
+/// (fail), and its stdout is the explanation. `snapshot_name` keys the on-disk
+/// verdict cache; `prefer_deterministic` (default true) skips the judge when
+/// the step also carries a deterministic assertion.
 pub struct AiAssertion {
+  prompt : String
+  cmd : String
   snapshot_name : String
+  prefer_deterministic : Bool
 }
 
 ///|

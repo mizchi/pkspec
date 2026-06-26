@@ -28,6 +28,7 @@ pub async fn run_steps(
   extra_env : Map[String, String],
   refresh_http? : Bool = false,
   http_replay_only? : Bool = false,
+  refresh_ai? : Bool = false,
 ) -> Unit {
   let state : Map[String, String] = Map::new()
   for k, v in extra_env {
@@ -55,6 +56,14 @@ pub async fn run_steps(
         Some(name) => state[name] = "\{sr.exit_code}"
         None => ()
       }
+    }
+    // expectAi runs after the step's deterministic expectations have all
+    // passed (Go's `runSteps`): a failed step never reaches the judge, so the
+    // snapshot cache is never polluted, and an `eventually` step polls without
+    // re-invoking the judge. Only a PASSED step is judged (a non-passing step
+    // already has its reasons).
+    if sr.outcome is Passed {
+      apply_expect_ai(sr, step, workdir, refresh_ai)
     }
     res.steps.push(sr)
     if not(sr.outcome is Passed) {
