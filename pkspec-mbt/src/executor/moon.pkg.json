@@ -70,6 +70,9 @@
     "http.mbt": [
       "native"
     ],
+    "sql.mbt": [
+      "native"
+    ],
     "httpenv.mbt": [
       "native"
     ],

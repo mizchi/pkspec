@@ -210,6 +210,8 @@ fn parse_steps(j : Json?) -> Array[Step] {
               expect_ai: parse_ai(s.get("expectAi")),
               cassette: opt_str(s.get("cassette")),
               eventually: parse_eventually(s.get("eventually")),
+              sql: parse_sql(s.get("sql")),
+              inline_sql_rows: str_map(s.get("inlineSqlRows")),
             })
           _ => ()
         }
@@ -236,6 +238,39 @@ fn parse_http(j : Json?) -> HttpRequest? {
       })
     _ => None
   }
+}
+
+///|
+/// Parse a `RenderedSqlSpec` object into a `SqlSpec`, or None when the key is
+/// absent / null (Go's `Sql *SqlSpec`). `args` is the raw `[]any` carried as
+/// `Array[Json]`; `expectRowCount` is `*int` (None when omitted).
+fn parse_sql(j : Json?) -> SqlSpec? {
+  match j {
+    Some(Object(s)) =>
+      Some(SqlSpec::{
+        dsn: str_val(s.get("dsn")),
+        query: str_val(s.get("query")),
+        args: arr_json(s.get("args")),
+        expect_row_count: opt_int(s.get("expectRowCount")),
+        expect_rows_json_path: json_map(s.get("expectRowsJsonPath")),
+      })
+    _ => None
+  }
+}
+
+///|
+/// Decode a JSON array into an `Array[Json]`, preserving each raw element
+/// (Go `[]any`). Used for SqlSpec `args`. Missing key / null => empty.
+fn arr_json(j : Json?) -> Array[Json] {
+  let out : Array[Json] = []
+  match j {
+    Some(Array(a)) =>
+      for e in a {
+        out.push(e)
+      }
+    _ => ()
+  }
+  out
 }
 
 ///|

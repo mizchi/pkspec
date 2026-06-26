@@ -196,11 +196,12 @@ async fn run_step_once(
       run_http_step(
         step, t, defaults, workdir, state, refresh_http, http_replay_only,
       )
-    "playwright" | "playwright-test" | "sql" => {
+    "sql" => run_sql_step(step, t, defaults, workdir, state)
+    "playwright" | "playwright-test" => {
       let sr = StepResult::new(step_display_name(step))
       sr.outcome = Errored
       sr.reasons.push(
-        "step kind \{go_quote(step.kind)} is not supported yet (shell only; http / playwright / sql are a later phase)",
+        "step kind \{go_quote(step.kind)} is not supported yet (shell / http / sql only; playwright is a later phase)",
       )
       sr
     }

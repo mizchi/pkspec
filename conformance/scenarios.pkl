@@ -879,4 +879,65 @@ scenarios: Listing<Scenario> = new {
       normalizeDurations = true
     }
   }
+  // ── P4b: exec sql step (via the sqlite3 CLI shell-out) ───────────────
+  //
+  // Same oracle CLASS 2 gating as the other exec scenarios. The `sql` step kind
+  // is DETERMINISTIC (in-memory / local-file SQLite, no network), so each gates
+  // the normalized stderr at byte parity (exactStderr + normalizeDurations) with
+  // stdout asserted empty (sql row output is captured + asserted, not echoed).
+  // The MoonBit binary shells out to `sqlite3` (preinstalled on the GitHub
+  // ubuntu/macos runners); the Go oracle that produced the goldens embeds
+  // modernc.org/sqlite — the rows-JSON / rowcount OUTCOMES are identical, which
+  // is what these gate. EXCLUDED (deferred, error loudly): playwright /
+  // quickcheck / AI.
+  //
+  // exec-sql-select: examples/sql-select verbatim — a single `:memory:` step
+  // that seeds via `WITH seed(...) VALUES ... SELECT` and asserts expectRowCount
+  // + expectRowsJsonPath. Self-contained (no .db file), PASSES, exit 0.
+  new {
+    id = "exec-sql-select"
+    fixture = "conformance/fixtures/exec-sql-select"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-sql-select" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-sql-dml: examples/sql-dml verbatim — a CREATE → INSERT → SELECT →
+  // UPDATE → SELECT → DELETE → SELECT sequence against a local `work.db`,
+  // exercising the DML rowcount (changes()) path + the read path. A trailing
+  // shell step `rm -f work.db` cleans the file, so the run is net-zero on the
+  // file system (no fsDelta gate). PASSES, exit 0.
+  new {
+    id = "exec-sql-dml"
+    fixture = "conformance/fixtures/exec-sql-dml"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-sql-dml" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // exec-sql-parameterised: examples/sql-parameterised verbatim — `?`
+  // placeholders bound from `args` (one via `$TARGET_EMAIL`) plus an injection
+  // probe (`'; DROP TABLE users; --` lands as an inert string literal, table
+  // stays intact). Net-zero on the file system (trailing `rm -f work.db`).
+  // PASSES, exit 0.
+  new {
+    id = "exec-sql-parameterised"
+    fixture = "conformance/fixtures/exec-sql-parameterised"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-sql-parameterised" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
 }

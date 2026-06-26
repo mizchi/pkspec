@@ -126,7 +126,9 @@ async test "run_steps: regex with leading (?m) inline flag compiles + matches" {
 
 ///|
 async test "run_step: non-shell kind errors loudly (deferred)" {
-  let body = "{\"steps\":[{\"name\":\"q\",\"kind\":\"sql\"}]}"
+  // `playwright` is still a deferred kind (P4b implements `sql`; playwright /
+  // playwright-test remain a later phase).
+  let body = "{\"steps\":[{\"name\":\"q\",\"kind\":\"playwright\"}]}"
   let t = one_test_full(body)
   let res = Result::synthetic("t", Passed, [], [])
   run_steps(res, t, Defaults::new(), ".", Map::new())
@@ -180,6 +182,82 @@ async test "run_step eventually: converges to pass within the budget" {
   assert_eq(res.outcome, Passed)
   assert_eq(res.steps[0].outcome, Passed)
   assert_eq(res.steps[0].reasons.length(), 0)
+}
+
+// ── P4b: sql step ────────────────────────────────────────────────────
+
+///|
+async test "run_sql: :memory: WITH-seed SELECT, rowcount + jsonpath pass" {
+  let body =
+    "{\"steps\":[{\"name\":\"q\",\"kind\":\"sql\",\"sql\":{" +
+    "\"dsn\":\"sqlite::memory:\"," +
+    "\"query\":\"WITH seed(id, email) AS (VALUES (1, 'alice@x.test'), (2, 'bob@x.test')) SELECT * FROM seed ORDER BY id\"," +
+    "\"args\":[],\"expectRowCount\":2," +
+    "\"expectRowsJsonPath\":{\"0.email\":\"alice@x.test\",\"1.id\":2}}}]}"
+  let t = one_test_full(body)
+  let res = Result::synthetic("t", Passed, [], [])
+  run_steps(res, t, Defaults::new(), ".", Map::new())
+  assert_eq(res.outcome, Passed)
+  assert_eq(res.steps[0].outcome, Passed)
+  assert_eq(res.steps[0].reasons.length(), 0)
+}
+
+///|
+async test "run_sql: rowcount mismatch fails with Go's wording" {
+  let body =
+    "{\"steps\":[{\"name\":\"q\",\"kind\":\"sql\",\"sql\":{" +
+    "\"dsn\":\"sqlite::memory:\"," +
+    "\"query\":\"SELECT 1 AS a UNION ALL SELECT 2\"," +
+    "\"args\":[],\"expectRowCount\":3,\"expectRowsJsonPath\":{}}}]}"
+  let t = one_test_full(body)
+  let res = Result::synthetic("t", Passed, [], [])
+  run_steps(res, t, Defaults::new(), ".", Map::new())
+  assert_eq(res.steps[0].outcome, Failed)
+  assert_eq(res.steps[0].reasons[0], "sql: expected 3 row(s), got 2")
+}
+
+///|
+async test "run_sql: DML on file db reports changes() as rowcount" {
+  let dir = @xfs.tmpdir(prefix="pkspec-wb-sql-")
+  let body =
+    "{\"steps\":[" +
+    "{\"name\":\"create\",\"kind\":\"sql\",\"sql\":{\"dsn\":\"sqlite:w.db\"," +
+    "\"query\":\"CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)\",\"args\":[],\"expectRowsJsonPath\":{}}}," +
+    "{\"name\":\"ins\",\"kind\":\"sql\",\"sql\":{\"dsn\":\"sqlite:w.db\"," +
+    "\"query\":\"INSERT INTO t (v) VALUES ('a'),('b')\",\"args\":[],\"expectRowCount\":2,\"expectRowsJsonPath\":{}}}," +
+    "{\"name\":\"sel\",\"kind\":\"sql\",\"sql\":{\"dsn\":\"sqlite:w.db\"," +
+    "\"query\":\"SELECT COUNT(*) AS n FROM t\",\"args\":[],\"expectRowsJsonPath\":{\"0.n\":2}}}]}"
+  let t = one_test_full(body)
+  let res = Result::synthetic("t", Passed, [], [])
+  run_steps(res, t, Defaults::new(), dir, Map::new())
+  assert_eq(res.outcome, Passed)
+  for sr in res.steps {
+    assert_eq(sr.outcome, Passed)
+  }
+}
+
+///|
+async test "run_sql: parameterised ? args bind as literals (injection-safe)" {
+  let dir = @xfs.tmpdir(prefix="pkspec-wb-sqlp-")
+  let body =
+    "{\"steps\":[" +
+    "{\"name\":\"setup\",\"kind\":\"sql\",\"sql\":{\"dsn\":\"sqlite:w.db\"," +
+    "\"query\":\"CREATE TABLE u (email TEXT)\",\"args\":[],\"expectRowsJsonPath\":{}}}," +
+    "{\"name\":\"ins\",\"kind\":\"sql\",\"sql\":{\"dsn\":\"sqlite:w.db\"," +
+    "\"query\":\"INSERT INTO u (email) VALUES (?),(?)\",\"args\":[\"a@x.test\",\"b@x.test\"]," +
+    "\"expectRowCount\":2,\"expectRowsJsonPath\":{}}}," +
+    "{\"name\":\"inj\",\"kind\":\"sql\",\"sql\":{\"dsn\":\"sqlite:w.db\"," +
+    "\"query\":\"SELECT email FROM u WHERE email = ?\",\"args\":[\"'; DROP TABLE u; --\"]," +
+    "\"expectRowCount\":0,\"expectRowsJsonPath\":{}}}," +
+    "{\"name\":\"intact\",\"kind\":\"sql\",\"sql\":{\"dsn\":\"sqlite:w.db\"," +
+    "\"query\":\"SELECT COUNT(*) AS n FROM u\",\"args\":[],\"expectRowsJsonPath\":{\"0.n\":2}}}]}"
+  let t = one_test_full(body)
+  let res = Result::synthetic("t", Passed, [], [])
+  run_steps(res, t, Defaults::new(), dir, Map::new())
+  assert_eq(res.outcome, Passed)
+  for sr in res.steps {
+    assert_eq(sr.outcome, Passed)
+  }
 }
 
 ///|
