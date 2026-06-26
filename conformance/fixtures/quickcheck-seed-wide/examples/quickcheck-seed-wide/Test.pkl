@@ -1,0 +1,36 @@
+amends "../../pkl/Test.pkl"
+
+// P4d regression fixture: iterationSeed in the UPPER half of the uint32 range
+// (> 2^31). Locks the full-range xorshift32 PRNG parity so the signed-32-bit
+// clamp bug (a JSON-number → Int decode SATURATES anything >= 2^31 to
+// Int.MAX_VALUE, silently truncating the seed) can never regress. With
+// iterationSeed = 4294967295 (2^32-1), the oracle and the MoonBit port both
+// derive A = 619; a clamped seed (2^31-1) would derive A = 309 instead — so the
+// generated value AND the shrink trace below are the seed-fidelity assertion.
+//
+// The body fails for A >= 500; A = 619 fails at iteration 0 and the shrinker
+// decrements toward the 500 boundary, exhausting its 50-step budget at A = 603
+// (16 adopted steps). The whole trace is byte-compared against the oracle.
+tests {
+  new {
+    name = "seed_wide_shrink"
+    description = "A < 500 fails for the seed-derived value; shrinks toward the boundary"
+    specRef { "pbt.inputs"; "pbt.shrink" }
+    iterations = 10
+    iterationSeed = 4294967295
+    shrink = true
+    shrinkAttempts = 50
+    inputs {
+      ["A"] = new IntInput { lo = 0; hi = 1000 }
+    }
+    body = new CmdTest {
+      cmd =
+        """
+        if [ $A -ge 500 ]; then
+          echo "A=$A (>= 500)"
+          exit 1
+        fi
+        """
+    }
+  }
+}

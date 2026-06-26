@@ -1076,4 +1076,24 @@ scenarios: Listing<Scenario> = new {
       normalizeDurations = true
     }
   }
+  // quickcheck-seed-wide: regression for the full-uint32 iterationSeed range.
+  // `iterationSeed = 4294967295` (2^32-1) lives in the upper half [2^31, 2^32-1]
+  // that the original `iteration_seed : Int` decode SILENTLY CLAMPED to
+  // Int.MAX_VALUE — yielding the wrong xorshift32 stream (A=309 / seed=2147483647
+  // instead of A=619 / seed=4294967295). Carrying the seed as Int64 fixes it;
+  // this fixture gates the generated A (619) + the full 16-step shrink trace +
+  // the `seed=4294967295` line byte-for-byte against the oracle, so a re-clamp
+  // can't slip through. FAILS deterministically, exit 1.
+  new {
+    id = "quickcheck-seed-wide"
+    fixture = "conformance/fixtures/quickcheck-seed-wide"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/quickcheck-seed-wide" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
 }

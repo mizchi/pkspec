@@ -313,7 +313,12 @@ pub struct Test {
   // iteration with a per-iteration env; `inputs` non-empty switches to
   // input-space mode (typed value generation + per-input shrink).
   iterations : Int
-  iteration_seed : Int
+  // `iterationSeed` is a Pkl `Int(this >= 0 && this <= 4294967295)` — the FULL
+  // uint32 range. It is carried as `Int64` (NOT `Int`) so values in the upper
+  // half `[2^31, 2^32-1]` survive decode: `Int` is signed 32-bit and the
+  // JSON-number → Int conversion saturates anything >= 2^31 to Int.MAX_VALUE,
+  // which would silently clamp the seed and produce the wrong xorshift32 stream.
+  iteration_seed : Int64
   shrink : Bool
   shrink_attempts : Int
   inputs : Map[String, IntInput]

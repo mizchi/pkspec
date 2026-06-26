@@ -156,7 +156,7 @@ fn parse_tests(j : Json?) -> Map[String, Test] {
               retries: int_val(t.get("retries")),
               flaky_acceptable: bool_val(t.get("flakyAcceptable")),
               iterations: int_val(t.get("iterations")),
-              iteration_seed: int_val(t.get("iterationSeed")),
+              iteration_seed: int64_val(t.get("iterationSeed")),
               shrink: bool_val(t.get("shrink")),
               shrink_attempts: int_val(t.get("shrinkAttempts")),
               inputs: parse_inputs(t.get("inputs")),
@@ -532,6 +532,20 @@ fn bool_val(j : Json?) -> Bool {
 fn int_val(j : Json?) -> Int {
   match j {
     Some(Number(x, ..)) => x.to_int()
+    _ => 0
+  }
+}
+
+///|
+/// Wide integer decode for fields that may exceed the signed-32-bit range —
+/// notably `iterationSeed`, whose Pkl type spans the FULL uint32 range
+/// `[0, 4294967295]`. `Double::to_int()` SATURATES at `Int.MAX_VALUE` (2^31-1),
+/// so anything in the upper half would be silently clamped; `Double::to_int64()`
+/// preserves the value exactly (2^32 is exactly representable in f64). Negatives
+/// pass through unclamped so the seed-range error path can still fire downstream.
+fn int64_val(j : Json?) -> Int64 {
+  match j {
+    Some(Number(x, ..)) => x.to_int64()
     _ => 0
   }
 }

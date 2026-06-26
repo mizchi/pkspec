@@ -202,3 +202,16 @@ if [ -f "$iface_fx/examples/quickcheck-input-space/Test.pkl" ]; then
 else
   echo "skip $iface_fx (hand-authored example missing)" >&2
 fi
+
+# quickcheck-seed-wide: HAND-AUTHORED regression for iterationSeed > 2^31 (the
+# upper-half-of-uint32 clamp bug). The fixed seed (4294967295) + the shrink
+# trace are the full-range PRNG-fidelity assertion. Regen only re-vendors the
+# schema, never the hand-authored example body.
+sw_fx="$here/quickcheck-seed-wide"
+if [ -f "$sw_fx/examples/quickcheck-seed-wide/Test.pkl" ]; then
+  mkdir -p "$sw_fx/pkl"
+  cp "$repo/pkl/Test.pkl" "$sw_fx/pkl/"
+  echo "re-vendored schema for $sw_fx (hand-authored example preserved)"
+else
+  echo "skip $sw_fx (hand-authored example missing)" >&2
+fi

@@ -29,20 +29,20 @@ fn xorshift32_step(s : UInt) -> UInt {
 
 ///|
 /// Validate + narrow `Test.iterationSeed` to a uint32, mirroring Go
-/// `iterationSeedUint32`. The seed is a Pkl `Int` (modelled as MoonBit `Int`
-/// here); it must be within `[0, 4294967295]`. Returns the seed as `UInt` or
-/// the exact Go error string on range violation.
-fn iteration_seed_uint32(seed : Int) -> Result_[UInt, String] {
-  if seed < 0 {
+/// `iterationSeedUint32`. The seed is carried as `Int64` (the model preserves
+/// the full uint32 range without the signed-32-bit clamp), and must be within
+/// `[0, 4294967295]`. Returns the seed as `UInt` or the exact Go error string
+/// on range violation (both the low and high bound, matching Go's two checks).
+fn iteration_seed_uint32(seed : Int64) -> Result_[UInt, String] {
+  if seed < 0L || seed > 4294967295L {
     return Err(
       "iterationSeed must be within uint32 range [0, 4294967295], got \{seed}",
     )
   }
-  // Test.iterationSeed is a plain MoonBit Int (32-bit signed in the model). A
-  // value <= Int.max_value is always within uint32 range once non-negative, so
-  // the high-bound check Go performs against uint64 never triggers here; we
-  // keep the same wording defensively.
-  Ok(seed.reinterpret_as_uint())
+  // In range [0, 2^32-1]: narrow Int64 -> UInt64 -> UInt. The final step keeps
+  // the low 32 bits, which equal the value since it is already within uint32
+  // range (Int64 has no direct `to_uint`, hence the UInt64 hop).
+  Ok(seed.to_uint64().to_uint())
 }
 
 ///|
