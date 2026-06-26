@@ -1,0 +1,64 @@
+scenarios {
+  new {
+    id = "demo"
+    implementations {
+      new CodeImpl { at = "internal/x.go:Foo" }
+    }
+    progressMethod = "severity-weighted"
+    inlineStdout = new InlineSnapshot {}
+    inlineStderr = new InlineSnapshot { state = "match"; value = "err\n" }
+    given {
+      new SpecStep {
+        description = "seed"
+        impl = new Step {
+          body = new ShellBody {
+            cmd = "echo seed"
+            captureStdout = "S"
+          }
+        }
+      }
+    }
+    audienceNotes { ["pm"] = "pm only" }
+  }
+}
+tests {
+  new {
+    name = "echo"
+    body = new CmdTest {
+      cmd = "echo hi"
+      shellExpectations {
+        expectExitCode = 0
+        expectStdout = "hi\n"
+      }
+    }
+  }
+  new {
+    name = "fan"
+    body = new ParallelTest {
+      parallelSteps {
+        new { name = "p1"; body = new ShellBody { cmd = "sleep 0.1" } }
+        new { name = "p2"; body = new ShellBody { cmd = "sleep 0.1" } }
+      }
+    }
+  }
+  new {
+    name = "fetch"
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "call"
+          body = new HttpBody {
+            http = new HttpRequest {
+              method = "GET"
+              url = "http://localhost/items"
+            }
+            expectStatus = 200
+          }
+        }
+      }
+    }
+  }
+}
+implementations {
+  new DocImpl { at = "docs/y.md#bar" }
+}

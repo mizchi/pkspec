@@ -1,0 +1,23 @@
+{
+  "warn-list": "-29-20-6",
+  "targets": {
+    "migrate.mbt": [
+      "native"
+    ],
+    "pass1.mbt": [
+      "native"
+    ],
+    "pass2.mbt": [
+      "native"
+    ],
+    "match.mbt": [
+      "native"
+    ],
+    "util.mbt": [
+      "native"
+    ],
+    "migrate_wbtest.mbt": [
+      "native"
+    ]
+  }
+}

@@ -23,6 +23,7 @@ fn usage() -> String {
     #|  check [opts] <path>...      verify declared specs have implementations
     #|  exec [-f Test.pkl] [--only N] [--tag T]  run shell `cmd` tests
     #|  run [--allow-cmd] <files>   wrap `pkl test`, translate its exit code
+    #|  migrate [--dry-run|--check] <path>...  text-transform pre-v0.2.0 Pkl specs
   s
 }
 
@@ -476,6 +477,7 @@ async fn main {
     "check" => run_check_cmd(rest)
     "exec" => run_exec_cmd(rest)
     "run" => run_run_cmd(rest)
+    "migrate" => run_migrate_cmd(rest)
     other => {
       // Go prints the usage banner and the error to STDERR for an unknown
       // command (cmd/pkspec/main.go: usage(stderr) then the os.Exit(1)
