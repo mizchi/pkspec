@@ -248,6 +248,17 @@ pub struct Defaults {
 }
 
 ///|
+/// A typed property-based input generator. Mirrors Go `config.Input` /
+/// `config.IntInput` (`pkspec.Test#RenderedIntInput`). Only the int kind is
+/// modelled today; the `kind` discriminator (carried verbatim from the
+/// rendered JSON) is the extension point for future StringInput / ListIntInput.
+pub struct IntInput {
+  kind : String
+  lo : Int
+  hi : Int
+}
+
+///|
 /// The runner-side test record. Mirrors the spec-relevant subset of Go
 /// `config.Test`. The full body detail is modelled so `pkspec spec` can
 /// reproduce Go's `expectations()` / `stepLabel()` byte-for-byte.
@@ -297,6 +308,15 @@ pub struct Test {
   // test-level
   retries : Int
   flaky_acceptable : Bool
+  // property-based testing (Go `Test.Iterations` / `IterationSeed` / `Shrink` /
+  // `ShrinkAttempts` / `Inputs`). When `iterations > 1`, the body runs once per
+  // iteration with a per-iteration env; `inputs` non-empty switches to
+  // input-space mode (typed value generation + per-input shrink).
+  iterations : Int
+  iteration_seed : Int
+  shrink : Bool
+  shrink_attempts : Int
+  inputs : Map[String, IntInput]
   // background processes spawned around the body (Go `Test.Background`).
   backgrounds : Array[Background]
 }

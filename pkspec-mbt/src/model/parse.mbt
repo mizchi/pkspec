@@ -155,7 +155,38 @@ fn parse_tests(j : Json?) -> Map[String, Test] {
               timeout_sec: int_val(t.get("timeoutSec")),
               retries: int_val(t.get("retries")),
               flaky_acceptable: bool_val(t.get("flakyAcceptable")),
+              iterations: int_val(t.get("iterations")),
+              iteration_seed: int_val(t.get("iterationSeed")),
+              shrink: bool_val(t.get("shrink")),
+              shrink_attempts: int_val(t.get("shrinkAttempts")),
+              inputs: parse_inputs(t.get("inputs")),
               backgrounds: parse_backgrounds(t.get("background")),
+            }
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+  out
+}
+
+///|
+/// Parse the `inputs` object (Go `map[string]config.Input`) into typed
+/// `IntInput`s keyed by input name. The rendered JSON is
+/// `{ "<name>": { "kind": "int", "lo": .., "hi": .. } }`. Only `kind == "int"`
+/// is modelled; an unknown kind is carried verbatim so the executor can error
+/// loudly (Go's `generateOneInput` default case).
+fn parse_inputs(j : Json?) -> Map[String, IntInput] {
+  let out : Map[String, IntInput] = {}
+  match j {
+    Some(Object(m)) =>
+      for k, v in m {
+        match v {
+          Object(o) =>
+            out[k] = IntInput::{
+              kind: str_val(o.get("kind")),
+              lo: int_val(o.get("lo")),
+              hi: int_val(o.get("hi")),
             }
           _ => ()
         }
