@@ -106,6 +106,26 @@ pub struct ReferenceTest {
 }
 
 ///|
+/// A SQL query spec on a Step. Mirrors Go `config.SqlSpec` (`internal/config`).
+/// The executor (P4b) opens the DSN, runs `query` (with `$VAR` expansion on the
+/// query text + every string `arg`), and asserts on `expectRowCount` /
+/// `expectRowsJsonPath` against the serialised row array. `args` is carried as
+/// raw `Json` per entry (Go `[]any`): string entries get `$VAR` expansion, all
+/// entries are substituted into the `?` placeholders as SQL literals.
+pub struct SqlSpec {
+  dsn : String
+  query : String
+  // Positional `?` bind values (Go `[]any`). String entries are `$VAR`-expanded
+  // before binding; every entry is rendered to a SQL literal for the sqlite3
+  // CLI (which cannot bind argv `?`).
+  args : Array[Json]
+  // `expectRowCount` (Go `*int`): None = no rowcount assertion.
+  expect_row_count : Int?
+  // gjson-path -> expected JSON value, against the row array (Go `map[string]any`).
+  expect_rows_json_path : Map[String, Json]
+}
+
+///|
 /// An `eventually` poll spec on a Step. Mirrors Go `config.Eventually`.
 pub struct Eventually {
   interval_ms : Int
@@ -177,6 +197,11 @@ pub struct Step {
   expect_ai : AiAssertion?
   cassette : String?
   eventually : Eventually?
+  // sql step body (Go `Step.Sql *SqlSpec`) + the inline-rows snapshot mapping
+  // (Go `Step.InlineSqlRows map[string]string`). The executor (P4b) runs the
+  // `sql` kind; `inline_sql_rows` is carried for the assert path.
+  sql : SqlSpec?
+  inline_sql_rows : Map[String, String]
 }
 
 ///|
