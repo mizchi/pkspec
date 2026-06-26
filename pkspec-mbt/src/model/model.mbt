@@ -56,11 +56,21 @@ pub struct Scenario {
 }
 
 ///|
-/// An HTTP request on a Step. Mirrors the spec-relevant subset of Go
-/// `config.HttpRequest`.
+/// An HTTP request on a Step. Mirrors Go `config.HttpRequest`. The spec
+/// commands only read `http_method` / `url` (for `stepLabel`); the executor
+/// (P4a) additionally reads `headers` / `body` / `body_json` / `timeout_sec`.
+/// `body` and `body_json` are mutually exclusive (the runner errors when both
+/// are set); `body_json` is JSON-encoded into the request body with an auto
+/// `Content-Type: application/json`.
 pub struct HttpRequest {
   http_method : String
   url : String
+  headers : Map[String, String]
+  body : String?
+  // The raw `bodyJson` value (any JSON shape) or None. Carried as `Json` so the
+  // executor can JSON-encode it after `$VAR` expansion (Go `expandJsonValue`).
+  body_json : Json?
+  timeout_sec : Int
 }
 
 ///|
@@ -150,17 +160,20 @@ pub struct Step {
   // sequential control (Go `Step.Always` / `Repeat`).
   always : Bool
   repeat : Int
-  // HTTP-only fields (used only by `validateStepKind` to reject a shell step
-  // that sets them; the HTTP body is a P4 step kind).
+  // HTTP-only fields. `validateStepKind` rejects a shell step that sets any of
+  // them; the executor (P4a) reads them for the `http` step kind. The JSONPath
+  // / header maps carry the full key/value pairs (Go `map[string]any` /
+  // `map[string]string`), not just a count, so the http assertions / captures
+  // run.
   expect_status : Int?
   expect_status_between : Array[Int]
   expect_body_equals : String?
   expect_body_contains : String?
-  expect_body_json_path_count : Int
-  expect_header_equals_count : Int
+  expect_body_json_path : Map[String, Json]
+  expect_header_equals : Map[String, String]
   capture_body : String?
   capture_status : String?
-  capture_body_json_path_count : Int
+  capture_body_json_path : Map[String, String]
   expect_ai : AiAssertion?
   cassette : String?
   eventually : Eventually?

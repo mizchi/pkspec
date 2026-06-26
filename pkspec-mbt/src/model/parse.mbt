@@ -202,11 +202,11 @@ fn parse_steps(j : Json?) -> Array[Step] {
               expect_status_between: arr_int(s.get("expectStatusBetween")),
               expect_body_equals: opt_str(s.get("expectBodyEquals")),
               expect_body_contains: opt_str(s.get("expectBodyContains")),
-              expect_body_json_path_count: map_len(s.get("expectBodyJsonPath")),
-              expect_header_equals_count: map_len(s.get("expectHeaderEquals")),
+              expect_body_json_path: json_map(s.get("expectBodyJsonPath")),
+              expect_header_equals: str_map(s.get("expectHeaderEquals")),
               capture_body: opt_str(s.get("captureBody")),
               capture_status: opt_str(s.get("captureStatus")),
-              capture_body_json_path_count: map_len(s.get("captureBodyJsonPath")),
+              capture_body_json_path: str_map(s.get("captureBodyJsonPath")),
               expect_ai: parse_ai(s.get("expectAi")),
               cassette: opt_str(s.get("cassette")),
               eventually: parse_eventually(s.get("eventually")),
@@ -226,6 +226,13 @@ fn parse_http(j : Json?) -> HttpRequest? {
       Some(HttpRequest::{
         http_method: str_val(h.get("method")),
         url: str_val(h.get("url")),
+        headers: str_map(h.get("headers")),
+        body: opt_str(h.get("body")),
+        // `bodyJson` is any JSON shape; carried raw so the executor can encode
+        // it after `$VAR` expansion (Go `expandJsonValue`). Pkl renders an
+        // unset `Any? = null` as JSON null, which decodes to None here.
+        body_json: opt_json(h.get("bodyJson")),
+        timeout_sec: int_val(h.get("timeoutSec")),
       })
     _ => None
   }
@@ -490,11 +497,14 @@ fn arr_int(j : Json?) -> Array[Int] {
 }
 
 ///|
-/// Number of keys in a JSON object value (Go `len(map)`); 0 when missing.
-fn map_len(j : Json?) -> Int {
+/// An optional raw JSON value (Go `any` / `*interface{}`): a present non-null
+/// value => Some, a missing key / JSON `null` => None. Used for `bodyJson`,
+/// where the executor needs the raw shape (object / array / scalar) to encode.
+fn opt_json(j : Json?) -> Json? {
   match j {
-    Some(Object(m)) => m.size()
-    _ => 0
+    Some(Null) => None
+    Some(v) => Some(v)
+    None => None
   }
 }
 
