@@ -1,0 +1,231 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "pkspec@*"
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. pkspec@0.4.0 or v0.4.0)"
+        required: true
+      dry_run:
+        description: "Build + package the matrix but skip publishing the release"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # Resolve the tag/version once so every downstream job (matrix build +
+  # release) shares a single source of truth. Tag push → github.ref_name;
+  # workflow_dispatch → its `tag` input. The version is the bare X.Y.Z
+  # (leading `pkspec@` or `v` stripped) baked into the pkspec binary at
+  # build time.
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF##refs/tags/}"
+          fi
+          version="${tag#pkspec@}"
+          version="${version#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "::notice::resolved tag=$tag version=$version"
+
+  # One GitHub-hosted runner per target — MoonBit native is host-only (no
+  # cross-compile), so each OS/arch combination is built on a matching
+  # runner. arm64 Linux + arm macOS images are all GitHub-hosted and free
+  # for public repos (pkspec is public).
+  build:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runs-on: ubuntu-latest
+          - target: linux-arm64
+            runs-on: ubuntu-24.04-arm
+          # No darwin-amd64: the MoonBit toolchain has no x86_64 macOS
+          # build (`Unsupported platform: Darwin x86_64`) and moon does
+          # not honour CC for cross-arch, so Intel macOS is unsupported.
+          - target: darwin-arm64
+            runs-on: macos-14
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install MoonBit CLI
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Moon version
+        run: moon version --all
+
+      # Bake the resolved tag version into pkspec_version() before
+      # building. This is a throwaway sed on the CI checkout only. The
+      # source keeps whatever the last manual bump set; CI overrides it
+      # with the tag version so the released binary always matches its tag
+      # even if the source bump was missed.
+      - name: Inject version
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve.outputs.version }}"
+          file="pkspec-mbt/src/cmd/pkspec/main.mbt"
+          sed -i.bak -E 's/^  "[0-9]+\.[0-9]+\.[0-9]+"$/  "'"$version"'"/' "$file"
+          rm -f "$file.bak"
+          grep -nF "  \"$version\"" "$file" || { echo "::error::version injection failed"; exit 1; }
+
+      - name: Moon update (pkspec-mbt)
+        working-directory: pkspec-mbt
+        run: moon update
+
+      - name: Build pkspec (native, release)
+        working-directory: pkspec-mbt
+        run: moon build --target native --release
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          target="${{ matrix.target }}"
+          build="pkspec-mbt/_build/native/release/build/src/cmd"
+          mkdir -p dist
+          # All six binaries renamed bare (no .exe) into one tarball.
+          for name in pkspec pkspec-adapter-vitest pkspec-adapter-playwright \
+                      pkspec-adapter-node-test pkspec-adapter-go-test pkspec-adapter-moon-test; do
+            cp "$build/$name/$name.exe" "dist/$name"
+            chmod +x "dist/$name"
+          done
+          tar -czf "pkspec-${target}.tar.gz" -C dist \
+            pkspec pkspec-adapter-vitest pkspec-adapter-playwright \
+            pkspec-adapter-node-test pkspec-adapter-go-test pkspec-adapter-moon-test
+          # shasum -a 256 is present on both macOS and ubuntu; sha256sum is
+          # Linux-only. Both emit the same "<hex>  <file>" format the asset
+          # contract expects.
+          shasum -a 256 "pkspec-${target}.tar.gz" > "pkspec-${target}.tar.gz.sha256"
+          echo "--- tarball contents ---"
+          tar -tzf "pkspec-${target}.tar.gz"
+          cat "pkspec-${target}.tar.gz.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkspec-${{ matrix.target }}
+          path: |
+            pkspec-${{ matrix.target }}.tar.gz
+            pkspec-${{ matrix.target }}.tar.gz.sha256
+          retention-days: 1
+
+  release:
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download pkspec binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pkspec-*
+          merge-multiple: true
+          path: dist
+
+      - name: Show downloaded artifacts
+        run: ls -la dist/
+
+      - name: Resolve release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve.outputs.version }}"
+          notes_file="${{ runner.temp }}/release-notes.md"
+          {
+            echo "Release pkspec@${version} — pkspec + 5 adapter shims for linux-amd64, linux-arm64, darwin-arm64."
+            echo ""
+            echo "Install:"
+            echo '```'
+            echo 'curl -fsSL https://raw.githubusercontent.com/mizchi/pkspec/main/install.sh | sh'
+            echo '```'
+          } > "$notes_file"
+          echo "file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to release
+        # Skip publishing on a dry-run dispatch: the matrix still builds +
+        # packages + uploads artifacts above, so a maintainer can verify
+        # all 3 runners produce correctly-named assets without cutting a
+        # release.
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ needs.resolve.outputs.tag }}"
+          notes="${{ steps.notes.outputs.file }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes-file "$notes"
+          else
+            gh release create "$tag" --title "$tag" --notes-file "$notes"
+          fi
+          gh release upload "$tag" --clobber \
+            dist/pkspec-linux-amd64.tar.gz dist/pkspec-linux-amd64.tar.gz.sha256 \
+            dist/pkspec-linux-arm64.tar.gz dist/pkspec-linux-arm64.tar.gz.sha256 \
+            dist/pkspec-darwin-arm64.tar.gz dist/pkspec-darwin-arm64.tar.gz.sha256 \
+            install.sh
+
+      # Keep the Nix flake's binary pin in lockstep with the release.
+      # The flake fetches these exact tarballs, so regenerate
+      # nix/pkspec-release.json from the freshly built checksums and open a
+      # follow-up PR. (Can't commit straight to main if it's protected;
+      # a PR is reviewable and works either way.)
+      - name: Sync Nix flake release pin
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve.outputs.version }}"
+          la=$(awk '{print $1}' dist/pkspec-linux-amd64.tar.gz.sha256)
+          lr=$(awk '{print $1}' dist/pkspec-linux-arm64.tar.gz.sha256)
+          da=$(awk '{print $1}' dist/pkspec-darwin-arm64.tar.gz.sha256)
+          jq -n --arg v "$version" --arg la "$la" --arg lr "$lr" --arg da "$da" '{
+            version: $v,
+            platforms: {
+              "x86_64-linux":  { plat: "linux-amd64",  sha256: $la },
+              "aarch64-linux": { plat: "linux-arm64",  sha256: $lr },
+              "aarch64-darwin": { plat: "darwin-arm64", sha256: $da }
+            }
+          }' > nix/pkspec-release.json
+          if git diff --quiet -- nix/pkspec-release.json; then
+            echo "::notice::nix/pkspec-release.json already in sync with pkspec@${version}"
+            exit 0
+          fi
+          branch="nix-release-sync-${version}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add nix/pkspec-release.json
+          git commit -m "nix: sync flake release pin to pkspec@${version}"
+          git push -f origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "nix: sync flake release pin to pkspec@${version}" \
+            --body "Auto-generated after the pkspec@${version} release. Updates \`nix/pkspec-release.json\` sha256 to the freshly built binaries so \`nix build\` / \`nix run github:mizchi/pkspec\` resolve the new release." \
+            || echo "::warning::could not open the sync PR — enable 'Allow GitHub Actions to create and approve pull requests' (Settings → Actions → General), or update nix/pkspec-release.json by hand"

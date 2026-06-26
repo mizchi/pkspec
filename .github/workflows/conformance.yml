@@ -1,4 +1,4 @@
-name: conformance-mbt
+name: conformance
 on:
   push:
     branches: [main]

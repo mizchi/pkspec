@@ -8,7 +8,7 @@
 - 既存ランナー (vitest / playwright / node:test / go test / moon test) は Pkl の **adapter DSL** で composition。Go 側に runner ごとの実装を抱え込まない
 - ソースコードに `// pkspec:spec=<id>` marker を書くだけで、 「この実装はあの spec を満たす」を `pkspec lint --scan` が拾う
 - `pkspec migrate` で v0.1.x → v0.2.0 の schema 変更を text-transform で吸収。 idempotent な `--check` モードを CI に挿せる
-- 0.2.1 リリース済み。 `go install github.com/mizchi/pkspec/cmd/...@latest` / `nix profile install github:mizchi/pkspec` / GitHub Action は `uses: mizchi/pkspec@v0`
+- MoonBit-native 実装 (0.4.x)。 `curl -fsSL https://raw.githubusercontent.com/mizchi/pkspec/main/install.sh | sh` / `nix profile install github:mizchi/pkspec` / GitHub Action は `uses: mizchi/pkspec@v0`
 
 ## なぜ書いてるか
 
@@ -25,7 +25,7 @@ pkspec は両方を Pkl の型で解く:
 ## 動かしてみる
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/...@latest
+curl -fsSL https://raw.githubusercontent.com/mizchi/pkspec/main/install.sh | sh
 # pkl CLI も必要 (https://pkl-lang.org/main/current/pkl-cli/)
 
 mkdir my-tests && cd my-tests
@@ -182,7 +182,7 @@ v0.1.x で `implementedBy = "code"` + `implementedAt = "X"` だったのを `imp
 
 ### 6. pkfire との spec ↔ task リンク
 
-main branch (次の patch release で入る) の `new TaskImpl { at = "Taskfile.pkl#release" }` で、 pkfire の task を Scenario の実装先に名指せる。 同じリリースで `Implementation` が abstract 化され、 `TestImpl` / `CodeImpl` / `DocImpl` / `TaskImpl` の 4 つの typed subclass に分かれた。 v0.1.x → v0.2.x の移行と同様、 `pkspec migrate` が flat 形式 → typed subclass の rewrite を担当する。 0.2.1 にはまだ入っていないので、 試すなら `go install github.com/mizchi/pkspec/cmd/...@main` で main を入れる。
+main branch (次の patch release で入る) の `new TaskImpl { at = "Taskfile.pkl#release" }` で、 pkfire の task を Scenario の実装先に名指せる。 同じリリースで `Implementation` が abstract 化され、 `TestImpl` / `CodeImpl` / `DocImpl` / `TaskImpl` の 4 つの typed subclass に分かれた。 v0.1.x → v0.2.x の移行と同様、 `pkspec migrate` が flat 形式 → typed subclass の rewrite を担当する。 試すなら `curl -fsSL https://raw.githubusercontent.com/mizchi/pkspec/main/install.sh | sh` で最新リリースの binary を入れる。
 
 ```pkl
 scenarios {
@@ -218,7 +218,7 @@ build / release / migration のような「コードに 1 ファイルとして�
 ## さわってみる
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/...@latest
+curl -fsSL https://raw.githubusercontent.com/mizchi/pkspec/main/install.sh | sh
 mkdir my-tests && cd my-tests
 pkspec init                                # pkspec/ 配下に schema を展開
 # Test.pkl と Spec.pkl を自分で書く
