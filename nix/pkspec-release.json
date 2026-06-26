@@ -1,17 +1,17 @@
 {
-  "version": "0.4.1",
+  "version": "0.4.2",
   "platforms": {
     "x86_64-linux": {
       "plat": "linux-amd64",
-      "sha256": "5e0af103fbd38b11601ca3eeb0130c25645e862936ccf09cc57fc7752aba820d"
+      "sha256": "5439767f9894afe09f39f323acdaa4926ca5cbf51f6e5d5d4788c45151418a65"
     },
     "aarch64-linux": {
       "plat": "linux-arm64",
-      "sha256": "8a7c05c3a5e9615e8cf6c35c2df44b3f91a0af4fc1c83616e86faf3ea5a24263"
+      "sha256": "95dccdda9c47eecab386d4d96037c77e9d78e97ef4ba7f2be1ca87e87f150f47"
     },
     "aarch64-darwin": {
       "plat": "darwin-arm64",
-      "sha256": "7bcdc64be78edf264afcf67e2e753b38d8e930c9ba611cc598aef5d0b29bf8bc"
+      "sha256": "f3393651a0fdea7746573c0e6201b27b1916ff6d8bcc31b6dda268d986ed0e2f"
     }
   }
 }
