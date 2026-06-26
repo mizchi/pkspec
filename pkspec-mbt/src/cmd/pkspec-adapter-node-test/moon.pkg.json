@@ -1,0 +1,13 @@
+{
+  "is-main": true,
+  "import": [
+    { "path": "mizchi/pkspec-mbt/src/adaptershim", "alias": "adaptershim" },
+    { "path": "moonbitlang/x/sys", "alias": "sys" },
+    { "path": "moonbitlang/async", "alias": "async" },
+    { "path": "moonbitlang/async/stdio", "alias": "stdio" }
+  ],
+  "warn-list": "-29-20",
+  "targets": {
+    "main.mbt": ["native"]
+  }
+}

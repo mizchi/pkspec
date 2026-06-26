@@ -1243,4 +1243,37 @@ scenarios: Listing<Scenario> = new {
       exactStderr = true
     }
   }
+  // adapter (mock protocol smoke): the PRIMARY hermetic gate for the `adapter`
+  // command + the pkspec.adapter.v1 wire format. The adapter is a bash
+  // `scripts/mock-adapter.sh` that speaks discover / run / coverage with FIXED
+  // JSON (no external test runner), so this is fully deterministic and needs
+  // nothing on PATH but bash. Gates exit + the stdout summary/coverage lines +
+  // the stderr suite line, all at byte parity (no volatile tokens to
+  // normalize). Goldens are captured from the Go oracle.
+  //
+  // The builtin go-test / moon-test / vitest / node-test / playwright adapters
+  // are NOT gated here. vitest / node-test / playwright need Node + browsers
+  // (non-hermetic, excluded like doctor / run); their file-scan discover output
+  // IS verified byte-identical to the Go oracle in isolation (see the P5b
+  // report), but their `run` spawns the node/npx toolchain.
+  //
+  // The go-test shim's discover (`go test -list`) and any kind's `run` that
+  // shells out to go / moon / node spawn an external toolchain whose persistent
+  // build/cache helper holds the captured stdout pipe open, so the MoonBit
+  // shim's nested `collect_output` never observes EOF and HANGS (the
+  // mizchi/x/process nested-capture limitation). moon-test discover scans .mbt
+  // files (no subprocess) and is verified byte-identical; the go-test/moon-test
+  // live orchestration is local/structural only. Pure paths (coverage profile
+  // parse, all-pending run event stream) are byte-verified vs the oracle.
+  new {
+    id = "adapter-protocol-smoke"
+    fixture = "conformance/fixtures/adapter-protocol-smoke"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/adapter-protocol-smoke" }
+    argv { "adapter"; "-f"; "Adapter.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+      exactStderr = true
+    }
+  }
 }

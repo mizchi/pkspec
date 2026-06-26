@@ -1,0 +1,23 @@
+{
+  "import": [
+    { "path": "moonbitlang/x/fs", "alias": "fs" },
+    { "path": "mizchi/x/process", "alias": "process" },
+    { "path": "moonbitlang/async", "alias": "async" },
+    { "path": "moonbitlang/async/stdio", "alias": "stdio" },
+    { "path": "moonbitlang/x/sys", "alias": "sys" },
+    { "path": "moonbitlang/regexp", "alias": "regexp" },
+    { "path": "moonbitlang/core/json", "alias": "json" },
+    { "path": "moonbitlang/core/encoding/utf8", "alias": "utf8" },
+    { "path": "moonbitlang/core/env", "alias": "env" }
+  ],
+  "warn-list": "-29-20-6-1-15",
+  "targets": {
+    "shim.mbt": ["native"],
+    "json.mbt": ["native"],
+    "discover.mbt": ["native"],
+    "fs.mbt": ["native"],
+    "run.mbt": ["native"],
+    "util.mbt": ["native"],
+    "shim_wbtest.mbt": ["native"]
+  }
+}

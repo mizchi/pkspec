@@ -1,0 +1,43 @@
+amends "../../pkl/Adapter.pkl"
+
+local class MockAdapter extends ExternalProtocolAdapter {
+  id = "custom.mock"
+  baseCommand = new {
+    "bash"
+    "scripts/mock-adapter.sh"
+  }
+}
+
+suites {
+  new {
+    name = "mock-protocol"
+    adapter = new MockAdapter {}
+    overlays {
+      ["native.echo"] = new CaseOverlay {
+        specRef { "adapter.dsl" }
+        tags { "adapter"; "native" }
+      }
+    }
+    cases {
+      new AdapterCase {
+        id = "generated.case"
+        name = "generated adapter case"
+        sourceModule = "cases/generated.case.ts"
+        exportName = "generatedCase"
+        specRef { "adapter.overlays-and-cases" }
+        tags { "adapter"; "generated" }
+        params {
+          ["message"] = "hello"
+        }
+      }
+    }
+    collectors {
+      new ReportCollector {
+        name = "coverage"
+        command = new Command {
+          argv { "bash"; "scripts/mock-adapter.sh"; "coverage" }
+        }
+      }
+    }
+  }
+}
