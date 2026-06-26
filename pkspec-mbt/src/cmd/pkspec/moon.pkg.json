@@ -12,6 +12,7 @@
     { "path": "moonbitlang/x/sys", "alias": "sys" },
     { "path": "moonbitlang/core/json", "alias": "json" },
     { "path": "moonbitlang/core/encoding/utf8", "alias": "utf8" },
+    { "path": "moonbitlang/core/strconv", "alias": "strconv" },
     { "path": "moonbitlang/core/env", "alias": "env" }
   ],
   "warn-list": "-29-20-6",
@@ -19,6 +20,7 @@
     "main.mbt": ["native"],
     "spec_cmds.mbt": ["native"],
     "exec_cmd.mbt": ["native"],
+    "run_cmd.mbt": ["native"],
     "doctor.mbt": ["native"]
   }
 }
