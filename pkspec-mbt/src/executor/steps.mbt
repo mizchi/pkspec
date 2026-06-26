@@ -29,6 +29,9 @@ pub async fn run_steps(
   refresh_http? : Bool = false,
   http_replay_only? : Bool = false,
   refresh_ai? : Bool = false,
+  refresh_snapshots? : Bool = false,
+  source_path? : String = "",
+  update_inline? : Bool = false,
 ) -> Unit {
   let state : Map[String, String] = Map::new()
   for k, v in extra_env {
@@ -45,6 +48,7 @@ pub async fn run_steps(
     }
     let sr = run_step(
       step, t, defaults, workdir, state, refresh_http, http_replay_only,
+      refresh_snapshots, source_path, update_inline,
     )
     // Captures fire only on success (Go's `sr.Outcome == OutcomePassed`).
     if sr.outcome is Passed {
@@ -86,6 +90,9 @@ pub async fn run_parallel(
   extra_env : Map[String, String],
   refresh_http? : Bool = false,
   http_replay_only? : Bool = false,
+  refresh_snapshots? : Bool = false,
+  source_path? : String = "",
+  update_inline? : Bool = false,
 ) -> Unit {
   let n = t.parallel_steps.length()
   // Pre-size the slot array; tasks write their result into their own index.
@@ -102,7 +109,7 @@ pub async fn run_parallel(
         slots[idx] = Some(
           run_step(
             step, t, defaults, workdir, per_state, refresh_http,
-            http_replay_only,
+            http_replay_only, refresh_snapshots, source_path, update_inline,
           ),
         )
       })
@@ -138,6 +145,9 @@ async fn run_step(
   state : Map[String, String],
   refresh_http : Bool,
   http_replay_only : Bool,
+  refresh_snapshots : Bool,
+  source_path : String,
+  update_inline : Bool,
 ) -> StepResult {
   // `repeat`: run N times in sequence; first failure aborts. PKSPEC_REPEAT
   // carries the 0-based index (only injected when reps>1, matching Go).
@@ -161,10 +171,12 @@ async fn run_step(
       Some(_) =>
         run_step_eventually(
           step, t, defaults, workdir, rep_state, refresh_http, http_replay_only,
+          refresh_snapshots, source_path, update_inline,
         )
       None =>
         run_step_once(
           step, t, defaults, workdir, rep_state, refresh_http, http_replay_only,
+          refresh_snapshots, source_path, update_inline,
         )
     }
     if not(last.outcome is Passed) {
@@ -190,6 +202,9 @@ async fn run_step_once(
   state : Map[String, String],
   refresh_http : Bool,
   http_replay_only : Bool,
+  refresh_snapshots : Bool,
+  source_path : String,
+  update_inline : Bool,
 ) -> StepResult {
   // validateStepKind (shell vs http field cross-checks) before dispatch.
   let vreason = validate_step_kind(step)
@@ -206,14 +221,15 @@ async fn run_step_once(
         step, t, defaults, workdir, state, refresh_http, http_replay_only,
       )
     "sql" => run_sql_step(step, t, defaults, workdir, state)
-    "playwright" | "playwright-test" => {
-      let sr = StepResult::new(step_display_name(step))
-      sr.outcome = Errored
-      sr.reasons.push(
-        "step kind \{go_quote(step.kind)} is not supported yet (shell / http / sql only; playwright is a later phase)",
+    "playwright" =>
+      run_playwright_step(
+        step, t, defaults, workdir, state, refresh_snapshots, source_path,
+        update_inline,
       )
-      sr
-    }
+    "playwright-test" =>
+      run_playwright_test_step(
+        step, t, defaults, workdir, state, refresh_snapshots,
+      )
     _ => {
       let sr = StepResult::new(step_display_name(step))
       sr.outcome = Errored
@@ -240,6 +256,9 @@ async fn run_step_eventually(
   state : Map[String, String],
   refresh_http : Bool,
   http_replay_only : Bool,
+  refresh_snapshots : Bool,
+  source_path : String,
+  update_inline : Bool,
 ) -> StepResult {
   let ev = step.eventually.unwrap()
   let timeout_ms = (ev.timeout_sec * 1000).to_int64()
@@ -250,6 +269,7 @@ async fn run_step_eventually(
     attempts = attempts + 1
     last = run_step_once(
       step, t, defaults, workdir, state, refresh_http, http_replay_only,
+      refresh_snapshots, source_path, update_inline,
     )
     if last.outcome is Passed {
       return last

@@ -940,6 +940,37 @@ scenarios: Listing<Scenario> = new {
       normalizeDurations = true
     }
   }
+  // ── P5c: exec playwright / playwright-test steps ─────────────────────
+  //
+  // INTENTIONALLY NOT GATED HERE (local-only / structural, like `run` and
+  // `doctor`). The `playwright` and `playwright-test` step kinds drive a real
+  // browser: they need Node + the `playwright` / `@playwright/test` npm
+  // packages + a downloaded browser (~500MB). That tool surface is NOT present
+  // hermetically on the conformance runners, so a browser-dependent scenario
+  // cannot be byte-gated in CI without making the gate flaky / non-hermetic —
+  // the same reason `doctor` (PATH-dependent) and `run` (live test runners) are
+  // excluded above.
+  //
+  // What IS verified, and where:
+  //   - The GRACEFUL-TOOL-ABSENT path (the only hermetic part) — when
+  //     `@playwright/test` is missing, `npx playwright test` exits non-zero
+  //     without writing the JUnit XML, so the step errors with Go's exact
+  //     "playwright-test failed to produce JUnit XML: read junit xml <tmp>:
+  //     open <tmp>: no such file or directory; cmd exit: exit status 1" wording
+  //     (volatile tmp path + stderr aside). Confirmed byte-identical to the Go
+  //     oracle during the P5c parity diff.
+  //   - The hermetic sub-paths are gated by `moon test` (executor wbtests):
+  //     the embedded harness is byte-identical to harness/playwright.mjs (diff
+  //     test), base64 matches Go base64.StdEncoding (RFC vectors), the JUnit XML
+  //     parse + outcome aggregation (pass/fail/skip/error buckets), the console
+  //     substring assertions, the screenshot %.2f diff formatting, and the
+  //     no-spec / script-not-found graceful errors.
+  //   - The LIVE browser path was smoke-tested LOCALLY against examples/
+  //     playwright-{page,console,screenshot,test-suite} with a real chromium +
+  //     `@playwright/test`: byte-identical outcomes + reasons to the Go oracle,
+  //     and the written screenshot PNG was byte-identical (same MD5). This
+  //     local smoke is NOT part of the CI net (no browser on the runners).
+  //
   // P4c exec-shard-balanced: `exec --shard 1/4` over the 10-test shard-balanced
   // example, with a COMMITTED .pkspec/timings.jsonl (fixed per-test durations:
   // fast=50ms, mid=150ms, slow=400ms). LPT bin-packing of those durations is

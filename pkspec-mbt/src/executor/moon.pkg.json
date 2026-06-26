@@ -88,6 +88,21 @@
     "snapshot.mbt": [
       "native"
     ],
+    "playwright.mbt": [
+      "native"
+    ],
+    "playwrighttest.mbt": [
+      "native"
+    ],
+    "playwright_harness.mbt": [
+      "native"
+    ],
+    "base64.mbt": [
+      "native"
+    ],
+    "junit_parse.mbt": [
+      "native"
+    ],
     "inline.mbt": [
       "native"
     ],
@@ -95,6 +110,9 @@
       "native"
     ],
     "executor_wbtest.mbt": [
+      "native"
+    ],
+    "playwright_wbtest.mbt": [
       "native"
     ],
     "http_wbtest.mbt": [

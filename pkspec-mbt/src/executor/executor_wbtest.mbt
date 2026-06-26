@@ -125,16 +125,44 @@ async test "run_steps: regex with leading (?m) inline flag compiles + matches" {
 }
 
 ///|
-async test "run_step: non-shell kind errors loudly (deferred)" {
-  // `playwright` is still a deferred kind (P4b implements `sql`; playwright /
-  // playwright-test remain a later phase).
+async test "run_step: playwright kind with no spec errors gracefully" {
+  // P5c: the `playwright` kind is implemented; a step tagged `playwright` with
+  // no `playwright` body errors loudly (Go's "playwright step has no spec"),
+  // NOT the old "not supported yet" stub.
   let body = "{\"steps\":[{\"name\":\"q\",\"kind\":\"playwright\"}]}"
   let t = one_test_full(body)
   let res = Result::synthetic("t", Passed, [], [])
   run_steps(res, t, Defaults::new(), ".", Map::new())
   assert_eq(res.outcome, Failed) // errored step => failed test
   assert_eq(res.steps[0].outcome, Errored)
-  assert_true(res.steps[0].reasons[0].contains("not supported yet"))
+  assert_true(res.steps[0].reasons[0].contains("playwright step has no spec"))
+}
+
+///|
+async test "run_step: playwright script-not-found errors gracefully" {
+  // A playwright step pointing at a non-existent script errors with Go's exact
+  // "playwright script not found: <abs>" wording (the hermetic part of the
+  // playwright path — no node / browser needed to reach it).
+  let body =
+    "{\"steps\":[{\"name\":\"q\",\"kind\":\"playwright\"," +
+    "\"playwright\":{\"script\":\"does-not-exist.mjs\",\"browser\":\"chromium\"}}]}"
+  let t = one_test_full(body)
+  let res = Result::synthetic("t", Passed, [], [])
+  run_steps(res, t, Defaults::new(), ".", Map::new())
+  assert_eq(res.outcome, Failed)
+  assert_eq(res.steps[0].outcome, Errored)
+  assert_true(res.steps[0].reasons[0].contains("playwright script not found"))
+}
+
+///|
+async test "run_step: playwright-test no spec errors gracefully" {
+  let body = "{\"steps\":[{\"name\":\"q\",\"kind\":\"playwright-test\"}]}"
+  let t = one_test_full(body)
+  let res = Result::synthetic("t", Passed, [], [])
+  run_steps(res, t, Defaults::new(), ".", Map::new())
+  assert_eq(res.outcome, Failed)
+  assert_eq(res.steps[0].outcome, Errored)
+  assert_true(res.steps[0].reasons[0].contains("playwright-test step has no spec"))
 }
 
 // ── P3c ──────────────────────────────────────────────────────────────
