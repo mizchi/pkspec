@@ -10,7 +10,18 @@
 /// Raised when the embedded Pkl evaluator reports diagnostics for the module.
 /// (`@loader.LoaderError` -- module resolution / fetch / IO failures -- is
 /// allowed to propagate unwrapped.)
-pub suberror ConfigError { ConfigError(String) } derive(Debug)
+///
+/// `Show` writes ONLY the inner message (not the `derive(Debug)` qualified
+/// `mizchi/pkspec-mbt/src/config.ConfigError.ConfigError` repr) so a load/eval
+/// failure routed through `err_message` -> `e.to_string()` prints a clean
+/// `pkspec: <message>` like the Go oracle, instead of leaking the type path.
+pub suberror ConfigError { ConfigError(String) }
+
+///|
+impl Show for ConfigError with output(self, logger) {
+  let ConfigError(msg) = self
+  logger.write_string(msg)
+}
 
 ///|
 /// Evaluate the Pkl module at `path` (through the embedded loader, so
