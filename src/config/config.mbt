@@ -12,7 +12,7 @@
 /// allowed to propagate unwrapped.)
 ///
 /// `Show` writes ONLY the inner message (not the `derive(Debug)` qualified
-/// `mizchi/pkspec-mbt/src/config.ConfigError.ConfigError` repr) so a load/eval
+/// `mizchi/pkspec/src/config.ConfigError.ConfigError` repr) so a load/eval
 /// failure routed through `err_message` -> `e.to_string()` prints a clean
 /// `pkspec: <message>` like the Go oracle, instead of leaking the type path.
 pub suberror ConfigError { ConfigError(String) }

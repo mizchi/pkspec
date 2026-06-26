@@ -5,7 +5,7 @@
 
 ///|
 /// `Show` writes ONLY the inner message (not the `derive(Debug)` qualified
-/// `mizchi/pkspec-mbt/src/model.ModelError.ModelError` repr), so a malformed-
+/// `mizchi/pkspec/src/model.ModelError.ModelError` repr), so a malformed-
 /// shape failure routed through `err_message` -> `e.to_string()` prints a clean
 /// `pkspec: <message>` instead of leaking the type path.
 pub suberror ModelError { ModelError(String) }

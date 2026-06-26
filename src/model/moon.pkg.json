@@ -1,7 +1,7 @@
 {
   "import": [
     {
-      "path": "mizchi/pkspec-mbt/src/config",
+      "path": "mizchi/pkspec/src/config",
       "alias": "config"
     },
     {
