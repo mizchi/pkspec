@@ -478,6 +478,7 @@ async fn main {
     "exec" => run_exec_cmd(rest)
     "run" => run_run_cmd(rest)
     "migrate" => run_migrate_cmd(rest)
+    "adapter" => run_adapter_cmd(rest)
     other => {
       // Go prints the usage banner and the error to STDERR for an unknown
       // command (cmd/pkspec/main.go: usage(stderr) then the os.Exit(1)

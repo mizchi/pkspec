@@ -17,6 +17,20 @@ jobs:
         run: |
           moon update
           moon build --target native --release
+      - name: Stage adapter shim binaries on PATH
+        run: |
+          # The adapter-go-test / adapter-moon-test conformance scenarios spawn
+          # the `pkspec-adapter-<kind>` shims by bare name (the Pkl
+          # adapterCommand). Expose the moon-built binaries under their bare
+          # names on PATH. `go` and `moon` are already present (go is
+          # preinstalled on ubuntu-latest; moon was installed above).
+          BIN="${{ github.workspace }}/.shim-bin"
+          mkdir -p "$BIN"
+          BUILD="${{ github.workspace }}/pkspec-mbt/_build/native/release/build/src/cmd"
+          for k in go-test moon-test node-test vitest playwright; do
+            cp "$BUILD/pkspec-adapter-$k/pkspec-adapter-$k.exe" "$BIN/pkspec-adapter-$k"
+          done
+          echo "$BIN" >> "$GITHUB_PATH"
       - name: Run pkspec-mbt unit gates (evaluator + model)
         working-directory: pkspec-mbt
         run: moon test --target native
