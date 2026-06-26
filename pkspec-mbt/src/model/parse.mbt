@@ -243,6 +243,9 @@ fn parse_steps(j : Json?) -> Array[Step] {
               eventually: parse_eventually(s.get("eventually")),
               sql: parse_sql(s.get("sql")),
               inline_sql_rows: str_map(s.get("inlineSqlRows")),
+              playwright: parse_playwright(s.get("playwright")),
+              playwright_test: parse_playwright_test(s.get("playwrightTest")),
+              inline_console_log: opt_str(s.get("inlineConsoleLog")),
             })
           _ => ()
         }
@@ -302,6 +305,76 @@ fn arr_json(j : Json?) -> Array[Json] {
     _ => ()
   }
   out
+}
+
+///|
+/// Parse a `RenderedPlaywrightSpec` object into a `PlaywrightSpec`, or None
+/// when absent / null (Go's `Playwright *PlaywrightSpec`). `browser` defaults
+/// in Pkl ("chromium"); the executor falls back to "chromium" on an empty
+/// string anyway.
+fn parse_playwright(j : Json?) -> PlaywrightSpec? {
+  match j {
+    Some(Object(p)) =>
+      Some(PlaywrightSpec::{
+        script: str_val(p.get("script")),
+        browser: str_val(p.get("browser")),
+        expect_screenshot: parse_screenshot_snapshot(p.get("expectScreenshot")),
+        expect_console: parse_console_assertion(p.get("expectConsole")),
+      })
+    _ => None
+  }
+}
+
+///|
+/// Parse a `RenderedScreenshotSnapshot` into a `ScreenshotSnapshot`, or None.
+fn parse_screenshot_snapshot(j : Json?) -> ScreenshotSnapshot? {
+  match j {
+    Some(Object(s)) =>
+      Some(ScreenshotSnapshot::{
+        name: str_val(s.get("name")),
+        threshold_pct: double_val(s.get("thresholdPct")),
+      })
+    _ => None
+  }
+}
+
+///|
+/// Parse a `RenderedConsoleAssertion` into a `ConsoleAssertion`, or None.
+fn parse_console_assertion(j : Json?) -> ConsoleAssertion? {
+  match j {
+    Some(Object(c)) =>
+      Some(ConsoleAssertion::{
+        contains_all: arr_str(c.get("containsAll")),
+        contains_none: arr_str(c.get("containsNone")),
+      })
+    _ => None
+  }
+}
+
+///|
+/// Parse a `RenderedPlaywrightTestSpec` into a `PlaywrightTestSpec`, or None.
+fn parse_playwright_test(j : Json?) -> PlaywrightTestSpec? {
+  match j {
+    Some(Object(p)) =>
+      Some(PlaywrightTestSpec::{
+        spec_path: str_val(p.get("specPath")),
+        config_path: opt_str(p.get("configPath")),
+        grep: opt_str(p.get("grep")),
+        project: arr_str(p.get("project")),
+        workers: opt_int(p.get("workers")),
+        shard: opt_str(p.get("shard")),
+      })
+    _ => None
+  }
+}
+
+///|
+/// Decode a JSON number into a `Double` (Go `float64`); 0.0 when missing/null.
+fn double_val(j : Json?) -> Double {
+  match j {
+    Some(Number(x, ..)) => x
+    _ => 0.0
+  }
 }
 
 ///|

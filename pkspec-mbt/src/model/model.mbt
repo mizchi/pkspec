@@ -126,6 +126,57 @@ pub struct SqlSpec {
 }
 
 ///|
+/// A screenshot snapshot reference on a `PlaywrightSpec` (Go
+/// `config.ScreenshotSnapshot` / `RenderedScreenshotSnapshot`). The captured
+/// screenshot is compared against `.pkspec/screenshots/<name>.png`;
+/// `threshold_pct` is the max percentage of differing pixels tolerated when a
+/// pixel diff is available (else byte-exact compare).
+pub(all) struct ScreenshotSnapshot {
+  name : String
+  threshold_pct : Double
+}
+
+///|
+/// Console assertions on a `PlaywrightSpec` (Go `config.ConsoleAssertion` /
+/// `RenderedConsoleAssertion`). `contains_all` requires every substring to
+/// appear in at least one collected console entry; `contains_none` fails on
+/// the first entry containing any forbidden substring.
+pub(all) struct ConsoleAssertion {
+  contains_all : Array[String]
+  contains_none : Array[String]
+}
+
+///|
+/// A lightweight Playwright script body on a Step (Go `config.PlaywrightSpec`
+/// / `RenderedPlaywrightSpec`). The runner writes the embedded Node harness
+/// under `.pkspec/`, spawns `node <harness>` with a config JSON on stdin
+/// (`{scriptPath, browser, env, workdir, captureScreenshot,
+/// expectScreenshotBaseline?}`), and parses the JSON response. `script` is
+/// resolved relative to the Step workdir.
+pub(all) struct PlaywrightSpec {
+  script : String
+  browser : String
+  expect_screenshot : ScreenshotSnapshot?
+  expect_console : ConsoleAssertion?
+}
+
+///|
+/// An `@playwright/test` invocation body on a Step (Go
+/// `config.PlaywrightTestSpec` / `RenderedPlaywrightTestSpec`). The runner
+/// shells out to `npx playwright test` with `--reporter=junit` forced, parses
+/// the JUnit XML, and aggregates inner-test outcomes into the Step outcome.
+pub(all) struct PlaywrightTestSpec {
+  spec_path : String
+  config_path : String?
+  grep : String?
+  project : Array[String]
+  // `--workers <n>` override (Go `*int`): None leaves auto-sizing in effect.
+  workers : Int?
+  // `--shard <i/n>` (Go `*string`): None = no shard.
+  shard : String?
+}
+
+///|
 /// An `eventually` poll spec on a Step. Mirrors Go `config.Eventually`.
 pub struct Eventually {
   interval_ms : Int
@@ -209,6 +260,13 @@ pub struct Step {
   // `sql` kind; `inline_sql_rows` is carried for the assert path.
   sql : SqlSpec?
   inline_sql_rows : Map[String, String]
+  // playwright bodies (Go `Step.Playwright *PlaywrightSpec` /
+  // `Step.PlaywrightTest *PlaywrightTestSpec`) + the console inline snapshot
+  // (Go `Step.InlineConsoleLog map[?]` -> flattened `*string`). The executor
+  // (P5c) runs the `playwright` / `playwright-test` kinds.
+  playwright : PlaywrightSpec?
+  playwright_test : PlaywrightTestSpec?
+  inline_console_log : String?
 }
 
 ///|

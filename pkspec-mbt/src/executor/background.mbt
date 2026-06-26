@@ -134,11 +134,12 @@ async fn run_attempt(
     @model.Steps =>
       run_steps(
         res, t, defaults, workdir, state, refresh_http~, http_replay_only~,
-        refresh_ai~,
+        refresh_ai~, refresh_snapshots~, source_path~, update_inline~,
       )
     @model.ParallelSteps =>
       run_parallel(
         res, t, defaults, workdir, state, refresh_http~, http_replay_only~,
+        refresh_snapshots~, source_path~, update_inline~,
       )
     @model.Invalid => ()
   })
