@@ -1,0 +1,3 @@
+[pkspec] rec_one: passed (verifies history.timings-jsonl) (14ms)
+[pkspec] rec_two: passed (verifies history.timings-jsonl) (15ms)
+pkspec: 2 passed, 0 flaky, 0 pending, 0 failed, 0 errored, 0 skipped (of 2)

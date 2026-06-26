@@ -1,0 +1,6 @@
+{"ts":"2026-01-01T00:00:00Z","test":"fast_a","duration_ms":50,"outcome":"pass","env":"local","kind":"shell"}
+{"ts":"2026-01-02T00:00:00Z","test":"fast_a","duration_ms":50,"outcome":"fail","env":"local","kind":"shell"}
+{"ts":"2026-01-02T00:00:00Z","test":"fast_b","duration_ms":50,"outcome":"pass","env":"local","kind":"shell"}
+{"ts":"2026-01-02T00:00:00Z","test":"mid_c","duration_ms":150,"outcome":"skip","env":"local","kind":"shell"}
+{"ts":"2026-01-02T00:00:00Z","test":"slow_b","duration_ms":400,"outcome":"error","env":"local","kind":"shell"}
+{"ts":"2026-01-02T00:00:00Z","test":"slow_c","duration_ms":400,"outcome":"pass","env":"ci","kind":"shell"}

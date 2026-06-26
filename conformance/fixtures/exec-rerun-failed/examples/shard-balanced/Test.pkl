@@ -1,0 +1,56 @@
+amends "../../pkl/Test.pkl"
+
+// Mixed-duration fixture for shard balancing demo / dogfood.
+// 10 tests with intentionally uneven durations so LPT has to work.
+tests {
+  new {
+    name = "fast_a"
+    body = new CmdTest { cmd = "sleep 0.05" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+  new {
+    name = "fast_b"
+    body = new CmdTest { cmd = "sleep 0.05" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+  new {
+    name = "fast_c"
+    body = new CmdTest { cmd = "sleep 0.05" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+  new {
+    name = "fast_d"
+    body = new CmdTest { cmd = "sleep 0.05" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+  new {
+    name = "mid_a"
+    body = new CmdTest { cmd = "sleep 0.15" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+  new {
+    name = "mid_b"
+    body = new CmdTest { cmd = "sleep 0.15" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+  new {
+    name = "mid_c"
+    body = new CmdTest { cmd = "sleep 0.15" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+  new {
+    name = "slow_a"
+    body = new CmdTest { cmd = "sleep 0.4" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+  new {
+    name = "slow_b"
+    body = new CmdTest { cmd = "sleep 0.4" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+  new {
+    name = "slow_c"
+    body = new CmdTest { cmd = "sleep 0.4" }
+    specRef { "history.timings-jsonl"; "history.shard-lpt" }
+  }
+}
