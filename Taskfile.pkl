@@ -1,14 +1,16 @@
 amends "package://pkg.pkl-lang.org/github.com/mizchi/pkfire/pkfire@0.9.0#/Taskfile.pkl"
 
-local releaseVersion = "0.3.0"
+/// Released version. Drives the `tag` task (pkspec@<ver> + v<ver>).
+/// Keep in lockstep with pkspec-mbt/moon.mod.json + the
+/// pkspec_version() constant in pkspec-mbt/src/cmd/pkspec/main.mbt.
+local releaseVersion = "0.4.0"
 
-local goSources: Listing<String> = new {
-  "*.go"
-  "cmd/**/*.go"
-  "harness/**/*.go"
-  "internal/**/*.go"
-  "go.mod"
-  "go.sum"
+/// MoonBit sources for the six pkspec binaries (`pkspec-mbt/`).
+local sources: Listing<String> = new {
+  "pkspec-mbt/src/**/*.mbt"
+  "pkspec-mbt/src/**/*.c"
+  "pkspec-mbt/src/**/moon.pkg"
+  "pkspec-mbt/moon.mod.json"
 }
 
 local schemaSources: Listing<String> = new {
@@ -16,27 +18,8 @@ local schemaSources: Listing<String> = new {
   "pkl/**/*.pcf"
 }
 
-local examplesAndFixtures: Listing<String> = new {
-  "examples/**"
-  "experiments/**"
-}
-
-local ciSources: Listing<String> = new {
-  ...goSources
-  ...schemaSources
-  "action.yml"
-  ".github/workflows/**"
-  "flake.nix"
-  "flake.lock"
-  "nix/**"
-}
-
-local specGateSources: Listing<String> = new {
-  ...goSources
-  ...schemaSources
-  ...examplesAndFixtures
-  "SPEC.pkl"
-}
+/// Path to the native release pkspec CLI the MoonBit toolchain emits.
+local pkspecBin: String = "pkspec-mbt/_build/native/release/build/src/cmd/pkspec/pkspec.exe"
 
 local default: Task = new {
   name = "default"
@@ -45,83 +28,44 @@ local default: Task = new {
   cache = false
 }
 
-local test: Task = new {
-  name = "test"
-  description = "Run Go tests"
-  cmd = "go test ./..."
-  inputs {
-    ...goSources
-    ...schemaSources
-    ...examplesAndFixtures
-  }
-}
-
+/// Build all six native release binaries from the MoonBit sources
+/// (pkspec CLI + the 5 adapter shims). Other dev tasks depend on this
+/// and run the built binaries so the gate reflects HEAD, not whatever
+/// happens to be on PATH.
 local build: Task = new {
-  name = "build"
-  description = "Build the pkspec binaries"
-  cmd =
-    """
-    set -euo pipefail
-    mkdir -p ./bin
-    go build -trimpath -ldflags "-s -w -X main.version=\(releaseVersion)" -o ./bin/pkspec ./cmd/pkspec
-    go build -trimpath -o ./bin/pkspec-adapter-vitest ./cmd/pkspec-adapter-vitest
-    go build -trimpath -o ./bin/pkspec-adapter-playwright ./cmd/pkspec-adapter-playwright
-    go build -trimpath -o ./bin/pkspec-adapter-node-test ./cmd/pkspec-adapter-node-test
-    go build -trimpath -o ./bin/pkspec-adapter-go-test ./cmd/pkspec-adapter-go-test
-    go build -trimpath -o ./bin/pkspec-adapter-moon-test ./cmd/pkspec-adapter-moon-test
-    """
-  inputs {
-    ...goSources
-    ...schemaSources
-  }
+  name = "build:pkspec-mbt"
+  description = "Build the six native release binaries from pkspec-mbt/"
+  cmd = "cd pkspec-mbt && moon update && moon build --target native --release"
+  inputs = sources
   outputs {
-    "bin/pkspec"
-    "bin/pkspec-adapter-vitest"
-    "bin/pkspec-adapter-playwright"
-    "bin/pkspec-adapter-node-test"
-    "bin/pkspec-adapter-go-test"
-    "bin/pkspec-adapter-moon-test"
+    pkspecBin
+    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-vitest/pkspec-adapter-vitest.exe"
+    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-playwright/pkspec-adapter-playwright.exe"
+    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-node-test/pkspec-adapter-node-test.exe"
+    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-go-test/pkspec-adapter-go-test.exe"
+    "pkspec-mbt/_build/native/release/build/src/cmd/pkspec-adapter-moon-test/pkspec-adapter-moon-test.exe"
   }
 }
 
-local smoke: Task = new {
-  name = "smoke"
-  description = "Smoke-test the locally built binary"
-  cmd =
-    """
-    set -euo pipefail
-    ./bin/pkspec version
-    ./bin/pkspec help >/dev/null
-    """
-  cache = false
-  inputs { "bin/pkspec" }
-  deps { build }
+local moonCheck: Task = new {
+  name = "moon:check"
+  description = "Type-check the MoonBit sources (native target)"
+  cmd = "cd pkspec-mbt && moon check --target native"
+  inputs = sources
 }
 
-local initSmoke: Task = new {
-  name = "init-smoke"
-  description = "Verify generated schemas can run a minimal test"
-  cmd =
-    #"""
-    set -euo pipefail
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
-    ./bin/pkspec init --dir "$tmp/pkspec"
-    cat > "$tmp/Test.pkl" <<'PKL'
-    amends "./pkspec/Test.pkl"
+local moonTest: Task = new {
+  name = "moon:test"
+  description = "MoonBit unit tests — evaluator + model gates (native target)"
+  cmd = "cd pkspec-mbt && moon test --target native"
+  inputs = sources
+}
 
-    tests {
-      new {
-        name = "smoke"
-        body = new CmdTest { cmd = "true" }
-      }
-    }
-    PKL
-    ./bin/pkspec exec -f "$tmp/Test.pkl"
-    """#
-  cache = false
-  inputs { "bin/pkspec" }
-  deps { build }
+local testPkl: Task = new {
+  name = "test:pkl"
+  description = "Pkl schema tests"
+  cmd = "pkl test pkl/Test.test.pkl pkl/Adapter.test.pkl pkl/QuickCheck.test.pkl"
+  inputs = schemaSources
 }
 
 local actionLint: Task = new {
@@ -135,72 +79,93 @@ local actionLint: Task = new {
   }
 }
 
-local specLint: Task = new {
-  name = "spec-lint"
-  description = "Lint pkspec's own spec and example cross-references"
-  cmd = "go run ./cmd/pkspec lint SPEC.pkl examples/*/Spec.pkl examples/*/Test.pkl"
+/// MoonBit conformance harness: candidate pkspec vs frozen goldens
+/// (71/71 strict). Stages the five adapter shims on PATH under their
+/// bare names (the Pkl `adapterCommand` spawns them by bare name) and
+/// points PKSPEC_BIN at the freshly built CLI, mirroring
+/// `.github/workflows/conformance.yml`.
+local conformance: Task = new {
+  name = "conformance"
+  description = "MoonBit pkspec contract harness: candidate vs frozen goldens (71/71 strict)"
+  cmd =
+    #"""
+    set -euo pipefail
+    build="$PWD/pkspec-mbt/_build/native/release/build/src/cmd"
+    shimbin="$PWD/.shim-bin"
+    mkdir -p "$shimbin"
+    for k in go-test moon-test node-test vitest playwright; do
+      cp "$build/pkspec-adapter-$k/pkspec-adapter-$k.exe" "$shimbin/pkspec-adapter-$k"
+    done
+    export PATH="$shimbin:$PATH"
+    export PKSPEC_BIN="$build/pkspec/pkspec.exe"
+    cd conformance && moon update && moon run --target native --release src
+    """#
+  deps { build }
   cache = false
-  inputs = specGateSources
 }
 
-local nixCheck: Task = new {
-  name = "nix-check"
-  description = "Evaluate the Nix flake"
-  cmd = "nix flake check --print-build-logs"
-  cache = false
-  inputs = ciSources
+/// Pre-commit gate: moon check/test + pkl schema tests + action-lint.
+/// Skips the conformance harness (CI's job, slower).
+local preflight: Task = new {
+  name = "preflight"
+  description = "Pre-commit gate: moon check/test + pkl tests + action-lint"
+  deps {
+    moonCheck
+    moonTest
+    testPkl
+    actionLint
+  }
 }
 
-local nixBuild: Task = new {
-  name = "nix-build"
-  description = "Build the Nix package"
-  cmd = "nix build .#default --print-build-logs"
-  cache = false
-  inputs = ciSources
+/// Git pre-commit hook target (delegates to preflight).
+local preCommit: Task = new {
+  name = "pre-commit"
+  description = "Git pre-commit hook target (delegates to preflight)"
+  deps { preflight }
 }
 
-local releaseCheck: Task = new {
-  name = "release-check"
-  description = "Full local release gate"
-  cmd = "echo release-check ok"
-  cache = false
-  deps { test; smoke; initSmoke; actionLint; specLint; nixCheck; nixBuild }
-}
-
+/// Local-only: creates `pkspec@<ver>` + `v<ver>` at HEAD but does NOT
+/// push. Push manually after reviewing — pushing `pkspec@<ver>`
+/// triggers the Release workflow (matrix build + GitHub release + nix
+/// pin sync), and `v-tags.yml` then syncs the action-friendly v-tags.
 local tag: Task = new {
   name = "tag"
-  description = "Run release-check and push a v<version> tag; CI publishes the GitHub release"
+  description = "Create the pkspec@<ver> + v<ver> tags locally (no push)"
+  cache = false
   cmd =
     """
     set -euo pipefail
-    git diff --exit-code
-    git diff --cached --exit-code
-    git tag -a "v$VERSION" -m "Release v$VERSION"
-    git push origin main
-    git push origin "v$VERSION"
+    ver="$VERSION"
+    for t in "pkspec@$ver" "v$ver"; do
+      if git rev-parse "$t" >/dev/null 2>&1; then
+        echo "tag $t already exists locally" >&2
+        exit 1
+      fi
+    done
+    git tag "pkspec@$ver"
+    git tag "v$ver"
+    echo "created tags: pkspec@$ver  v$ver"
+    echo "  push with: git push origin pkspec@$ver v$ver"
     """
-  cache = false
-  deps { releaseCheck }
   params {
     new {
       name = "version"
       type = "string"
       default = releaseVersion
-      description = "release version without the leading v"
+      description = "release version without the leading v (default: \(releaseVersion))"
     }
   }
 }
 
 tasks {
   default
-  test
   build
-  smoke
-  initSmoke
+  moonCheck
+  moonTest
+  testPkl
   actionLint
-  specLint
-  nixCheck
-  nixBuild
-  releaseCheck
+  conformance
+  preflight
+  preCommit
   tag
 }

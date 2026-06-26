@@ -42,8 +42,9 @@ class Scenario {
 }
 
 scenarios: Listing<Scenario> = new {
-  // version differs by design (Go 0.3.0 vs MoonBit 0.4.0), so assert only
-  // exit code + non-empty stdout — this proves dispatch + capture plumbing.
+  // assert only exit code + non-empty stdout (the version string is volatile
+  // across releases) — this proves dispatch + capture plumbing. pkspec is now
+  // MoonBit-native at 0.4.0; the legacy Go binary (0.3.0) is retired.
   new {
     id = "version"
     fixture = "conformance/fixtures/empty"

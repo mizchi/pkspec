@@ -1,8 +1,8 @@
 # pkspec
 
-[![Nix CI](https://github.com/mizchi/pkspec/actions/workflows/nix.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/nix.yml)
-[![Go CI](https://github.com/mizchi/pkspec/actions/workflows/go.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/go.yml)
-[![Action CI](https://github.com/mizchi/pkspec/actions/workflows/action.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/action.yml)
+[![Conformance](https://github.com/mizchi/pkspec/actions/workflows/conformance.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/conformance.yml)
+[![Nix](https://github.com/mizchi/pkspec/actions/workflows/nix.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/nix.yml)
+[![Action smoke](https://github.com/mizchi/pkspec/actions/workflows/action-smoke.yml/badge.svg)](https://github.com/mizchi/pkspec/actions/workflows/action-smoke.yml)
 
 > **[experimental]** A language-agnostic test runner built on
 > [Pkl](https://pkl-lang.org/). Generalizes the retry / sharding /
@@ -306,29 +306,51 @@ Beyond the per-test plumbing:
 - **Ephemeral workdirs** — `Test.ephemeralWorkdir = true` for an
   auto-temp dir cleaned at test exit.
 
+pkspec is distributed as prebuilt MoonBit binaries — the `pkspec` CLI
+plus its five adapter shims
+(`pkspec-adapter-{vitest,playwright,node-test,go-test,moon-test}`).
+Supported platforms: `linux-amd64`, `linux-arm64`, `darwin-arm64`.
+Intel macOS and Windows are not supported (the MoonBit toolchain has no
+x86_64 macOS / Windows target).
+
 ## Install
 
-### Nix (recommended)
+### Install script (recommended)
 
 ```sh
-nix run github:mizchi/pkspec/v0.3.0 -- init --dir pkspec
-nix run github:mizchi/pkspec/v0.3.0 -- exec -f path/to/Test.pkl
-nix profile install github:mizchi/pkspec/v0.3.0
+curl -fsSL https://raw.githubusercontent.com/mizchi/pkspec/main/install.sh | sh
 ```
 
-The flake builds `pkspec` plus the built-in adapter shim binaries and
-wraps them so the bundled Pkl CLI is on `PATH` automatically. That Pkl
-CLI is the upstream native binary, not the Java/JAR build from nixpkgs.
-The Nix workflow on every push to `main` and every PR builds the flake
-on `aarch64-darwin` and `x86_64-linux`; the badge above tracks its
-status. The Go workflow also runs `go test ./...` and a `go install`
-smoke on both platforms.
+Installs all six binaries into `~/.local/bin` (override with
+`PKSPEC_INSTALL_DIR`). Pin a version with `--version 0.4.0`. You also
+need the [Pkl CLI](https://pkl-lang.org/main/current/pkl-cli/) on
+`PATH`.
+
+### Release tarball
+
+Download `pkspec-<plat>.tar.gz` from the
+[releases page](https://github.com/mizchi/pkspec/releases), verify it
+against the published `.sha256`, extract the six bare-named binaries,
+and put them on `PATH`.
+
+### Nix
+
+```sh
+nix run github:mizchi/pkspec/v0.4.0 -- init --dir pkspec
+nix run github:mizchi/pkspec/v0.4.0 -- exec -f path/to/Test.pkl
+nix profile install github:mizchi/pkspec/v0.4.0
+```
+
+The flake fetches the prebuilt release tarball and wraps the binaries
+so the native Pkl CLI is on `PATH` automatically — no Go toolchain and
+no source build. That Pkl CLI is the upstream native binary, not the
+Java/JAR build from nixpkgs.
 
 In a home-manager flake:
 
 ```nix
 {
-  inputs.pkspec.url = "github:mizchi/pkspec/v0.3.0";
+  inputs.pkspec.url = "github:mizchi/pkspec/v0.4.0";
   inputs.pkspec.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = { self, nixpkgs, home-manager, pkspec, ... }:
@@ -354,18 +376,14 @@ In a home-manager flake:
 you only want the wrapped `pkspec` binary and do not want a standalone
 `pkl` command in `home.packages`.
 
-### Go
+### Authoring tests
+
+After installing, generate the local schemas and author test modules
+against them:
 
 ```sh
-go install github.com/mizchi/pkspec/cmd/...@v0.3.0
 pkspec init --dir pkspec
 ```
-
-You also need the [Pkl CLI](https://pkl-lang.org/main/current/pkl-cli/)
-on `PATH` — that's exactly the friction Nix removes.
-
-After `pkspec init`, author test modules against the generated local
-schemas:
 
 ```pkl
 amends "./pkspec/Test.pkl"
@@ -388,7 +406,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: mizchi/pkspec@v0.3.0
+      - uses: mizchi/pkspec@v0.4.0
         with:
           init-schema-dir: pkspec
       - run: pkspec exec -f Test.pkl
@@ -403,9 +421,8 @@ Inputs:
 
 | Input | Default | Notes |
 | --- | --- | --- |
-| `version` | the action ref, falling back to latest release | Accepts `local`, `v0.3.0`, `0.3.0`, `v0`, or `latest`. |
+| `version` | the action ref, falling back to latest release | Accepts `pkspec@0.4.0`, `v0.4.0`, `0.4.0`, `v0`, or `latest`. |
 | `pkl-version` | `0.31.1` | Set to `none` to skip Pkl install. |
-| `setup-go` | `true` | Uses this action's `go.mod` to install the Go toolchain needed for `go install`. |
 | `install-dir` | `${{ runner.temp }}/pkspec-bin` | Added to `PATH`. |
 | `init-schema-dir` | empty | Optional target for `pkspec init --dir`. |
 | `init-force` | `false` | Passes `--force` when initializing schemas. |
@@ -472,28 +489,33 @@ Project maintenance tasks are defined in `Taskfile.pkl` and run with
 
 ```sh
 pkf list
-pkf run test
-pkf run build
-pkf run init-smoke
-pkf run release-check
+pkf run build:pkspec-mbt   # build the six native release binaries
+pkf run moon:test          # MoonBit unit gates (evaluator + model)
+pkf run conformance        # candidate vs frozen goldens (71/71 strict)
+pkf run preflight          # pre-commit gate (check/test + pkl + action-lint)
 ```
 
-`nix develop` includes `pkf`, `go`, `pkl`, and `gopls`. To create and
-push a release tag after `release-check` passes:
+pkspec is implemented in MoonBit under [`pkspec-mbt/`](./pkspec-mbt);
+`nix develop` includes the MoonBit toolchain and the native `pkl` CLI.
+To create the release tags locally (no push):
 
 ```sh
-pkf run tag --version=0.3.0
+pkf run tag --version=0.4.0   # creates pkspec@0.4.0 + v0.4.0
 ```
 
-Pushing `v*.*.*` tags triggers the Release workflow. It validates the
-Nix package on Linux and macOS, smoke-tests the wrapped `pkl`, then
-creates or updates the GitHub Release so `latest` resolves to the new
-tag.
+Pushing `pkspec@<ver>` (and `v<ver>`) triggers the Release workflow
+(`.github/workflows/mbt-publish.yml`). It builds the six binaries on a
+matrix of linux-amd64 / linux-arm64 / darwin-arm64 runners, packages
+each platform into one `pkspec-<plat>.tar.gz` + `.sha256`, uploads them
+to the GitHub Release, and opens a follow-up PR syncing
+`nix/pkspec-release.json`. `v-tags.yml` then keeps the action-friendly
+`v<ver>` / `v<major>` tags in sync.
 
 ## Status
 
-Active development, frequent API churn. `v0.1.x` is the first
-dogfooding line for Nix flakes, GitHub Actions, and `go install`;
+Active development, frequent API churn. `v0.4.x` is the first
+MoonBit-native line (the Go implementation has been retired), shipping
+prebuilt binaries via the install script, GitHub Actions, and Nix;
 expect schema and CLI changes before a stability promise.
 
 For decision history per phase, see [`findings.md`](./findings.md);
