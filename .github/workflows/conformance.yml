@@ -13,7 +13,6 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
       - name: Build MoonBit pkspec candidate
-        working-directory: pkspec-mbt
         run: |
           moon update
           moon build --target native --release
@@ -26,18 +25,17 @@ jobs:
           # preinstalled on ubuntu-latest; moon was installed above).
           BIN="${{ github.workspace }}/.shim-bin"
           mkdir -p "$BIN"
-          BUILD="${{ github.workspace }}/pkspec-mbt/_build/native/release/build/src/cmd"
+          BUILD="${{ github.workspace }}/_build/native/release/build/src/cmd"
           for k in go-test moon-test node-test vitest playwright; do
             cp "$BUILD/pkspec-adapter-$k/pkspec-adapter-$k.exe" "$BIN/pkspec-adapter-$k"
           done
           echo "$BIN" >> "$GITHUB_PATH"
-      - name: Run pkspec-mbt unit gates (evaluator + model)
-        working-directory: pkspec-mbt
+      - name: Run pkspec unit gates (evaluator + model)
         run: moon test --target native
       - name: Run conformance harness vs frozen goldens
         working-directory: conformance
         env:
-          PKSPEC_BIN: ${{ github.workspace }}/pkspec-mbt/_build/native/release/build/src/cmd/pkspec/pkspec.exe
+          PKSPEC_BIN: ${{ github.workspace }}/_build/native/release/build/src/cmd/pkspec/pkspec.exe
         run: |
           moon update
           moon run --target native --release src

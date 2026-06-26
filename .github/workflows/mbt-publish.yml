@@ -91,24 +91,22 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.resolve.outputs.version }}"
-          file="pkspec-mbt/src/cmd/pkspec/main.mbt"
+          file="src/cmd/pkspec/main.mbt"
           sed -i.bak -E 's/^  "[0-9]+\.[0-9]+\.[0-9]+"$/  "'"$version"'"/' "$file"
           rm -f "$file.bak"
           grep -nF "  \"$version\"" "$file" || { echo "::error::version injection failed"; exit 1; }
 
-      - name: Moon update (pkspec-mbt)
-        working-directory: pkspec-mbt
+      - name: Moon update
         run: moon update
 
       - name: Build pkspec (native, release)
-        working-directory: pkspec-mbt
         run: moon build --target native --release
 
       - name: Package
         run: |
           set -euo pipefail
           target="${{ matrix.target }}"
-          build="pkspec-mbt/_build/native/release/build/src/cmd"
+          build="_build/native/release/build/src/cmd"
           mkdir -p dist
           # All six binaries renamed bare (no .exe) into one tarball.
           for name in pkspec pkspec-adapter-vitest pkspec-adapter-playwright \
