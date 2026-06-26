@@ -26,6 +26,8 @@ pub async fn run_steps(
   defaults : Defaults,
   workdir : String,
   extra_env : Map[String, String],
+  refresh_http? : Bool = false,
+  http_replay_only? : Bool = false,
 ) -> Unit {
   let state : Map[String, String] = Map::new()
   for k, v in extra_env {
@@ -40,7 +42,9 @@ pub async fn run_steps(
       res.steps.push(skipped)
       continue
     }
-    let sr = run_step(step, t, defaults, workdir, state)
+    let sr = run_step(
+      step, t, defaults, workdir, state, refresh_http, http_replay_only,
+    )
     // Captures fire only on success (Go's `sr.Outcome == OutcomePassed`).
     if sr.outcome is Passed {
       match step.capture_stdout {
@@ -71,6 +75,8 @@ pub async fn run_parallel(
   defaults : Defaults,
   workdir : String,
   extra_env : Map[String, String],
+  refresh_http? : Bool = false,
+  http_replay_only? : Bool = false,
 ) -> Unit {
   let n = t.parallel_steps.length()
   // Pre-size the slot array; tasks write their result into their own index.
@@ -84,7 +90,12 @@ pub async fn run_parallel(
         for k, v in extra_env {
           per_state[k] = v
         }
-        slots[idx] = Some(run_step(step, t, defaults, workdir, per_state))
+        slots[idx] = Some(
+          run_step(
+            step, t, defaults, workdir, per_state, refresh_http,
+            http_replay_only,
+          ),
+        )
       })
     }
   })
@@ -116,6 +127,8 @@ async fn run_step(
   defaults : Defaults,
   workdir : String,
   state : Map[String, String],
+  refresh_http : Bool,
+  http_replay_only : Bool,
 ) -> StepResult {
   // `repeat`: run N times in sequence; first failure aborts. PKSPEC_REPEAT
   // carries the 0-based index (only injected when reps>1, matching Go).
@@ -136,8 +149,14 @@ async fn run_step(
       state
     }
     last = match step.eventually {
-      Some(_) => run_step_eventually(step, t, defaults, workdir, rep_state)
-      None => run_step_once(step, t, defaults, workdir, rep_state)
+      Some(_) =>
+        run_step_eventually(
+          step, t, defaults, workdir, rep_state, refresh_http, http_replay_only,
+        )
+      None =>
+        run_step_once(
+          step, t, defaults, workdir, rep_state, refresh_http, http_replay_only,
+        )
     }
     if not(last.outcome is Passed) {
       if reps > 1 {
@@ -160,6 +179,8 @@ async fn run_step_once(
   defaults : Defaults,
   workdir : String,
   state : Map[String, String],
+  refresh_http : Bool,
+  http_replay_only : Bool,
 ) -> StepResult {
   // validateStepKind (shell vs http field cross-checks) before dispatch.
   let vreason = validate_step_kind(step)
@@ -171,7 +192,11 @@ async fn run_step_once(
   }
   match step.kind {
     "shell" => run_shell_step(step, t, defaults, workdir, state)
-    "http" | "playwright" | "playwright-test" | "sql" => {
+    "http" =>
+      run_http_step(
+        step, t, defaults, workdir, state, refresh_http, http_replay_only,
+      )
+    "playwright" | "playwright-test" | "sql" => {
       let sr = StepResult::new(step_display_name(step))
       sr.outcome = Errored
       sr.reasons.push(
@@ -203,6 +228,8 @@ async fn run_step_eventually(
   defaults : Defaults,
   workdir : String,
   state : Map[String, String],
+  refresh_http : Bool,
+  http_replay_only : Bool,
 ) -> StepResult {
   let ev = step.eventually.unwrap()
   let timeout_ms = (ev.timeout_sec * 1000).to_int64()
@@ -211,7 +238,9 @@ async fn run_step_eventually(
   let mut last = StepResult::new(step_name(step))
   while true {
     attempts = attempts + 1
-    last = run_step_once(step, t, defaults, workdir, state)
+    last = run_step_once(
+      step, t, defaults, workdir, state, refresh_http, http_replay_only,
+    )
     if last.outcome is Passed {
       return last
     }
@@ -439,10 +468,10 @@ fn has_http_fields(step : @model.Step) -> Bool {
   step.expect_status_between.length() > 0 ||
   step.expect_body_equals is Some(_) ||
   step.expect_body_contains is Some(_) ||
-  step.expect_header_equals_count > 0 ||
-  step.expect_body_json_path_count > 0 ||
+  step.expect_header_equals.size() > 0 ||
+  step.expect_body_json_path.size() > 0 ||
   step.capture_body is Some(_) ||
   step.capture_status is Some(_) ||
-  step.capture_body_json_path_count > 0 ||
+  step.capture_body_json_path.size() > 0 ||
   step.cassette is Some(_)
 }
