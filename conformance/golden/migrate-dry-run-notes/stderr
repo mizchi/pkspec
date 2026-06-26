@@ -1,0 +1,2 @@
+pkspec migrate: Spec.pkl:5 — expectStdoutMatches opens a multi-line block; wrap the surrounding sibling expect* fields inside a `shellExpectations { ... }` block by hand.
+pkspec migrate: 1 file(s) scanned, 1 changed

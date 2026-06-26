@@ -1,0 +1,12 @@
+tests {
+  new {
+    name = "contracts"
+    expectStdoutMatches {
+      "pattern1"
+      "pattern2"
+    }
+    body = new CmdTest {
+      cmd = "echo hi"
+    }
+  }
+}

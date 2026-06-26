@@ -1,0 +1,53 @@
+scenarios {
+  new {
+    id = "demo"
+    implementedBy = "code"
+    implementedAt = "internal/x.go:Foo"
+    pmNotes = "pm only"
+    progress {
+      method = "severity-weighted"
+    }
+    inlineStdout = ""
+    inlineStderr = "err\n"
+    given {
+      new SpecStep {
+        description = "seed"
+        impl = new Step {
+          cmd = "echo seed"
+          captureStdout = "S"
+        }
+      }
+    }
+  }
+}
+tests {
+  new {
+    name = "echo"
+    cmd = "echo hi"
+    expectExitCode = 0
+    expectStdout = "hi\n"
+  }
+  new {
+    name = "fan"
+    parallelSteps {
+      new { name = "p1"; cmd = "sleep 0.1" }
+      new { name = "p2"; cmd = "sleep 0.1" }
+    }
+  }
+  new {
+    name = "fetch"
+    steps {
+      new {
+        name = "call"
+        http = new HttpRequest {
+          method = "GET"
+          url = "http://localhost/items"
+        }
+        expectStatus = 200
+      }
+    }
+  }
+}
+implementations {
+  new Implementation { kind = "doc"; at = "docs/y.md#bar" }
+}

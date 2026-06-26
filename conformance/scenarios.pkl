@@ -1156,4 +1156,91 @@ scenarios: Listing<Scenario> = new {
       normalizeDurations = true
     }
   }
+
+  // ── P5a: migrate (v0.1.x/v0.2.x → v0.3.0 Pkl text-transform) ──────────────
+  //
+  // The fixtures are plain v0.1.x/v0.2.x Pkl modules (no schema vendoring — the
+  // transform is text-only and never evaluates Pkl). The goldens are captured
+  // from the Go oracle. exactStdout here is the conformance harness's
+  // whitespace-normalized compare; the load-bearing byte-for-byte parity vs the
+  // oracle (indentation + newlines) is asserted by the P5a all-fixture sweep
+  // (migrate --dry-run candidate-vs-oracle, 0 byte divergences) recorded in the
+  // phase report — the committed golden is the regression backstop.
+
+  // migrate-rules-all --dry-run: one module exercising every rule (1-7) and
+  // every Step/Test body kind (ShellBody / CmdTest / SequentialTest /
+  // ParallelTest / HttpBody / impl-Step) in combination. Gates the transformed
+  // Pkl on stdout.
+  new {
+    id = "migrate-dry-run-rules-all"
+    fixture = "conformance/fixtures/migrate-rules-all"
+    argv { "migrate"; "--dry-run"; "Spec.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+    }
+  }
+  // migrate-notes --dry-run: the multi-line-block Note path (Rule 6 multi-line
+  // expect block). Gates BOTH the transformed stdout (unchanged passthrough) and
+  // the advisory Note + summary on stderr. The Note's path is the relative
+  // `Spec.pkl` (stable across runs), so exactStderr is safe.
+  new {
+    id = "migrate-dry-run-notes"
+    fixture = "conformance/fixtures/migrate-notes"
+    argv { "migrate"; "--dry-run"; "Spec.pkl" }
+    contract = new {
+      exit = true
+      exactStdout = true
+      exactStderr = true
+    }
+  }
+  // migrate --check on a STALE (would-change) file -> exit 1 (CI gate).
+  new {
+    id = "migrate-check-stale"
+    fixture = "conformance/fixtures/migrate-rules-all"
+    argv { "migrate"; "--check"; "Spec.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+    }
+  }
+  // migrate --check on an ALREADY-MIGRATED file -> exit 0 (idempotence). The
+  // fixture is in the v0.3.0 shape, so the transform is a no-op.
+  new {
+    id = "migrate-check-clean"
+    fixture = "conformance/fixtures/migrate-idempotent"
+    argv { "migrate"; "--check"; "Spec.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+    }
+  }
+  // migrate (default in-place) on the rules-all fixture: atomically rewrites the
+  // changed file. Gates the fs delta (Spec.pkl modified) + the `rewrote` /
+  // summary lines on stderr.
+  new {
+    id = "migrate-in-place"
+    fixture = "conformance/fixtures/migrate-rules-all"
+    argv { "migrate"; "Spec.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      fsDelta = true
+      exactStderr = true
+    }
+  }
+  // migrate (default in-place) on the already-migrated fixture: no file changes
+  // (idempotence), no fsDelta, only the scan summary on stderr.
+  new {
+    id = "migrate-in-place-clean"
+    fixture = "conformance/fixtures/migrate-idempotent"
+    argv { "migrate"; "Spec.pkl" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+    }
+  }
 }

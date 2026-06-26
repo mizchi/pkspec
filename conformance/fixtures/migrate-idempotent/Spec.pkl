@@ -1,0 +1,11 @@
+tests {
+  new {
+    name = "echo"
+    body = new CmdTest {
+      cmd = "echo hi"
+      shellExpectations {
+        expectStdout = "hi\n"
+      }
+    }
+  }
+}
