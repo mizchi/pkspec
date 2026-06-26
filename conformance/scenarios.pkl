@@ -802,4 +802,36 @@ scenarios: Listing<Scenario> = new {
       mustContainStderr { "wrote SPEC.md (5 entries)" }
     }
   }
+  // ── P3d: exec --update-inline-snapshots (Test.pkl source rewrite) ─────
+  //
+  // exec-inline-rewrite: the fixture's CmdTest carries a STALE inline snapshot
+  // (`value = "STALE\n"`) that does not match the deterministic `echo pong`
+  // output. With `--update-inline-snapshots`, the runner REWRITES the Test.pkl
+  // SOURCE in place (atomic tmp+rename) — replacing the RHS with
+  // `new InlineSnapshot { state = "match"; value = "pong\n" }` — and the test
+  // then PASSES (exit 0). This is a MODIFICATION of a committed file, not a
+  // creation; the harness's content-hash snapshot registers it in fsDelta. The
+  // transient `Test.pkl.pkspec.tmp` is renamed away, so it never appears.
+  //
+  // The rewrite is fully deterministic (echo pong is fixed), so the normalized
+  // stderr — the `[pkspec] inlineStdout for "echo_pong" updated (5 bytes)`
+  // notice, the passing progress line, and the green summary — is gated at byte
+  // parity (exactStderr + normalizeDurations). fsDelta asserts the rewritten
+  // `examples/exec-inline-rewrite/Test.pkl` is the only changed path, matching
+  // the oracle. The rewritten CONTENT's byte-for-byte parity vs Go is verified
+  // separately by the all-examples sweep (it is identical there); here fsDelta
+  // gates that the SAME file set is touched.
+  new {
+    id = "exec-inline-rewrite"
+    fixture = "conformance/fixtures/exec-inline-rewrite"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-inline-rewrite" }
+    argv { "exec"; "-f"; "Test.pkl"; "--update-inline-snapshots"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      fsDelta = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
 }

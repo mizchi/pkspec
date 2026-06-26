@@ -27,6 +27,7 @@ priv struct ExecArgs {
   tags : Array[String]
   junit_reports : String
   refresh_snapshots : Bool
+  update_inline : Bool
 }
 
 ///|
@@ -36,6 +37,7 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
   let tags : Array[String] = []
   let mut junit_reports = ""
   let mut refresh_snapshots = false
+  let mut update_inline = false
   let mut i = 0
   while i < args.length() {
     let a = args[i]
@@ -62,6 +64,8 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
       "--junit-reports" => junit_reports = take()
       // P3c: (re)write every reference snapshot file unconditionally.
       "--refresh-snapshots" => refresh_snapshots = true
+      // P3d: on inline-snapshot mismatch, rewrite the Test.pkl source in place.
+      "--update-inline-snapshots" => update_inline = true
       // Deferred value-flags: consume the value so it is not mistaken for a
       // positional arg, but ignore it (no effect this phase).
       "--shard" | "--total-timeout" | "--timings-file" => take() |> ignore
@@ -69,7 +73,6 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
       "--refresh-ai"
       | "--refresh-http"
       | "--http-replay-only"
-      | "--update-inline-snapshots"
       | "--no-record-timings"
       | "--rerun-failed" => ()
       _ =>
@@ -82,7 +85,7 @@ fn parse_exec_args(args : ArrayView[String]) -> ExecArgs raise {
     }
     i = i + 1
   }
-  ExecArgs::{ file, only, tags, junit_reports, refresh_snapshots }
+  ExecArgs::{ file, only, tags, junit_reports, refresh_snapshots, update_inline }
 }
 
 ///|
@@ -334,7 +337,10 @@ async fn run_exec_cmd(rest : ArrayView[String]) -> Int {
         t.spec_ref,
       )
     } else {
-      run_exec_one(name, t, defaults, workdir, test_state, ea.refresh_snapshots)
+      run_exec_one(
+        name, t, defaults, workdir, test_state, ea.refresh_snapshots, abs,
+        ea.update_inline,
+      )
     }
 
     // after-each in LIFO order. Skip when the body failed unless alwaysRun.
@@ -430,9 +436,12 @@ async fn run_exec_one(
   workdir : String,
   state : Map[String, String],
   refresh_snapshots : Bool,
+  source_path : String,
+  update_inline : Bool,
 ) -> @executor.Result {
   @executor.run_one(
     name, t, defaults, workdir, state, t.spec_ref, refresh_snapshots~,
+    source_path~, update_inline~,
   )
 }
 

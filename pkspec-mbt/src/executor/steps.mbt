@@ -318,7 +318,19 @@ async fn run_shell_step(
         None => false
       }
       if has_name {
-        match check_inline("inlineStdout", step.inline_stdout, stdout) {
+        // Step-level inline ASSERT only (block name = the step name). The
+        // SOURCE-REWRITE path (`--update-inline-snapshots` for a step's
+        // inlineStdout) is not threaded here: the cmd-body rewrite is the P3d
+        // scope, and the only step-level inline fixtures are assert-only. Pass
+        // `source_path=""` + `update_inline=false` so this stays pure assert.
+        let block = match step.name {
+          Some(nm) => nm
+          None => ""
+        }
+        match
+          check_inline(
+            block, "inlineStdout", step.inline_stdout, stdout, "", false,
+          ) {
           Some(r) => sr.reasons.push(r)
           None => ()
         }

@@ -21,6 +21,10 @@
       "alias": "async"
     },
     {
+      "path": "moonbitlang/async/stdio",
+      "alias": "stdio"
+    },
+    {
       "path": "moonbitlang/async/socket",
       "alias": "socket"
     },
@@ -62,6 +66,9 @@
       "native"
     ],
     "snapshot.mbt": [
+      "native"
+    ],
+    "inline.mbt": [
       "native"
     ],
     "junit.mbt": [
