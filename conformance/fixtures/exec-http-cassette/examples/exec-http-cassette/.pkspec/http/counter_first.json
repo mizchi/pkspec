@@ -1,0 +1,13 @@
+{
+  "hash": "011b55408c151dec5ea9cf2ae2aa4ac1780b5d67f53ebe770c419fd84f221b39",
+  "method": "GET",
+  "url": "http://127.0.0.1:19011/counter",
+  "status": 200,
+  "headers": {
+    "Content-Type": [
+      "application/json"
+    ]
+  },
+  "body": "{\"call\": 1}",
+  "updated_at": "2026-06-26T00:00:00Z"
+}
