@@ -1026,4 +1026,54 @@ scenarios: Listing<Scenario> = new {
       normalizeDurations = true
     }
   }
+  // ── P4d: QuickCheck property-based iteration (xorshift32 + inputs) ────
+  //
+  // Both fixtures are DETERMINISTIC: a fixed `iterationSeed` pins the
+  // xorshift32 stream, so the generated values, the failing-iteration seed, and
+  // the shrink trace are fully reproducible. They gate the normalized stderr at
+  // byte parity (exactStderr + normalizeDurations) with stdout asserted empty
+  // (the property bodies capture/assert their own output; only the failing
+  // body's `echo` would surface, and it exits 1 before any pass-through). The
+  // goldens are captured from the Go oracle, whose xorshift32Step +
+  // generateInputs + shrinkInputs the MoonBit port reproduces bit-for-bit.
+  //
+  // EXCLUDED (Gap B — cannot eval under the embedded loader): quickcheck-pkl/
+  //   SortProperty.test.pkl (`Cannot find property \`length\` in object of type
+  //   \`Int\``, a `pkl test` facts module, not an exec target).
+  //
+  // quickcheck-subprocess: examples/quickcheck-subprocess verbatim — the
+  // seed-only `addition_is_associative` property (50 iterations, derives 3 ints
+  // from $PKSPEC_SEED, checks integer-add associativity) PASSES; the two
+  // deliberately-failing demos stay `pending`. Gates the all-pass seed-only
+  // path + the `[N/N attempts passed]` accounting. exit 0.
+  new {
+    id = "quickcheck-subprocess"
+    fixture = "conformance/fixtures/quickcheck-subprocess"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/quickcheck-subprocess" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+  // quickcheck-input-space: HAND-AUTHORED (not a verbatim example copy) so the
+  // deterministic FAILING + shrink path is gated — the strongest PRNG + shrink
+  // parity check. `addition_in_range` passes (30 iterations, A,B ∈ [0,100]);
+  // `multiplication_bounded` fails at iteration 0 (A=10,B=17 from seed 1234567,
+  // product 170 ≥ 100) and the greedy shrinker narrows to {A=7,B=15} in 5 steps.
+  // The whole shrink trace is byte-compared. The run FAILS, exit 1.
+  new {
+    id = "quickcheck-input-space"
+    fixture = "conformance/fixtures/quickcheck-input-space"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/quickcheck-input-space" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
 }

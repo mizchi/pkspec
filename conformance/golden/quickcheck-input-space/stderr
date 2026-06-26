@@ -1,0 +1,12 @@
+[pkspec] addition_in_range: passed [30/30 attempts passed] (verifies pbt.iterations, pbt.inputs) (102ms)
+[pkspec] multiplication_bounded: failed (verifies pbt.inputs, pbt.shrink) (84ms)
+      property failed at iteration 0/30 (seed=1234567) with inputs {A=7, B=15}
+shrink: {A=10, B=17} → {A=7, B=15} (5 steps)
+shrink: A 10 → 9 still fails
+shrink: B 17 → 16 still fails
+shrink: A 9 → 8 still fails
+shrink: B 16 → 15 still fails
+shrink: A 8 → 7 still fails
+      expected exit code 0, got 1
+pkspec: 1 passed, 0 flaky, 0 pending, 1 failed, 0 errored, 0 skipped (of 2)
+pkspec: 1 test(s) failed, 0 errored, 0 skipped

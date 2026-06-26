@@ -1,0 +1,59 @@
+amends "../../pkl/Test.pkl"
+
+// P4d conformance fixture: input-space property-based testing. Hand-authored
+// (NOT a verbatim copy of examples/quickcheck-input-space) so the deterministic
+// FAILING + shrink path is exercised under the gate — the shrink trace is the
+// strongest parity check for the xorshift32 PRNG + per-input value derivation +
+// the greedy [lo, half, val-1] shrink. Both tests are fully deterministic given
+// the fixed iterationSeed, so the normalized stderr is byte-comparable.
+tests {
+  // PASSING property: 0 ≤ A + B ≤ 200 for A,B ∈ [0,100]. Always holds; 30
+  // iterations report all-pass. Gates the per-iteration value-generation +
+  // env-injection path (no failure, no shrink).
+  new {
+    name = "addition_in_range"
+    description = "0 ≤ a + b ≤ 200 for a,b ∈ [0,100]"
+    specRef { "pbt.iterations"; "pbt.inputs" }
+    iterations = 30
+    iterationSeed = 7
+    inputs {
+      ["A"] = new IntInput { lo = 0; hi = 100 }
+      ["B"] = new IntInput { lo = 0; hi = 100 }
+    }
+    body = new CmdTest {
+      cmd =
+        """
+        sum=$(( A + B ))
+        [ $sum -ge 0 ] && [ $sum -le 200 ]
+        """
+    }
+  }
+
+  // FAILING property (deliberate): a * b < 100. False for the first generated
+  // pair (A=10, B=17 from seed 1234567), so iteration 0 fails and the shrinker
+  // narrows toward the boundary (→ A=7, B=15 in 5 steps). Gates the full
+  // failure header + the byte-exact shrink trace.
+  new {
+    name = "multiplication_bounded"
+    description = "a * b < 100 (false in general; deliberately failing)"
+    specRef { "pbt.inputs"; "pbt.shrink" }
+    iterations = 30
+    iterationSeed = 1234567
+    shrink = true
+    shrinkAttempts = 50
+    inputs {
+      ["A"] = new IntInput { lo = 0; hi = 50 }
+      ["B"] = new IntInput { lo = 0; hi = 50 }
+    }
+    body = new CmdTest {
+      cmd =
+        """
+        product=$(( A * B ))
+        if [ $product -ge 100 ]; then
+          echo "A=$A B=$B product=$product"
+          exit 1
+        fi
+        """
+    }
+  }
+}
