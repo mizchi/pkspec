@@ -1,6 +1,7 @@
 {
   "import": [
     { "path": "moonbitlang/x/fs", "alias": "fs" },
+    { "path": "mizchi/x/fs", "alias": "xfs" },
     { "path": "mizchi/x/process", "alias": "process" },
     { "path": "moonbitlang/async", "alias": "async" },
     { "path": "moonbitlang/async/stdio", "alias": "stdio" },

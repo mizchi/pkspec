@@ -221,14 +221,14 @@ async fn discover_go(
   let expanded = expand_go_packages(bin, packages)
   let cases : Array[ShimCase] = []
   for pkg in expanded {
-    let (exit, out, err) = @process.collect_output(
+    // File-redirect capture: `go test -list` forks the go build helper which
+    // would hold a captured pipe open forever (see run_capture).
+    let (exit, stdout, stderr) = run_capture(
       bin,
       ["test", "-list", pattern, pkg],
       inherit_env=true,
     )
-    let stdout = bytes_to_string(out.binary())
     if exit != 0 {
-      let stderr = bytes_to_string(err.binary())
       let message = trim(stdout + "\n" + stderr)
       raise ShimError(if message == "" { "go test -list failed" } else { message })
     }
@@ -276,24 +276,32 @@ async fn expand_go_packages(
       }
       continue
     }
-    let (exit, out, err) = @process.collect_output(
+    // File-redirect capture (`go list` forks the go build helper; see
+    // run_capture).
+    let (exit, stdout, stderr) = run_capture(
       go_bin,
       ["list", "-f", "{{.Dir}}", pkg],
       inherit_env=true,
     )
-    let stdout = bytes_to_string(out.binary())
     if exit != 0 {
-      let stderr = bytes_to_string(err.binary())
       let message = trim(stdout + "\n" + stderr)
       raise ShimError(if message == "" { "go list failed" } else { message })
     }
-    let cwd = @env.current_dir() |> dir_or_dot
+    // `@env.current_dir()` returns the realpath (symlinks resolved, e.g.
+    // /tmp -> /private/tmp on macOS), but `go list -f {{.Dir}}` may print an
+    // unresolved path. Canonicalise both via realpath before relativising so a
+    // `./...`-expanded dir dedups against a literal `./pkg` (Go's
+    // expandGoPackages relativises against os.Getwd(), which on the CI/runner
+    // already agrees with go list).
+    let cwd_raw = @env.current_dir() |> dir_or_dot
+    let cwd = (try? @xfs.realpath(cwd_raw)).unwrap_or(cwd_raw)
     for line in split_lines(stdout) {
       let d = trim(line)
       if d == "" {
         continue
       }
-      let resolved = rel_to_cwd(cwd, d)
+      let d_canon = (try? @xfs.realpath(d)).unwrap_or(d)
+      let resolved = rel_to_cwd(cwd, d_canon)
       if not(seen.contains(resolved)) {
         expanded.push(resolved)
         seen[resolved] = true

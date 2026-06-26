@@ -1,7 +1,30 @@
-// Unit gates for the shim's pure wire-format + native-command logic. The
-// subprocess paths (go test / moon test / node) are not exercised here (the
-// nested-capture limitation + external-runner needs); these lock the byte
-// shapes the Go oracle produces.
+// Unit gates for the shim's pure wire-format + native-command logic, plus a
+// fast hermetic gate that `run_capture`'s file-redirect does not hang when the
+// child forks a grandchild that inherits + holds stdout open (the exact
+// nested-capture scenario `go test` / `moon test` trigger). These lock the
+// byte shapes the Go oracle produces.
+
+///|
+/// Regression gate for the toolchain-spawn hang: a child whose grandchild
+/// inherits and HOLDS its stdout open for several seconds must NOT block
+/// `run_capture`, because we redirect to files and wait on the immediate
+/// child's exit (not on the captured pipe reaching EOF). Hermetic (bash only)
+/// and fast: the child exits in ~0s; if file-redirect regressed to
+/// pipe-capture this would stall the whole `moon test` run. The grandchild is
+/// short-lived (5s) so it leaves no lingering process worth caring about.
+async test "run_capture: grandchild holding stdout does not hang" {
+  // `sleep 5 &` backgrounds a grandchild that inherits the child's stdout; the
+  // child prints + exits immediately. A pipe-capture runner would wait for the
+  // grandchild to close stdout (5s); the file-redirect runner returns now.
+  let (exit, stdout, _) = run_capture("bash", [
+    "-c", "sleep 5 & echo done",
+  ])
+  inspect(exit, content="0")
+  inspect(stdout, content=(
+    #|done
+    #|
+  ))
+}
 
 ///|
 test "encode_case: full field set, struct order + omitempty" {

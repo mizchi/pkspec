@@ -14,6 +14,78 @@ fn bytes_to_string(b : Bytes) -> String {
 }
 
 ///|
+/// Run a subprocess capturing stdout+stderr via FILE redirects rather than
+/// pipes, then read the files back after the process exits. Returns
+/// `(exit, stdout, stderr)` like `@process.collect_output`.
+///
+/// Why not `collect_output`: it drains the child's stdout/stderr pipes to EOF
+/// (all writers closed). `go test`/`go list`/`moon test`/`node` fork a
+/// persistent build-cache or daemon helper that INHERITS the captured stdout
+/// pipe and keeps it open, so EOF never arrives and the runner hangs (the
+/// mizchi/x/process nested-capture limitation). Redirecting to files makes the
+/// runner wait on PROCESS EXIT instead; a grandchild keeping the file handle
+/// open is harmless because we read after the parent has exited. stdin is
+/// redirected from /dev/null so the child can never block reading stdin. This
+/// is the same technique P3b's background ready-probe uses.
+async fn run_capture(
+  bin : String,
+  args : ArrayView[String],
+  extra_env? : Map[String, String],
+  inherit_env~ : Bool = true,
+  cwd? : String,
+) -> (Int, String, String) raise {
+  let tmp = @xfs.tmpdir(prefix="pkspec-shim-")
+  let out_path = tmp + "/stdout"
+  let err_path = tmp + "/stderr"
+  let result = try {
+    let stdout_sink = @process.redirect_to_file(
+      out_path,
+      create_mode=CreateOrTruncate,
+    )
+    let stderr_sink = @process.redirect_to_file(
+      err_path,
+      create_mode=CreateOrTruncate,
+    )
+    let stdin = @process.redirect_from_file("/dev/null")
+    let exit = match cwd {
+      Some(d) =>
+        @process.run(
+          bin,
+          args,
+          extra_env?,
+          inherit_env~,
+          stdin~,
+          stdout=stdout_sink,
+          stderr=stderr_sink,
+          cwd=d,
+        )
+      None =>
+        @process.run(
+          bin,
+          args,
+          extra_env?,
+          inherit_env~,
+          stdin~,
+          stdout=stdout_sink,
+          stderr=stderr_sink,
+        )
+    }
+    // Read back after exit; the files always exist (we just truncated/created
+    // them), but a runner that wrote nothing leaves them empty.
+    let so = (try? read_text(out_path)).unwrap_or("")
+    let se = (try? read_text(err_path)).unwrap_or("")
+    (exit, so, se)
+  } catch {
+    e => {
+      let _ = try? @xfs.rmdir(tmp, recursive=true)
+      raise e
+    }
+  }
+  let _ = try? @xfs.rmdir(tmp, recursive=true)
+  result
+}
+
+///|
 /// Split into lines on `\n` (Go `strings.Split(s, "\n")` keeps a trailing
 /// empty element, but discovery / event parsing skip blanks, so the exact
 /// trailing-element behaviour is immaterial). A `\r\n` line keeps its `\r`,

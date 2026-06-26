@@ -1,0 +1,15 @@
+amends "../../pkl/Adapter.pkl"
+import "../../pkl/adapters/GoTest.pkl"
+
+// Deterministic go-test adapter suite: a single self-contained module with
+// two passing tests. `-count 1` defeats the go test cache so the run is
+// reproducible; the adapter command's stdout is a stable outcome summary.
+suites {
+  new {
+    name = "calc"
+    adapter = new GoTest.GoTest {
+      packages { "./calc" }
+      count = 1
+    }
+  }
+}

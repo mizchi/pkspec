@@ -1,0 +1,14 @@
+amends "../../pkl/Adapter.pkl"
+import "../../pkl/adapters/MoonTest.pkl"
+
+// Deterministic moon-test adapter suite: a tiny self-contained MoonBit
+// package with two passing tests. The adapter command's stdout is a stable
+// outcome summary (no volatile tokens).
+suites {
+  new {
+    name = "lib"
+    adapter = new MoonTest.MoonTest {
+      packages { "./src" }
+    }
+  }
+}

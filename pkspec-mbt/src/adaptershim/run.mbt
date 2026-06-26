@@ -111,19 +111,17 @@ async fn execute_case(
   if argv.length() == 0 {
     return (false, "adapter kind has no native command")
   }
-  let spawn = try? @process.collect_output(
-    argv[0],
-    argv[1:],
-    inherit_env=true,
-  )
+  // File-redirect capture: the native runner (go test / moon test / node /
+  // npx) forks a build-cache or daemon helper that inherits and holds a piped
+  // stdout open; capturing via files lets us wait on process exit (see
+  // run_capture).
+  let spawn = try? run_capture(argv[0], argv[1:], inherit_env=true)
   match spawn {
     Err(e) =>
       // Go's cmd.Run() error path: the message is the captured output, or the
       // error string when empty. A spawn failure (binary not found) maps here.
       (false, e.to_string())
-    Ok((exit, out, err)) => {
-      let stdout = bytes_to_string(out.binary())
-      let stderr = bytes_to_string(err.binary())
+    Ok((exit, stdout, stderr)) => {
       if stderr != "" {
         @stdio.stderr.write(stderr)
       }
