@@ -248,6 +248,17 @@ pub struct Defaults {
 }
 
 ///|
+/// A typed property-based input generator. Mirrors Go `config.Input` /
+/// `config.IntInput` (`pkspec.Test#RenderedIntInput`). Only the int kind is
+/// modelled today; the `kind` discriminator (carried verbatim from the
+/// rendered JSON) is the extension point for future StringInput / ListIntInput.
+pub struct IntInput {
+  kind : String
+  lo : Int
+  hi : Int
+}
+
+///|
 /// The runner-side test record. Mirrors the spec-relevant subset of Go
 /// `config.Test`. The full body detail is modelled so `pkspec spec` can
 /// reproduce Go's `expectations()` / `stepLabel()` byte-for-byte.
@@ -297,6 +308,20 @@ pub struct Test {
   // test-level
   retries : Int
   flaky_acceptable : Bool
+  // property-based testing (Go `Test.Iterations` / `IterationSeed` / `Shrink` /
+  // `ShrinkAttempts` / `Inputs`). When `iterations > 1`, the body runs once per
+  // iteration with a per-iteration env; `inputs` non-empty switches to
+  // input-space mode (typed value generation + per-input shrink).
+  iterations : Int
+  // `iterationSeed` is a Pkl `Int(this >= 0 && this <= 4294967295)` — the FULL
+  // uint32 range. It is carried as `Int64` (NOT `Int`) so values in the upper
+  // half `[2^31, 2^32-1]` survive decode: `Int` is signed 32-bit and the
+  // JSON-number → Int conversion saturates anything >= 2^31 to Int.MAX_VALUE,
+  // which would silently clamp the seed and produce the wrong xorshift32 stream.
+  iteration_seed : Int64
+  shrink : Bool
+  shrink_attempts : Int
+  inputs : Map[String, IntInput]
   // background processes spawned around the body (Go `Test.Background`).
   backgrounds : Array[Background]
 }

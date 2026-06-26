@@ -57,6 +57,28 @@ pub async fn run_one(
     res.duration_ms = @async.now() - start
     return res
   }
+  // Property-based mode (Go `runOne`): iterations > 1 runs the body N times
+  // with a fresh xorshift32 seed per iteration. retries / flakyAcceptable are
+  // ignored — a property check treats the first failure as the bug. With
+  // `inputs` non-empty the loop switches to input-space mode (typed value
+  // generation + per-input shrink); otherwise the seed-only path runs
+  // (PKSPEC_SEED env + seed-space shrink).
+  if t.iterations > 1 {
+    let last = if t.inputs.size() > 0 {
+      run_input_iterated(
+        name, t, defaults, workdir, state, spec_ref, mode, start,
+        refresh_snapshots, source_path, update_inline, refresh_http,
+        http_replay_only,
+      )
+    } else {
+      run_iterated(
+        name, t, defaults, workdir, state, spec_ref, mode, start,
+        refresh_snapshots, source_path, update_inline, refresh_http,
+        http_replay_only,
+      )
+    }
+    return last
+  }
   // Retry loop, mirroring Go `runOne`: run up to `1 + Test.retries` attempts,
   // break on the first Pass, then `classify(lastOutcome, attempts, passed,
   // flakyAcceptable)`. `passed` is at most 1 (we break on the first pass).

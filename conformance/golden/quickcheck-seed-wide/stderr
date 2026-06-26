@@ -1,0 +1,22 @@
+[pkspec] seed_wide_shrink: failed (verifies pbt.inputs, pbt.shrink) (165ms)
+      property failed at iteration 0/10 (seed=4294967295) with inputs {A=603}
+shrink: {A=619} → {A=603} (16 steps)
+shrink: A 619 → 618 still fails
+shrink: A 618 → 617 still fails
+shrink: A 617 → 616 still fails
+shrink: A 616 → 615 still fails
+shrink: A 615 → 614 still fails
+shrink: A 614 → 613 still fails
+shrink: A 613 → 612 still fails
+shrink: A 612 → 611 still fails
+shrink: A 611 → 610 still fails
+shrink: A 610 → 609 still fails
+shrink: A 609 → 608 still fails
+shrink: A 608 → 607 still fails
+shrink: A 607 → 606 still fails
+shrink: A 606 → 605 still fails
+shrink: A 605 → 604 still fails
+shrink: A 604 → 603 still fails
+      expected exit code 0, got 1
+pkspec: 0 passed, 0 flaky, 0 pending, 1 failed, 0 errored, 0 skipped (of 1)
+pkspec: 1 test(s) failed, 0 errored, 0 skipped

@@ -177,3 +177,41 @@ if [ -f "$rec_fx/examples/exec-timings-record/Test.pkl" ]; then
 else
   echo "skip $rec_fx (hand-authored example missing)" >&2
 fi
+
+# P4d QuickCheck property-based fixtures (xorshift32 + inputs).
+#
+# quickcheck-subprocess: VERBATIM copy of examples/quickcheck-subprocess (the
+# seed-only associativity property passes; the two deliberately-failing demos
+# stay pending). Re-vendor schema + example body.
+sub_fx="$here/quickcheck-subprocess"
+rm -rf "$sub_fx"
+mkdir -p "$sub_fx/pkl" "$sub_fx/examples/quickcheck-subprocess"
+cp "$repo/pkl/Test.pkl" "$sub_fx/pkl/"
+cp "$repo/examples/quickcheck-subprocess/Test.pkl" "$sub_fx/examples/quickcheck-subprocess/Test.pkl"
+echo "regenerated $sub_fx (from examples/quickcheck-subprocess)"
+
+# quickcheck-input-space: HAND-AUTHORED example (NOT a verbatim copy) so the
+# deterministic FAILING + shrink path is gated — the strongest xorshift32 PRNG +
+# per-input-value-derivation + greedy-shrink parity check. Regen only re-vendors
+# the schema, never the hand-authored example body.
+iface_fx="$here/quickcheck-input-space"
+if [ -f "$iface_fx/examples/quickcheck-input-space/Test.pkl" ]; then
+  mkdir -p "$iface_fx/pkl"
+  cp "$repo/pkl/Test.pkl" "$iface_fx/pkl/"
+  echo "re-vendored schema for $iface_fx (hand-authored example preserved)"
+else
+  echo "skip $iface_fx (hand-authored example missing)" >&2
+fi
+
+# quickcheck-seed-wide: HAND-AUTHORED regression for iterationSeed > 2^31 (the
+# upper-half-of-uint32 clamp bug). The fixed seed (4294967295) + the shrink
+# trace are the full-range PRNG-fidelity assertion. Regen only re-vendors the
+# schema, never the hand-authored example body.
+sw_fx="$here/quickcheck-seed-wide"
+if [ -f "$sw_fx/examples/quickcheck-seed-wide/Test.pkl" ]; then
+  mkdir -p "$sw_fx/pkl"
+  cp "$repo/pkl/Test.pkl" "$sw_fx/pkl/"
+  echo "re-vendored schema for $sw_fx (hand-authored example preserved)"
+else
+  echo "skip $sw_fx (hand-authored example missing)" >&2
+fi

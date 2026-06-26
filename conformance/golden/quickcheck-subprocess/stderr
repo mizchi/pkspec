@@ -1,0 +1,4 @@
+[pkspec] addition_is_associative: passed [50/50 attempts passed] (verifies pbt.iterations) (188ms)
+[pkspec] property_that_does_not_hold: pending (0s)
+[pkspec] shrinkable_modulo_property: pending (0s)
+pkspec: 1 passed, 0 flaky, 2 pending, 0 failed, 0 errored, 0 skipped (of 3)

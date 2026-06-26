@@ -155,7 +155,38 @@ fn parse_tests(j : Json?) -> Map[String, Test] {
               timeout_sec: int_val(t.get("timeoutSec")),
               retries: int_val(t.get("retries")),
               flaky_acceptable: bool_val(t.get("flakyAcceptable")),
+              iterations: int_val(t.get("iterations")),
+              iteration_seed: int64_val(t.get("iterationSeed")),
+              shrink: bool_val(t.get("shrink")),
+              shrink_attempts: int_val(t.get("shrinkAttempts")),
+              inputs: parse_inputs(t.get("inputs")),
               backgrounds: parse_backgrounds(t.get("background")),
+            }
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+  out
+}
+
+///|
+/// Parse the `inputs` object (Go `map[string]config.Input`) into typed
+/// `IntInput`s keyed by input name. The rendered JSON is
+/// `{ "<name>": { "kind": "int", "lo": .., "hi": .. } }`. Only `kind == "int"`
+/// is modelled; an unknown kind is carried verbatim so the executor can error
+/// loudly (Go's `generateOneInput` default case).
+fn parse_inputs(j : Json?) -> Map[String, IntInput] {
+  let out : Map[String, IntInput] = {}
+  match j {
+    Some(Object(m)) =>
+      for k, v in m {
+        match v {
+          Object(o) =>
+            out[k] = IntInput::{
+              kind: str_val(o.get("kind")),
+              lo: int_val(o.get("lo")),
+              hi: int_val(o.get("hi")),
             }
           _ => ()
         }
@@ -501,6 +532,20 @@ fn bool_val(j : Json?) -> Bool {
 fn int_val(j : Json?) -> Int {
   match j {
     Some(Number(x, ..)) => x.to_int()
+    _ => 0
+  }
+}
+
+///|
+/// Wide integer decode for fields that may exceed the signed-32-bit range —
+/// notably `iterationSeed`, whose Pkl type spans the FULL uint32 range
+/// `[0, 4294967295]`. `Double::to_int()` SATURATES at `Int.MAX_VALUE` (2^31-1),
+/// so anything in the upper half would be silently clamped; `Double::to_int64()`
+/// preserves the value exactly (2^32 is exactly representable in f64). Negatives
+/// pass through unclamped so the seed-range error path can still fire downstream.
+fn int64_val(j : Json?) -> Int64 {
+  match j {
+    Some(Number(x, ..)) => x.to_int64()
     _ => 0
   }
 }
