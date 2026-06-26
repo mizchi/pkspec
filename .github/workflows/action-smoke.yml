@@ -1,54 +1,35 @@
-name: Action
+name: Action smoke
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "action.yml"
-      - "go.mod"
-      - "go.sum"
-      - "cmd/**"
-      - "harness/**"
-      - "internal/**"
-      - "pkl/**"
-      - "Taskfile.pkl"
-      - "*.go"
-      - ".github/workflows/action.yml"
+  # Catch action.yml regressions before merge — runs against the latest
+  # published release so the action's binary download path exists.
   pull_request:
     paths:
       - "action.yml"
-      - "go.mod"
-      - "go.sum"
-      - "cmd/**"
-      - "harness/**"
-      - "internal/**"
-      - "pkl/**"
-      - "Taskfile.pkl"
-      - "*.go"
-      - ".github/workflows/action.yml"
+      - ".github/workflows/action-smoke.yml"
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
+    inputs:
+      version:
+        description: "Version to test. Accepts v0.4.0 / 0.4.0 / v0 / pkspec@0.4.0. Empty = latest."
+        required: false
+        default: ""
 
 jobs:
-  setup:
-    name: setup (${{ matrix.os }})
+  smoke:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
 
-      - uses: ./
+      - name: Use the action from this checkout
+        uses: ./
         with:
-          version: local
+          # On PR: empty → action falls back to "latest release".
+          # On dispatch: whatever the user specified.
+          version: ${{ inputs.version }}
           init-schema-dir: ${{ runner.temp }}/pkspec
 
       - name: Write smoke test
@@ -69,4 +50,5 @@ jobs:
           EOF
 
       - name: Run pkspec
+        working-directory: ${{ runner.temp }}
         run: pkspec exec -f "$RUNNER_TEMP/Test.pkl"

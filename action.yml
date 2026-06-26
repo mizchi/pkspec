@@ -1,5 +1,5 @@
 name: Setup pkspec
-description: Install the pkspec test runner and the Pkl CLI on the runner.
+description: Install the pkspec test runner (and its adapter shims) plus the Pkl CLI on the runner.
 branding:
   icon: check-square
   color: blue
@@ -7,23 +7,17 @@ branding:
 inputs:
   version:
     description: |
-      pkspec version to install. Accepts `local`, a release tag such as
-      `v0.3.0`, a bare semver `0.3.0`, the floating major `v0`, or `latest`.
-      `local` installs from this action checkout and is intended for this
-      repository's own CI.
-      When empty, the action reads its own ref (so pinning via
-      `mizchi/pkspec@v0.3.0` or `@v0` just works) and falls back to the
-      latest published release.
+      pkspec release to install. Accepts the underlying release tag
+      `pkspec@0.4.0`, the action-friendly form `v0.4.0`, a bare semver
+      `0.4.0`, the floating major `v0`, or `latest`. When empty, the action
+      reads its own ref (so pinning via `mizchi/pkspec@v0.4.0` or `@v0` just
+      works) and falls back to the latest published release.
     required: false
     default: ""
   pkl-version:
     description: Pkl CLI version to install. Set to `none` to skip Pkl install.
     required: false
     default: "0.31.1"
-  setup-go:
-    description: Install the Go toolchain needed for `go install`.
-    required: false
-    default: "true"
   install-dir:
     description: Directory where binaries are placed. Added to GITHUB_PATH.
     required: false
@@ -56,7 +50,7 @@ inputs:
 
 outputs:
   version:
-    description: Resolved pkspec version installed by the action.
+    description: Resolved pkspec release tag installed by the action.
     value: ${{ steps.resolve.outputs.version }}
   install-dir:
     description: Directory added to PATH.
@@ -72,6 +66,10 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
       run: |
         set -euo pipefail
+        # GHA can't parse `uses: <repo>@pkspec@<ver>` (the second `@` in the
+        # ref kills workflow file parsing). So the action ref is `v<ver>` or
+        # `v<major>`; we normalize either form into the underlying release
+        # tag `pkspec@<ver>` that the release assets live under.
 
         github_api() {
           local url="$1"
@@ -95,7 +93,7 @@ runs:
         latest_major() {
           local major="$1"
           github_api https://api.github.com/repos/mizchi/pkspec/releases \
-            | sed -n 's/.*"tag_name": *"\(v'"$major"'\.[^"]*\)".*/\1/p' \
+            | sed -n 's/.*"tag_name": *"\(pkspec@'"$major"'\.[^"]*\)".*/\1/p' \
             | head -n1
         }
 
@@ -103,10 +101,10 @@ runs:
           local raw="$1"
           case "$raw" in
             "" | main | master) echo ""; return ;;
-            local) echo "local"; return ;;
             latest) latest; return ;;
-            v[0-9]*.[0-9]*.[0-9]*) echo "$raw"; return ;;
-            [0-9]*.[0-9]*.[0-9]*) echo "v$raw"; return ;;
+            pkspec@*) echo "$raw"; return ;;
+            v[0-9]*.[0-9]*.[0-9]*) echo "pkspec@${raw#v}"; return ;;
+            [0-9]*.[0-9]*.[0-9]*) echo "pkspec@$raw"; return ;;
             v[0-9]*) latest_major "${raw#v}"; return ;;
             *) echo "$raw"; return ;;
           esac
@@ -120,15 +118,18 @@ runs:
           version="$(latest)"
         fi
         if [ -z "$version" ]; then
-          echo "::error::could not resolve a pkspec version (input/ref/latest all came up empty)"
+          echo "::error::could not resolve a pkspec release tag (input/ref/latest all came up empty)"
           exit 1
         fi
 
         case "${RUNNER_OS}-${RUNNER_ARCH}" in
-          Linux-X64)   pkl_plat=linux-amd64 ;;
-          Linux-ARM64) pkl_plat=linux-aarch64 ;;
-          macOS-ARM64) pkl_plat=macos-aarch64 ;;
-          macOS-X64)   pkl_plat=macos-amd64 ;;
+          Linux-X64)   plat=linux-amd64;  pkl_plat=linux-amd64 ;;
+          Linux-ARM64) plat=linux-arm64;  pkl_plat=linux-aarch64 ;;
+          macOS-ARM64) plat=darwin-arm64; pkl_plat=macos-aarch64 ;;
+          macOS-X64)
+            echo "::error::Intel macOS (darwin-amd64) is not supported — the MoonBit toolchain has no x86_64 macOS build. Use an Apple Silicon runner."
+            exit 1
+            ;;
           *)
             echo "::error::unsupported runner ${RUNNER_OS}-${RUNNER_ARCH}"
             exit 1
@@ -136,15 +137,9 @@ runs:
         esac
 
         echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "plat=$plat" >> "$GITHUB_OUTPUT"
         echo "pkl_plat=$pkl_plat" >> "$GITHUB_OUTPUT"
-        echo "::notice::installing pkspec $version"
-
-    - name: Setup Go
-      if: inputs.setup-go == 'true'
-      uses: actions/setup-go@v6
-      with:
-        go-version-file: ${{ github.action_path }}/go.mod
-        cache: false
+        echo "::notice::installing pkspec $version ($plat)"
 
     - name: Install pkspec
       shell: bash
@@ -152,20 +147,13 @@ runs:
         set -euo pipefail
         dir="${{ inputs.install-dir }}"
         mkdir -p "$dir"
-        if [ "${{ steps.resolve.outputs.version }}" = "local" ]; then
-          GOBIN="$dir" go install "${{ github.action_path }}/cmd/..."
-        else
-          for pkg in \
-            cmd/pkspec \
-            cmd/pkspec-adapter-vitest \
-            cmd/pkspec-adapter-playwright \
-            cmd/pkspec-adapter-node-test \
-            cmd/pkspec-adapter-go-test \
-            cmd/pkspec-adapter-moon-test
-          do
-            GOBIN="$dir" go install "github.com/mizchi/pkspec/$pkg@${{ steps.resolve.outputs.version }}"
-          done
-        fi
+        # The tarball carries all six bare-named binaries (pkspec + 5 shims).
+        url="https://github.com/mizchi/pkspec/releases/download/${{ steps.resolve.outputs.version }}/pkspec-${{ steps.resolve.outputs.plat }}.tar.gz"
+        curl -fsSL "$url" | tar -xzf - -C "$dir"
+        for bin in pkspec pkspec-adapter-vitest pkspec-adapter-playwright \
+                   pkspec-adapter-node-test pkspec-adapter-go-test pkspec-adapter-moon-test; do
+          chmod +x "$dir/$bin"
+        done
         echo "$dir" >> "$GITHUB_PATH"
 
     - name: Install Pkl CLI

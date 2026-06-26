@@ -4,57 +4,93 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    pkfire.url = "github:mizchi/pkfire/v0.9.0";
+
+    # MoonBit toolchain for the `nix develop` shell (building pkspec-mbt/
+    # from source). The package itself no longer builds from source — it
+    # installs the prebuilt release binaries — so there is no Go input.
+    moonbit-overlay.url = "github:moonbit-community/moonbit-overlay";
   };
 
-  outputs = { self, nixpkgs, flake-utils, pkfire }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = { self, nixpkgs, flake-utils, moonbit-overlay }:
+    let
+      # pkspec is distributed as prebuilt MoonBit binaries (the pkspec CLI
+      # plus five adapter shims). This flake installs the release tarball
+      # rather than compiling from source — the same artifact `install.sh` /
+      # the GitHub Action ship.
+      #
+      # `version` + the per-platform sha256 live in `nix/pkspec-release.json`,
+      # which the release workflow (.github/workflows/mbt-publish.yml) auto-
+      # regenerates from the freshly built checksums and opens a follow-up PR
+      # for. To bump by hand: set version, then refresh each sha256 from
+      #   curl -fsSL https://github.com/mizchi/pkspec/releases/download/pkspec@<v>/pkspec-<plat>.tar.gz.sha256
+      # (no x86_64-darwin: the MoonBit toolchain has no Intel macOS build.)
+      #
+      # NOTE: until the pkspec@<version> release exists, the sha256 fields in
+      # nix/pkspec-release.json are zeroed placeholders — `nix build` will
+      # fail with a hash mismatch until the release workflow fills them in.
+      release = builtins.fromJSON (builtins.readFile ./nix/pkspec-release.json);
+      version = release.version;
+      assets = release.platforms;
+
+      # The six binaries packed into pkspec-<plat>.tar.gz.
+      binaries = [
+        "pkspec"
+        "pkspec-adapter-vitest"
+        "pkspec-adapter-playwright"
+        "pkspec-adapter-node-test"
+        "pkspec-adapter-go-test"
+        "pkspec-adapter-moon-test"
+      ];
+    in
+    flake-utils.lib.eachSystem (builtins.attrNames assets) (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        version = "0.3.0";
-        go_1_26_3 = pkgs.go_1_26.overrideAttrs (_old: {
-          version = "1.26.3";
-          src = pkgs.fetchurl {
-            url = "https://go.dev/dl/go1.26.3.src.tar.gz";
-            hash = "sha256-HGRoddCqh5kTMYTtV895/yS97+jIggRwYCqdPW2Rkrg=";
-          };
-        });
-        buildGo1263Module = pkgs.buildGo126Module.override {
-          go = go_1_26_3;
-        };
+        asset = assets.${system};
+        isLinux = pkgs.stdenv.hostPlatform.isLinux;
         pklNative = pkgs.callPackage ./nix/pkl-native.nix { };
-        pkspec = buildGo1263Module {
+
+        tarball = pkgs.fetchurl {
+          url = "https://github.com/mizchi/pkspec/releases/download/pkspec@${version}/pkspec-${asset.plat}.tar.gz";
+          sha256 = asset.sha256;
+        };
+
+        # Install the prebuilt binaries. On Linux they were built on a
+        # generic runner, so autoPatchelfHook rewrites the ELF interpreter +
+        # rpath for the Nix closure. Two runtime wraps per binary:
+        #   1. `pkspec` shells out to `pkl` (and re-invokes itself), so keep
+        #      the native pkl on PATH.
+        #   2. moonbitlang/async's TLS module dlopen()s libssl.so.3 at startup
+        #      (unconditional). dlopen consults LD_LIBRARY_PATH (not
+        #      DT_RUNPATH), so autoPatchelf can't help — put openssl on
+        #      LD_LIBRARY_PATH. macOS dlopen's /usr/lib system libssl, so this
+        #      is Linux-only.
+        pkspec = pkgs.stdenv.mkDerivation {
           pname = "pkspec";
           inherit version;
-          src = ./.;
+          src = tarball;
+          dontUnpack = true;
 
-          vendorHash = "sha256-XE5jU3X1tDVPiPbq6/yHjDzlxKpi+U9LKEil7kk238I=";
+          nativeBuildInputs = [ pkgs.makeWrapper ]
+            ++ pkgs.lib.optionals isLinux [ pkgs.autoPatchelfHook ];
+          # autoPatchelfHook resolves the binaries' NEEDED libs against these.
+          buildInputs = pkgs.lib.optionals isLinux [ pkgs.stdenv.cc.cc.lib ];
 
-          subPackages = [
-            "cmd/pkspec"
-            "cmd/pkspec-adapter-vitest"
-            "cmd/pkspec-adapter-playwright"
-            "cmd/pkspec-adapter-node-test"
-            "cmd/pkspec-adapter-go-test"
-            "cmd/pkspec-adapter-moon-test"
-          ];
+          installPhase = ''
+            runHook preInstall
+            mkdir -p $out/bin
+            tar -xzf "$src"
+            for bin in ${pkgs.lib.escapeShellArgs binaries}; do
+              install -m 0755 "$bin" "$out/bin/$bin"
+            done
+            runHook postInstall
+          '';
 
-          ldflags = [
-            "-s"
-            "-w"
-            "-X main.version=${version}"
-          ];
-
-          # `pkspec` shells out to `pkl` (via pkl-go) for evaluation, and
-          # `pkspec run --reader-helper` re-invokes itself, so PATH needs both.
-          # Wrapping ensures users who installed pkspec via Nix get a
-          # working native `pkl` without a separate install step.
-          nativeBuildInputs = [ pkgs.makeWrapper ];
-          nativeCheckInputs = [ pklNative ];
-          postInstall = ''
-            for bin in $out/bin/pkspec*; do
-              wrapProgram "$bin" \
-                --prefix PATH : ${pkgs.lib.makeBinPath [ pklNative ]}
+          postFixup = ''
+            for bin in ${pkgs.lib.escapeShellArgs binaries}; do
+              wrapProgram "$out/bin/$bin" \
+                --prefix PATH : ${pkgs.lib.makeBinPath [ pklNative ]} \
+                ${pkgs.lib.optionalString isLinux
+                  "--prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath [ pkgs.openssl ]}"}
             done
           '';
 
@@ -63,14 +99,12 @@
             homepage = "https://github.com/mizchi/pkspec";
             license = licenses.mit;
             mainProgram = "pkspec";
-            platforms = platforms.unix;
+            platforms = builtins.attrNames assets;
           };
         };
+
         pklNativeClosure = pkgs.closureInfo {
           rootPaths = [ pklNative ];
-        };
-        pkspecClosure = pkgs.closureInfo {
-          rootPaths = [ pkspec ];
         };
         homeManagerModuleEval = pkgs.lib.evalModules {
           specialArgs = { inherit pkgs; };
@@ -114,15 +148,6 @@
             cp version.txt "$out"
           '';
 
-          pkspec-no-java-closure = pkgs.runCommand "pkspec-no-java-closure-check" { } ''
-            ${pkspec}/bin/pkspec version > version.txt
-            if grep -E -i -- '-(temurin|openjdk|jdk|jre)' ${pkspecClosure}/store-paths; then
-              echo "pkspec closure unexpectedly contains a Java runtime" >&2
-              exit 1
-            fi
-            cp version.txt "$out"
-          '';
-
           home-manager-module = pkgs.runCommand "pkspec-home-manager-module-check" { } ''
             packages="${toString homeManagerModuleEval.config.home.packages}"
             case "$packages" in
@@ -137,15 +162,14 @@
           '';
         };
 
-        # `nix develop` for working on pkspec itself.
+        # `nix develop` for working on pkspec itself: the MoonBit toolchain
+        # (`moon`, `moonc`, …) to build `pkspec-mbt/` from source, plus the
+        # native Pkl CLI (needed for `pkl test` / `pkl format`).
         devShells.default = pkgs.mkShell {
           packages = [
-            pkfire.packages.${system}.default
-          ] ++ (with pkgs; [
-            go_1_26_3
+            moonbit-overlay.packages.${system}.default
             pklNative
-            gopls
-          ]);
+          ];
         };
       }) // {
         homeManagerModules.default = import ./nix/home-manager.nix { inherit self; };

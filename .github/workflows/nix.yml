@@ -6,31 +6,13 @@ on:
     paths:
       - "flake.nix"
       - "flake.lock"
-      - "go.mod"
-      - "go.sum"
-      - "cmd/**"
-      - "internal/**"
-      - "pkl/**"
-      - "examples/**"
-      - "experiments/**"
       - "nix/**"
-      - "Taskfile.pkl"
-      - "SPEC.pkl"
       - ".github/workflows/nix.yml"
   pull_request:
     paths:
       - "flake.nix"
       - "flake.lock"
-      - "go.mod"
-      - "go.sum"
-      - "cmd/**"
-      - "internal/**"
-      - "pkl/**"
-      - "examples/**"
-      - "experiments/**"
       - "nix/**"
-      - "Taskfile.pkl"
-      - "SPEC.pkl"
       - ".github/workflows/nix.yml"
   workflow_dispatch:
 
@@ -42,8 +24,13 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: build (${{ matrix.os }})
+  # `nix build .#default` fetches the prebuilt release tarball pinned in
+  # nix/pkspec-release.json, so it can only run once a pkspec@<ver> release
+  # exists with non-placeholder sha256. `nix flake check` evaluates every
+  # output and builds the eval-only checks (native-pkl, home-manager-module)
+  # which don't pull the pkspec tarball — that's the gate we keep on every PR.
+  check:
+    name: flake check (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -61,12 +48,3 @@ jobs:
 
       - name: nix flake check
         run: nix flake check --print-build-logs
-
-      - name: nix build
-        run: nix build .#default --print-build-logs
-
-      - name: Smoke test
-        run: |
-          ./result/bin/pkspec version
-          ./result/bin/pkspec help
-          ./result/bin/pkspec adapter -f examples/adapter-protocol-smoke/Adapter.pkl
