@@ -1096,4 +1096,64 @@ scenarios: Listing<Scenario> = new {
       normalizeDurations = true
     }
   }
+
+  // P4e expectAi: AI/LLM-judge assertions, exercised hermetically with a
+  // DETERMINISTIC MOCK judge (a fixed shell rule over stdin + $PKSPEC_AI_PROMPT
+  // — no LLM, no network). All three gate exactStderr + exit + normalizeDurations
+  // (the judge verdict / explanation surfaces on stderr via the per-step
+  // reasons). fsDelta is intentionally NOT gated: a live judge run writes
+  // `.pkspec/ai-snapshots/<name>.json` (+ a `.lock` file) with a fixed
+  // `updated_at`, which the contract neither asserts nor normalizes.
+  //
+  // exec-ai-pass: the mock judge greps the body (on stdin) for "hello"; the
+  // body is `hello world`, so it exits 0 and the step PASSES. preferDeterministic
+  // = false forces the judge to run.
+  new {
+    id = "exec-ai-pass"
+    fixture = "conformance/fixtures/exec-ai-pass"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-ai-pass" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+
+  // exec-ai-fail: the mock judge greps for "hello"; the body is `goodbye`, so it
+  // prints an explanation to stderr and exits 1. The step FAILS with the reason
+  // `ai: no greeting found` (the judge's explanation). FAILS deterministically,
+  // exit 1.
+  new {
+    id = "exec-ai-fail"
+    fixture = "conformance/fixtures/exec-ai-fail"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-ai-fail" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
+
+  // exec-ai-cache: the fixture ships a COMMITTED snapshot whose hash matches
+  // sha256(prompt + "\n" + body); the runner finds it (no --refresh-ai) and
+  // returns the cached `fail` verdict WITHOUT running the judge cmd (`exit 1`, a
+  // tripwire). The step fails with `ai (cached): cached judgement: not a
+  // greeting`, exercising the cache-hit path AND the `(cached)` indicator. exit
+  // 1.
+  new {
+    id = "exec-ai-cache"
+    fixture = "conformance/fixtures/exec-ai-cache"
+    env { ["PKF_CONFORMANCE_SUBDIR"] = "examples/exec-ai-cache" }
+    argv { "exec"; "-f"; "Test.pkl"; "--no-record-timings" }
+    contract = new {
+      exit = true
+      stdoutEmpty = true
+      exactStderr = true
+      normalizeDurations = true
+    }
+  }
 }

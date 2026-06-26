@@ -1,0 +1,32 @@
+amends "../../pkl/Test.pkl"
+
+// Hermetic AI-judge assertion (FAIL). The DETERMINISTIC mock judge greps the
+// body (on stdin) for "hello"; the body is `goodbye`, so the grep fails, the
+// judge prints an explanation to stderr and exits 1. The step therefore FAILS
+// with the reason `ai: no greeting found` (the judge's explanation, surfaced
+// from stderr since the judge wrote nothing to stdout). `preferDeterministic =
+// false` forces the judge to run.
+tests {
+  new {
+    name = "ai_fail"
+    description = "expectAi judge (deterministic mock) rejects the body: exit 1 -> step fails with the explanation"
+    tags { "unit" }
+    specRef { "kind.ai"; "diff.cross-language" }
+    body = new SequentialTest {
+      steps {
+        new {
+          name = "emit"
+          body = new ShellBody {
+            cmd = "printf 'goodbye'"
+          }
+          expectAi = new AiAssertion {
+            prompt = "the body greets the world"
+            cmd = "if grep -q hello; then exit 0; else echo 'no greeting found' >&2; exit 1; fi"
+            snapshotName = "greetfail"
+            preferDeterministic = false
+          }
+        }
+      }
+    }
+  }
+}
