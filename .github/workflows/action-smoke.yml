@@ -1,12 +1,9 @@
 name: Action smoke
 
 on:
-  # Catch action.yml regressions before merge — runs against the latest
-  # published release so the action's binary download path exists.
-  pull_request:
-    paths:
-      - "action.yml"
-      - ".github/workflows/action-smoke.yml"
+  # The action downloads a published release tarball, so this can only run
+  # once a pkspec@<ver> release exists. Manual/dispatch only — NOT on PR
+  # (pre-release there is no tarball to fetch). Run it after cutting a release.
   workflow_dispatch:
     inputs:
       version:

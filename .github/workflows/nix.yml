@@ -46,5 +46,13 @@ jobs:
             experimental-features = nix-command flakes
             accept-flake-config = true
 
-      - name: nix flake check
-        run: nix flake check --print-build-logs
+      # Pre-release the binary-fetch `packages.default` pins a placeholder
+      # sha256 (filled by the first release), so a full `nix flake check`
+      # (which builds derivations) can't pass. Validate the flake by EVAL
+      # only — parses + evaluates every output, including the package's
+      # version, without fetching the release tarball.
+      - name: nix flake eval (no build pre-release)
+        run: |
+          nix --option access-tokens "github.com=${{ secrets.GITHUB_TOKEN }}" flake show
+          nix --option access-tokens "github.com=${{ secrets.GITHUB_TOKEN }}" eval \
+            ".#packages.$(nix eval --raw --impure --expr builtins.currentSystem).default.version"
