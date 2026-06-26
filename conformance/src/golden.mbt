@@ -21,9 +21,8 @@ pub async fn load_golden(root : String, s : Scenario) -> Golden raise {
   let dir = golden_dir(root, s)
   let stdout = read_text(dir + "/stdout")
   let exit_raw = read_text(dir + "/exit")
-  let exit = match (try? @strconv.parse_int(exit_raw.trim_space())) {
-    Ok(n) => n
-    Err(_) => raise ScenarioError("golden \{s.id}: bad exit file")
+  let exit = try @string.parse_int(exit_raw.trim()) catch {
+    _ => raise ScenarioError("golden \{s.id}: bad exit file")
   }
   let stderr = if @xfs.exists(dir + "/stderr") {
     read_text(dir + "/stderr")
@@ -45,26 +44,24 @@ async fn read_text(path : String) -> String raise {
 /// Read a fsdelta/fsdeleted file. A missing file yields an empty list (Go
 /// leaves the slice nil, which MarshalDelta normalizes to []).
 async fn read_delta(path : String) -> Array[String] {
-  if not(@xfs.exists(path)) {
+  if !@xfs.exists(path) {
     return []
   }
-  let raw = try? read_text(path)
-  match raw {
-    Err(_) => []
-    Ok(text) =>
-      match (try? @json.parse(text)) {
-        Ok(Array(a)) => {
-          let out : Array[String] = []
-          for e in a {
-            match e {
-              String(s) => out.push(s)
-              _ => ()
-            }
-          }
-          out
+  let text = try read_text(path) catch {
+    _ => return []
+  }
+  match (try @json.parse(text) catch { _ => Json::null() }) {
+    Array(a) => {
+      let out : Array[String] = []
+      for e in a {
+        match e {
+          String(s) => out.push(s)
+          _ => ()
         }
-        _ => []
       }
+      out
+    }
+    _ => []
   }
 }
 
@@ -80,7 +77,7 @@ pub async fn capture_golden(
   res : RunResult,
 ) -> Unit raise {
   let dir = golden_dir(root, s)
-  if not(@xfs.exists(dir)) {
+  if !@xfs.exists(dir) {
     @xfs.mkdir(dir, recursive=true)
   }
   @xfs.write_file(dir + "/stdout", res.stdout)

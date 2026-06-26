@@ -14,17 +14,13 @@
 /// `reflect.TypeOf` does, so a stringified number/bool ("1" vs 1) is a type
 /// mismatch, not equality.
 pub fn diff_json(want : String, got : String, unordered : Array[String]) -> String {
-  let wv = try? @json.parse(want)
-  let wv = match wv {
-    Ok(v) => v
-    Err(e) => return "golden is not valid JSON: \{e}"
+  let wv = try @json.parse(want) catch {
+    e => return "golden is not valid JSON: \{e}"
   }
-  let gv = try? @json.parse(got)
-  let gv = match gv {
-    Ok(v) => v
-    Err(e) => return "candidate stdout is not valid JSON: \{e}"
+  let gv = try @json.parse(got) catch {
+    e => return "candidate stdout is not valid JSON: \{e}"
   }
-  let set : Map[String, Bool] = Map::new()
+  let set : Map[String, Bool] = {}
   for p in unordered {
     set[p] = true
   }
@@ -95,7 +91,7 @@ fn json_diff(
       if scalar_type(want) != scalar_type(got) {
         return "\{path_or_root(path)}: type \{type_name(want)} != \{type_name(got)}"
       }
-      if not(scalar_eq(want, got)) {
+      if !scalar_eq(want, got) {
         return "\{path_or_root(path)}: \{scalar_show(want)} != \{scalar_show(got)}"
       }
       ""
@@ -128,7 +124,7 @@ fn scalar_eq(a : Json, b : Json) -> Bool {
     (True, False) => false
     (False, True) => false
     // Compare numbers by value, not repr: Go parses to float64 so 1 == 1.0.
-    (Number(x), Number(y)) => x == y
+    (Number(x, ..), Number(y, ..)) => x == y
     (String(x), String(y)) => x == y
     _ => false
   }
@@ -152,7 +148,7 @@ fn scalar_show(j : Json) -> String {
     Null => "<nil>"
     True => "true"
     False => "false"
-    Number(x) => {
+    Number(x, ..) => {
       // Go prints float64 with %v; integers come out without a decimal point.
       let n = x.to_int()
       if n.to_double() == x {
@@ -187,7 +183,7 @@ fn canon_json(j : Json) -> String {
     Null => "null"
     True => "true"
     False => "false"
-    Number(x) => {
+    Number(x, ..) => {
       let n = x.to_int()
       if n.to_double() == x {
         "\{n}"
@@ -284,11 +280,10 @@ pub fn strip_json_keys(raw : String, keys : Array[String]) -> String {
   if keys.length() == 0 {
     return raw
   }
-  let v = match (try? @json.parse(raw)) {
-    Ok(v) => v
-    Err(_) => return raw
+  let v = try @json.parse(raw) catch {
+    _ => return raw
   }
-  let set : Map[String, Bool] = Map::new()
+  let set : Map[String, Bool] = {}
   for k in keys {
     set[k] = true
   }
@@ -300,7 +295,7 @@ pub fn strip_json_keys(raw : String, keys : Array[String]) -> String {
 fn strip_walk(n : Json, set : Map[String, Bool]) -> Json {
   match n {
     Object(o) => {
-      let out : Map[String, Json] = Map::new()
+      let out : Map[String, Json] = {}
       for k, v in o {
         if set.get(k) is Some(true) {
           continue
@@ -402,7 +397,7 @@ fn is_duration_token(chars : Array[Char], start : Int, end : Int) -> Bool {
     }
     k = k + 1
   }
-  if not(saw_digit) || k >= end {
+  if !saw_digit || k >= end {
     return false
   }
   // Remaining text must be a known unit (optionally followed by more
@@ -487,7 +482,7 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
     }
   }
   for sub in s.contract.must_contain {
-    if not(contains_normalized(got.stdout, sub)) {
+    if !contains_normalized(got.stdout, sub) {
       return "mustContain: \"\{sub}\" not found in normalized stdout"
     }
   }
@@ -510,7 +505,7 @@ pub fn compare(s : Scenario, want : Golden, got : RunResult) -> String {
     }
   }
   for sub in s.contract.must_contain_stderr {
-    if not(contains_normalized(got.stderr, sub)) {
+    if !contains_normalized(got.stderr, sub) {
       return "mustContainStderr: \"\{sub}\" not found in normalized stderr"
     }
   }
