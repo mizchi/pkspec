@@ -187,7 +187,7 @@ runs:
 
     - name: Cache ~/.pkl/cache
       if: inputs.cache-pkl == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.pkl/cache
         key: ${{ inputs.pkl-cache-key != '' && inputs.pkl-cache-key || format('pkl-{0}', hashFiles('**/PklProject.deps.json', '**/*.pkl')) }}
