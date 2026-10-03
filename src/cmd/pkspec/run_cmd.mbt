@@ -288,7 +288,7 @@ fn attr_str(attrs : String, key : String) -> String? {
 fn attr_int(attrs : String, key : String) -> Int? {
   match attr_str(attrs, key) {
     Some(s) =>
-      match (try? @strconv.parse_int(s)) {
+      match (try? @string.parse_int(s)) {
         Ok(n) => Some(n)
         Err(_) => None
       }

@@ -4,7 +4,7 @@
 ///|
 fn read_text(path : String) -> String raise {
   @fs.read_file_to_string(path) catch {
-    e => raise ShimError("read \{path}: \{e}")
+    @fs.IOError(message) => raise ShimError("read \{path}: \{message}")
   }
 }
 
@@ -25,7 +25,7 @@ fn bytes_to_string(b : Bytes) -> String {
 /// mizchi/x/process nested-capture limitation). Redirecting to files makes the
 /// runner wait on PROCESS EXIT instead; a grandchild keeping the file handle
 /// open is harmless because we read after the parent has exited. stdin is
-/// redirected from /dev/null so the child can never block reading stdin. This
+/// an already-closed pipe so the child immediately reads EOF. This
 /// is the same technique P3b's background ready-probe uses.
 async fn run_capture(
   bin : String,
@@ -46,7 +46,8 @@ async fn run_capture(
       err_path,
       create_mode=CreateOrTruncate,
     )
-    let stdin = @process.redirect_from_file("/dev/null")
+    let (stdin, stdin_writer) = @process.write_to_process()
+    stdin_writer.close()
     let exit = match cwd {
       Some(d) =>
         @process.run(

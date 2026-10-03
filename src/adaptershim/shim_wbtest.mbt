@@ -14,10 +14,10 @@
 /// short-lived (5s) so it leaves no lingering process worth caring about.
 async test "run_capture: grandchild holding stdout does not hang" {
   // `sleep 5 &` backgrounds a grandchild that inherits the child's stdout; the
-  // child prints + exits immediately. A pipe-capture runner would wait for the
+  // cat must read EOF immediately; the child prints + exits immediately. A pipe-capture runner would wait for the
   // grandchild to close stdout (5s); the file-redirect runner returns now.
   let (exit, stdout, _) = run_capture("bash", [
-    "-c", "sleep 5 & echo done",
+    "-c", "cat; sleep 5 & echo done",
   ])
   inspect(exit, content="0")
   inspect(stdout, content=(

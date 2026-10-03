@@ -5,7 +5,9 @@
     "mizchi/pkl": "0.2.7",
     "mizchi/x": "0.3.3",
     "moonbitlang/async": "0.19.0",
-    "moonbitlang/x": "0.4.43"
+    "moonbitlang/x": "0.5.1",
+    "mizchi/cst": "0.1.10",
+    "moonbit-community/yaml": "0.0.6"
   },
   "preferred-target": "native"
 }
