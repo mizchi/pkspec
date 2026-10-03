@@ -16,7 +16,7 @@ pub(all) enum Outcome {
   Skipped
   Flaky
   Pending
-} derive(Eq)
+} derive(Eq, Debug)
 
 ///|
 impl Show for Outcome with output(self, logger) {

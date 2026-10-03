@@ -4,7 +4,7 @@
 ///|
 fn read_text(path : String) -> String raise {
   @fs.read_file_to_string(path) catch {
-    e => raise ShimError("read \{path}: \{e}")
+    @fs.IOError(message) => raise ShimError("read \{path}: \{message}")
   }
 }
 

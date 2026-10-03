@@ -28,7 +28,7 @@ impl Show for ConfigError with output(self, logger) {
 /// `amends`/`import`/glob/package:// all resolve in-process) and return its
 /// rendered value as a parsed `@json.Json` tree.
 ///
-/// - On `@pkl.EvalOk(v)`: returns `@json.parse(@pkl.render_value_as_json(v))`.
+/// - On `@pkl.EvalOk(v)`: renders the module's `output.value`, matching `pkl eval -f json`.
 /// - On `@pkl.EvalError(errs)`: raises `ConfigError` with the joined diagnostics.
 /// - `@loader.LoaderError` (and JSON parse failures) propagate via `raise`.
 pub async fn eval_module_to_json(path : String) -> Json raise {
@@ -42,7 +42,7 @@ pub async fn eval_module_to_json(path : String) -> Json raise {
       raise ConfigError("pkl eval \{path}: " + join_messages(msgs, "; "))
     }
   }
-  @json.parse(@pkl.render_value_as_json(value))
+  @json.parse(@pkl.render_value_as_json(@pkl.extract_output_value(value)))
 }
 
 ///|

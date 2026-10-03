@@ -435,11 +435,11 @@ fn parse_shard_spec(s : String) -> (Int, Int) raise {
   if parts.length() != 2 {
     raise SpecCliError("--shard must be K/N, got \{go_quote(s)}")
   }
-  let k = match (try? @strconv.parse_int(trim_space(parts[0]))) {
+  let k = match (try? @string.parse_int(trim_space(parts[0]))) {
     Ok(v) => v
     Err(_) => raise SpecCliError("--shard K: invalid")
   }
-  let n = match (try? @strconv.parse_int(trim_space(parts[1]))) {
+  let n = match (try? @string.parse_int(trim_space(parts[1]))) {
     Ok(v) => v
     Err(_) => raise SpecCliError("--shard N: invalid")
   }
@@ -483,7 +483,7 @@ fn parse_go_duration_ms(s : String) -> Int64 {
       return 0L // expected a number
     }
     let num_str = s.substring(start=num_start, end=i)
-    let value = match (try? @strconv.parse_double(num_str)) {
+    let value = match (try? @string.parse_double(num_str)) {
       Ok(v) => v
       Err(_) => return 0L
     }
